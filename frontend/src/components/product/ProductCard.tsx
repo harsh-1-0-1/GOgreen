@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ShoppingCart } from 'lucide-react';
+import { Plus, ShoppingCart } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import type { Product } from '@/types';
@@ -26,9 +26,9 @@ export default function ProductCard({ product }: { product: Product }) {
   return (
     <Link
       to={`/products/${product.slug}`}
-      className="group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-shadow duration-300"
+      className="group bg-white rounded-xl sm:rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-shadow duration-300"
     >
-      <div className="relative aspect-square overflow-hidden bg-gray-50">
+      <div className="relative aspect-[4/3] sm:aspect-square overflow-hidden bg-gray-50">
         <img
           src={product.images?.[0] || 'https://placehold.co/400x400?text=Plant'}
           alt={product.name}
@@ -36,45 +36,54 @@ export default function ProductCard({ product }: { product: Product }) {
           loading="lazy"
         />
         {discount && (
-          <span className="absolute top-3 left-3 bg-accent text-white text-xs font-bold px-2.5 py-1 rounded-full">
+          <span className="absolute top-2 left-2 sm:top-3 sm:left-3 bg-accent text-white text-[10px] sm:text-xs font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full">
             {discount}% OFF
           </span>
         )}
         {product.badge && (
-          <span className="absolute top-3 right-3 bg-primary text-white text-xs font-medium px-2.5 py-1 rounded-full">
+          <span className="absolute top-2 right-2 sm:top-3 sm:right-3 bg-primary text-white text-[10px] sm:text-xs font-medium px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full">
             {product.badge}
           </span>
         )}
+        {/* Desktop: cart icon on hover */}
         <button
           onClick={handleAdd}
-          className="absolute bottom-3 right-3 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary hover:text-white"
+          className="absolute bottom-3 right-3 w-10 h-10 bg-white rounded-full shadow-md items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary hover:text-white hidden sm:flex"
           aria-label="Add to cart"
         >
           <ShoppingCart size={16} />
         </button>
+        {/* Mobile: always-visible + button */}
+        <button
+          onClick={handleAdd}
+          className="sm:hidden absolute bottom-2 right-2 w-8 h-8 bg-primary text-white rounded-full shadow-md flex items-center justify-center active:scale-95 transition-transform touch-target"
+          aria-label="Add to cart"
+        >
+          <Plus size={16} />
+        </button>
       </div>
-      <div className="p-4">
-        <h3 className="text-sm font-medium line-clamp-1 group-hover:text-primary transition-colors">
+      <div className="p-2.5 sm:p-4">
+        <h3 className="text-xs sm:text-sm font-medium line-clamp-1 group-hover:text-primary transition-colors">
           {product.name}
         </h3>
         {product.tags?.length > 0 && (
-          <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">
+          <p className="text-[10px] sm:text-xs text-gray-400 mt-0.5 line-clamp-1 hidden sm:block">
             {product.tags.slice(0, 3).join(' · ')}
           </p>
         )}
-        <div className="flex items-baseline gap-2 mt-2">
-          <span className="text-primary font-bold">₹{product.price}</span>
+        <div className="flex items-baseline gap-1.5 sm:gap-2 mt-1 sm:mt-2">
+          <span className="text-primary font-bold text-sm sm:text-base">₹{product.price}</span>
           {product.original_price && product.original_price > product.price && (
-            <span className="text-xs text-gray-400 line-through">
+            <span className="text-[10px] sm:text-xs text-gray-400 line-through">
               ₹{product.original_price}
             </span>
           )}
         </div>
         {product.stock_qty <= 5 && product.stock_qty > 0 && (
-          <p className="text-xs text-red-500 mt-1">Only {product.stock_qty} left!</p>
+          <p className="text-[10px] sm:text-xs text-red-500 mt-0.5 sm:mt-1">Only {product.stock_qty} left!</p>
         )}
         {product.stock_qty === 0 && (
-          <p className="text-xs text-red-500 mt-1 font-medium">Out of Stock</p>
+          <p className="text-[10px] sm:text-xs text-red-500 mt-0.5 sm:mt-1 font-medium">Out of Stock</p>
         )}
       </div>
     </Link>

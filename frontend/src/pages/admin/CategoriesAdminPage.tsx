@@ -11,25 +11,22 @@ function CategoryNode({ cat, onDelete }: { cat: Category; onDelete: (id: number,
 
   return (
     <div>
-      <div className="flex items-center gap-2 py-2 px-3 hover:bg-gray-50 rounded-lg group">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="w-5 h-5 flex items-center justify-center"
-        >
+      <div className="flex items-center gap-2 py-2.5 px-3 hover:bg-gray-50 rounded-lg group">
+        <button onClick={() => setExpanded(!expanded)} className="w-6 h-6 flex items-center justify-center touch-target">
           {hasChildren ? (expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />) : <span className="w-3" />}
         </button>
-        <FolderTree size={16} className="text-primary-light" />
-        <span className="text-sm font-medium flex-1">{cat.name}</span>
-        <span className="text-xs text-gray-400">{cat.slug}</span>
+        <FolderTree size={16} className="text-primary-light shrink-0" />
+        <span className="text-sm font-medium flex-1 min-w-0 truncate">{cat.name}</span>
+        <span className="text-xs text-gray-400 hidden sm:inline shrink-0">{cat.slug}</span>
         <button
           onClick={() => onDelete(cat.id, cat.name)}
-          className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-600 transition-opacity"
+          className="sm:opacity-0 sm:group-hover:opacity-100 p-1.5 text-red-400 hover:text-red-600 transition-opacity touch-target shrink-0"
         >
           <Trash2 size={14} />
         </button>
       </div>
       {expanded && hasChildren && (
-        <div className="ml-6 border-l pl-2">
+        <div className="ml-4 sm:ml-6 border-l pl-2">
           {cat.children!.map((child) => (
             <CategoryNode key={child.id} cat={child} onDelete={onDelete} />
           ))}
@@ -77,40 +74,38 @@ export default function CategoriesAdminPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Categories</h1>
+    <div className="space-y-4 sm:space-y-6">
+      <h1 className="text-xl sm:text-2xl font-bold">Categories</h1>
 
-      <form onSubmit={handleCreate} className="flex flex-wrap gap-3 bg-white rounded-xl border p-4">
+      <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-2 sm:gap-3 bg-white rounded-xl border p-3 sm:p-4">
         <input
           placeholder="Category name"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           required
-          className="px-3 py-2 text-sm border rounded-lg flex-1 min-w-[200px] focus:outline-none focus:ring-1 focus:ring-primary-light"
+          className="px-3 py-2.5 text-sm border rounded-lg flex-1 focus:outline-none focus:ring-1 focus:ring-primary-light"
         />
         <select
           value={parentId}
           onChange={(e) => setParentId(e.target.value)}
-          className="px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-light"
+          className="px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-light"
         >
           <option value="">No Parent (root)</option>
           {allCats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <button type="submit" disabled={createMutation.isPending} className="px-4 py-2 bg-primary text-white text-sm rounded-lg font-medium flex items-center gap-2 hover:bg-primary/90 disabled:opacity-60">
+        <button type="submit" disabled={createMutation.isPending} className="px-4 py-2.5 bg-primary text-white text-sm rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-primary/90 disabled:opacity-60 touch-target">
           <Plus size={16} /> Add
         </button>
       </form>
 
-      <div className="bg-white rounded-xl border p-4">
+      <div className="bg-white rounded-xl border p-3 sm:p-4">
         {isLoading ? (
-          <p className="text-center text-gray-400 py-8">Loading...</p>
+          <p className="text-center text-gray-400 py-8 text-sm">Loading...</p>
         ) : roots.length === 0 ? (
-          <p className="text-center text-gray-400 py-8">No categories yet</p>
+          <p className="text-center text-gray-400 py-8 text-sm">No categories yet</p>
         ) : (
-          <div className="space-y-1">
-            {roots.map((cat) => (
-              <CategoryNode key={cat.id} cat={cat} onDelete={handleDelete} />
-            ))}
+          <div className="space-y-0.5">
+            {roots.map((cat) => <CategoryNode key={cat.id} cat={cat} onDelete={handleDelete} />)}
           </div>
         )}
       </div>

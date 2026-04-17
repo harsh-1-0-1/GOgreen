@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { Plus, Search, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useDeleteProduct } from '@/hooks/useAdmin';
 import api from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 const productSchema = z.object({
   name: z.string().min(2, 'Name is required'),
@@ -36,6 +37,8 @@ function ProductModal({ onClose }: { onClose: () => void }) {
   const allCats = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
   const [submitting, setSubmitting] = useState(false);
 
+  useBodyScrollLock(true);
+
   const { register, handleSubmit, control, formState: { errors } } = useForm<ProductFormData>({
     resolver: zodResolver(productSchema) as any,
     defaultValues: { tags: [{ value: '' }], care_tips: [{ value: '' }], stock_qty: 0 },
@@ -49,15 +52,10 @@ function ProductModal({ onClose }: { onClose: () => void }) {
       const fd = new FormData();
       const slug = slugify(data.name);
       fd.append('body', JSON.stringify({
-        name: data.name,
-        slug,
-        description: data.description || '',
-        price: data.price,
-        original_price: data.original_price || null,
-        stock_qty: data.stock_qty,
-        category_id: data.category_id,
-        badge: data.badge || null,
-        sunlight: data.sunlight || null,
+        name: data.name, slug, description: data.description || '',
+        price: data.price, original_price: data.original_price || null,
+        stock_qty: data.stock_qty, category_id: data.category_id,
+        badge: data.badge || null, sunlight: data.sunlight || null,
         watering: data.watering || null,
         tags: data.tags?.map((t) => t.value).filter(Boolean) || [],
         care_tips: data.care_tips?.map((t) => t.value).filter(Boolean) || [],
@@ -74,37 +72,40 @@ function ProductModal({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const inputClass = "w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-light";
+
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
-      <div className="fixed inset-4 md:inset-y-8 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-2xl bg-white rounded-2xl z-50 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between p-5 border-b">
+      <div className="fixed inset-0 sm:inset-4 md:inset-y-8 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-2xl bg-white sm:rounded-2xl z-50 flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b shrink-0">
           <h2 className="text-lg font-bold">Add Product</h2>
-          <button onClick={onClose}><X size={20} /></button>
+          <button onClick={onClose} className="p-2 touch-target"><X size={20} /></button>
         </div>
-        <form onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-y-auto p-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
+        <form onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+          {/* Single column on mobile, 2-col on desktop */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="sm:col-span-2">
               <label className="text-xs font-medium text-gray-500 mb-1 block">Name *</label>
-              <input {...register('name')} className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-light" />
+              <input {...register('name')} className={inputClass} />
               {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1 block">Price (₹) *</label>
-              <input type="number" step="0.01" {...register('price')} className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-light" />
+              <input type="number" step="0.01" {...register('price')} className={inputClass} />
               {errors.price && <p className="text-xs text-red-500 mt-1">{errors.price.message}</p>}
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1 block">Original Price</label>
-              <input type="number" step="0.01" {...register('original_price')} className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-light" />
+              <input type="number" step="0.01" {...register('original_price')} className={inputClass} />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1 block">Stock *</label>
-              <input type="number" {...register('stock_qty')} className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-light" />
+              <input type="number" {...register('stock_qty')} className={inputClass} />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1 block">Category *</label>
-              <select {...register('category_id')} className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-light">
+              <select {...register('category_id')} className={inputClass}>
                 <option value="">Select</option>
                 {allCats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -112,54 +113,49 @@ function ProductModal({ onClose }: { onClose: () => void }) {
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1 block">Badge</label>
-              <input {...register('badge')} placeholder="e.g. Bestseller" className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-light" />
+              <input {...register('badge')} placeholder="e.g. Bestseller" className={inputClass} />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1 block">Sunlight</label>
-              <input {...register('sunlight')} placeholder="e.g. Indirect" className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-light" />
+              <input {...register('sunlight')} placeholder="e.g. Indirect" className={inputClass} />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1 block">Watering</label>
-              <input {...register('watering')} placeholder="e.g. Weekly" className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-light" />
+              <input {...register('watering')} placeholder="e.g. Weekly" className={inputClass} />
             </div>
           </div>
-          <div className="col-span-2">
+          <div>
             <label className="text-xs font-medium text-gray-500 mb-1 block">Description</label>
-            <textarea {...register('description')} rows={3} className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-light" />
+            <textarea {...register('description')} rows={3} className={inputClass} />
           </div>
-
-          {/* Tags */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-medium text-gray-500">Tags</label>
-              <button type="button" onClick={() => addTag({ value: '' })} className="text-xs text-primary hover:underline">+ Add</button>
+              <button type="button" onClick={() => addTag({ value: '' })} className="text-xs text-primary hover:underline touch-target">+ Add</button>
             </div>
             <div className="flex flex-wrap gap-2">
               {tagFields.map((f, i) => (
                 <div key={f.id} className="flex items-center gap-1">
-                  <input {...register(`tags.${i}.value`)} placeholder="tag" className="w-28 px-2 py-1.5 text-xs border rounded-lg" />
-                  <button type="button" onClick={() => removeTag(i)} className="text-red-400 hover:text-red-600"><X size={14} /></button>
+                  <input {...register(`tags.${i}.value`)} placeholder="tag" className="w-24 sm:w-28 px-2 py-1.5 text-xs border rounded-lg" />
+                  <button type="button" onClick={() => removeTag(i)} className="text-red-400 hover:text-red-600 touch-target"><X size={14} /></button>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Care tips */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-medium text-gray-500">Care Tips</label>
-              <button type="button" onClick={() => addTip({ value: '' })} className="text-xs text-primary hover:underline">+ Add</button>
+              <button type="button" onClick={() => addTip({ value: '' })} className="text-xs text-primary hover:underline touch-target">+ Add</button>
             </div>
             <div className="space-y-2">
               {tipFields.map((f, i) => (
                 <div key={f.id} className="flex items-center gap-2">
                   <input {...register(`care_tips.${i}.value`)} placeholder="Tip" className="flex-1 px-3 py-2 text-sm border rounded-lg" />
-                  <button type="button" onClick={() => removeTip(i)} className="text-red-400 hover:text-red-600"><X size={14} /></button>
+                  <button type="button" onClick={() => removeTip(i)} className="text-red-400 hover:text-red-600 touch-target"><X size={14} /></button>
                 </div>
               ))}
             </div>
           </div>
-
           <button type="submit" disabled={submitting} className="w-full py-3 bg-primary text-white rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-60">
             {submitting ? 'Creating...' : 'Create Product'}
           </button>
@@ -188,24 +184,25 @@ export default function ProductsAdminPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Products</h1>
-        <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-primary text-white text-sm rounded-lg font-medium flex items-center gap-2 hover:bg-primary/90">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <h1 className="text-xl sm:text-2xl font-bold">Products</h1>
+        <button onClick={() => setShowModal(true)} className="px-4 py-2.5 bg-primary text-white text-sm rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-primary/90 touch-target">
           <Plus size={16} /> Add Product
         </button>
       </div>
 
-      <div className="relative max-w-sm">
+      <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           placeholder="Search products..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="w-full pl-9 pr-4 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-light"
+          className="w-full sm:max-w-sm pl-9 pr-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-light"
         />
       </div>
 
-      <div className="bg-white rounded-xl border overflow-x-auto">
+      {/* Desktop table */}
+      <div className="hidden sm:block bg-white rounded-xl border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-gray-500 border-b">
@@ -233,9 +230,7 @@ export default function ProductsAdminPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => handleDelete(p.id, p.name)} className="p-1.5 text-red-400 hover:text-red-600">
-                      <Trash2 size={15} />
-                    </button>
+                    <button onClick={() => handleDelete(p.id, p.name)} className="p-1.5 text-red-400 hover:text-red-600 touch-target"><Trash2 size={15} /></button>
                   </td>
                 </tr>
               ))
@@ -244,11 +239,38 @@ export default function ProductsAdminPage() {
         </table>
       </div>
 
+      {/* Mobile cards */}
+      <div className="sm:hidden space-y-2">
+        {isLoading ? (
+          <p className="text-center text-gray-400 py-8 text-sm">Loading...</p>
+        ) : data?.items?.length === 0 ? (
+          <p className="text-center text-gray-400 py-8 text-sm">No products found</p>
+        ) : (
+          data?.items?.map((p) => (
+            <div key={p.id} className="bg-white rounded-xl border p-3 flex items-center gap-3">
+              <img
+                src={p.images?.[0] || 'https://placehold.co/60x60?text=P'}
+                alt={p.name}
+                className="w-12 h-12 rounded-lg object-cover shrink-0"
+                loading="lazy"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium line-clamp-1">{p.name}</p>
+                <p className="text-xs text-gray-500">₹{p.price} · Stock: {p.stock_qty}</p>
+              </div>
+              <button onClick={() => handleDelete(p.id, p.name)} className="p-2 text-red-400 hover:text-red-600 shrink-0 touch-target">
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
       {data && data.pages > 1 && (
         <div className="flex items-center justify-center gap-2">
-          <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-30">Prev</button>
+          <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-30 touch-target">Prev</button>
           <span className="text-sm text-gray-500">Page {page} of {data.pages}</span>
-          <button disabled={page >= data.pages} onClick={() => setPage(page + 1)} className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-30">Next</button>
+          <button disabled={page >= data.pages} onClick={() => setPage(page + 1)} className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-30 touch-target">Next</button>
         </div>
       )}
 
