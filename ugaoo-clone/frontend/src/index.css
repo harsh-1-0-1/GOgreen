@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #2D6A4F;
+  --color-primary-light: #52B788;
+  --color-accent: #F4A261;
+  --color-bg: #FAFAF7;
+  --color-text: #1B1B1B;
+}
+
+body {
+  @apply bg-bg text-text antialiased;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+}

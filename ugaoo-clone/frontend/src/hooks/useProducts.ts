@@ -1,0 +1,38 @@
+import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
+import type { Product, ProductListResponse } from '@/types';
+
+interface ProductFilters {
+  category_slug?: string;
+  search?: string;
+  min_price?: number;
+  max_price?: number;
+  tags?: string;
+  sort_by?: string;
+  page?: number;
+  limit?: number;
+}
+
+export function useProducts(filters: ProductFilters = {}) {
+  return useQuery({
+    queryKey: ['products', filters],
+    queryFn: async () => {
+      const params = Object.fromEntries(
+        Object.entries(filters).filter(([, v]) => v !== undefined && v !== ''),
+      );
+      const { data } = await api.get<ProductListResponse>('/products', { params });
+      return data;
+    },
+  });
+}
+
+export function useProduct(slug: string) {
+  return useQuery({
+    queryKey: ['product', slug],
+    queryFn: async () => {
+      const { data } = await api.get<Product>(`/products/${slug}`);
+      return data;
+    },
+    enabled: !!slug,
+  });
+}

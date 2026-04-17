@@ -1,0 +1,159 @@
+import { Link } from 'react-router-dom';
+import { ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useCartStore } from '@/store/cartStore';
+import { useAuthStore } from '@/store/authStore';
+
+export default function CartPage() {
+  const { items, total, itemCount, updateItem, removeItem } = useCartStore();
+  const { user, openAuthModal } = useAuthStore();
+
+  async function handleUpdate(itemId: number, qty: number) {
+    try {
+      if (qty <= 0) await removeItem(itemId);
+      else await updateItem(itemId, qty);
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Update failed');
+    }
+  }
+
+  async function handleRemove(itemId: number) {
+    try {
+      await removeItem(itemId);
+      toast.success('Removed from cart');
+    } catch {
+      toast.error('Remove failed');
+    }
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-20 flex flex-col items-center gap-4 text-gray-400">
+        <ShoppingBag size={56} strokeWidth={1} />
+        <h2 className="text-xl font-semibold text-gray-600">Your cart is empty</h2>
+        <p className="text-sm">Add some plants to make your home greener!</p>
+        <Link
+          to="/products"
+          className="mt-2 px-6 py-3 bg-primary text-white rounded-full font-medium hover:bg-primary/90 transition"
+        >
+          Browse Plants
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-8">Shopping Cart ({itemCount} items)</h1>
+
+      <div className="grid lg:grid-cols-3 gap-8">
+        {/* Items */}
+        <div className="lg:col-span-2 space-y-4">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="flex gap-4 p-4 bg-white rounded-2xl border border-gray-100"
+            >
+              <Link to={`/products/${item.product.slug}`} className="shrink-0">
+                <img
+                  src={item.product.images?.[0] || 'https://placehold.co/120x120?text=Plant'}
+                  alt={item.product.name}
+                  className="w-24 h-24 md:w-28 md:h-28 rounded-xl object-cover"
+                />
+              </Link>
+              <div className="flex-1 min-w-0">
+                <Link
+                  to={`/products/${item.product.slug}`}
+                  className="font-medium hover:text-primary transition line-clamp-1"
+                >
+                  {item.product.name}
+                </Link>
+                <p className="text-primary font-bold mt-1">₹{item.product.price}</p>
+                {item.product.original_price && item.product.original_price > item.product.price && (
+                  <p className="text-xs text-gray-400 line-through">₹{item.product.original_price}</p>
+                )}
+                <div className="flex items-center gap-3 mt-3">
+                  <div className="flex items-center border rounded-lg">
+                    <button
+                      onClick={() => handleUpdate(item.id, item.quantity - 1)}
+                      className="p-2 hover:bg-gray-50"
+                    >
+                      <Minus size={14} />
+                    </button>
+                    <span className="px-3 text-sm font-medium">{item.quantity}</span>
+                    <button
+                      onClick={() => handleUpdate(item.id, item.quantity + 1)}
+                      className="p-2 hover:bg-gray-50"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => handleRemove(item.id)}
+                    className="text-red-400 hover:text-red-600 text-sm flex items-center gap-1"
+                  >
+                    <Trash2 size={14} /> Remove
+                  </button>
+                </div>
+              </div>
+              <p className="font-bold text-lg shrink-0">₹{item.line_total.toFixed(0)}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Order summary sidebar */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-2xl border p-6 space-y-4 sticky top-24">
+            <h3 className="font-bold text-lg">Order Summary</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Subtotal</span>
+                <span className="font-medium">₹{total.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Shipping</span>
+                <span className="font-medium text-green-600">
+                  {total >= 499 ? 'Free' : '₹49'}
+                </span>
+              </div>
+            </div>
+            <div className="border-t pt-3">
+              <div className="flex justify-between text-lg font-bold">
+                <span>Total</span>
+                <span className="text-primary">₹{(total + (total >= 499 ? 0 : 49)).toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Promo code */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Promo code"
+                className="flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-light"
+              />
+              <button className="px-4 py-2 text-sm bg-gray-100 rounded-lg font-medium hover:bg-gray-200 transition">
+                Apply
+              </button>
+            </div>
+
+            {user ? (
+              <Link
+                to="/checkout"
+                className="block w-full text-center py-3.5 bg-primary text-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-primary/90 transition"
+              >
+                Proceed to Checkout <ArrowRight size={18} />
+              </Link>
+            ) : (
+              <button
+                onClick={openAuthModal}
+                className="w-full py-3.5 bg-primary text-white rounded-xl font-semibold hover:bg-primary/90 transition"
+              >
+                Login to Checkout
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
