@@ -7,9 +7,10 @@ export default function UsersAdminPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Users</h1>
+      <h1 className="text-xl sm:text-2xl font-bold">Users</h1>
 
-      <div className="bg-white rounded-xl border overflow-x-auto">
+      {/* Desktop table */}
+      <div className="hidden sm:block bg-white rounded-xl border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-gray-500 border-b">
@@ -40,9 +41,7 @@ export default function UsersAdminPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-medium ${u.is_active ? 'text-green-600' : 'text-red-500'}`}>
-                      {u.is_active ? 'Yes' : 'No'}
-                    </span>
+                    <span className={`text-xs font-medium ${u.is_active ? 'text-green-600' : 'text-red-500'}`}>{u.is_active ? 'Yes' : 'No'}</span>
                   </td>
                   <td className="px-4 py-3 text-gray-500">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
                 </tr>
@@ -52,11 +51,36 @@ export default function UsersAdminPage() {
         </table>
       </div>
 
+      {/* Mobile cards */}
+      <div className="sm:hidden space-y-2">
+        {isLoading ? (
+          <p className="text-center text-gray-400 py-8 text-sm">Loading...</p>
+        ) : data?.items?.length === 0 ? (
+          <p className="text-center text-gray-400 py-8 text-sm">No users</p>
+        ) : (
+          data?.items?.map((u: any) => (
+            <div key={u.id} className="bg-white rounded-xl border p-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm font-medium">{u.full_name || 'No name'}</p>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${u.is_admin ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
+                  {u.is_admin ? 'Admin' : 'User'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 truncate">{u.email}</p>
+              <div className="flex items-center justify-between mt-1.5">
+                <p className="text-xs text-gray-400">{u.phone || 'No phone'}</p>
+                <p className="text-xs text-gray-400">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
       {data && data.pages > 1 && (
         <div className="flex items-center justify-center gap-2">
-          <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-30">Prev</button>
+          <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-30 touch-target">Prev</button>
           <span className="text-sm text-gray-500">Page {page} of {data.pages}</span>
-          <button disabled={page >= data.pages} onClick={() => setPage(page + 1)} className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-30">Next</button>
+          <button disabled={page >= data.pages} onClick={() => setPage(page + 1)} className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-30 touch-target">Next</button>
         </div>
       )}
     </div>
