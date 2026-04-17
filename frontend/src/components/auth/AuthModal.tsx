@@ -47,8 +47,13 @@ export default function AuthModal() {
     }
   }
 
-  function handleGoogleLogin() {
-    window.location.href = 'http://localhost:8000/api/v1/auth/google';
+  async function handleGoogleLogin() {
+    try {
+      const { data } = await (await import('@/lib/api')).default.get('/auth/google');
+      window.location.href = data.authorization_url;
+    } catch {
+      toast.error('Failed to start Google login');
+    }
   }
 
   return (

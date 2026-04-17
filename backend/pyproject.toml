@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "GOgreen – gardening & farming essentials, FastAPI backend"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115.0",
+    "fastapi[standard]>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "sqlalchemy[asyncio]>=2.0.36",
     "aiosqlite>=0.20.0",

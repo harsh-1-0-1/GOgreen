@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, Search, ShoppingCart, User, X, LogOut, Package } from 'lucide-react';
+import { Menu, Search, ShoppingCart, User, X, LogOut, Package, Settings } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 import { useCategories } from '@/hooks/useCategories';
@@ -124,6 +124,15 @@ export default function Navbar() {
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
                   <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border z-50 py-1">
+                    {user.is_admin && (
+                      <Link
+                        to="/admin"
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50 text-primary font-medium"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <Settings size={15} /> Admin Panel
+                      </Link>
+                    )}
                     <Link
                       to="/orders"
                       className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50"

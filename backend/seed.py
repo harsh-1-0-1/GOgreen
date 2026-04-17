@@ -109,6 +109,12 @@ def _original_price(price: float) -> float:
 
 async def seed() -> None:
     async with async_session_factory() as db:
+        # Clear existing seed data so the script is re-runnable
+        await db.execute(Product.__table__.delete())
+        await db.execute(Category.__table__.delete())
+        await db.flush()
+        print("Cleared existing products and categories.\n")
+
         slug_to_id: dict[str, int] = {}
 
         for cat_data in CATEGORIES:
