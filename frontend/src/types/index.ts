@@ -119,3 +119,25 @@ export interface CheckoutResponse {
   order_id: number;
   payu_form_data: Record<string, string>;
 }
+
+export interface BlogPost {
+  id: number;
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string;
+  cover_image_url: string | null;
+  category: string;
+  author_name: string;
+  is_published: boolean;
+  published_at: string | null;
+  created_at: string;
+}
+
+export interface BlogListResponse {
+  items: BlogPost[];
+  total: number;
+  page: number;
+  pages: number;
+  limit: number;
+}

@@ -1,4 +1,4 @@
-"""Seed script: 10 categories + 50 products for GOgreen.
+"""Seed script: 10 categories + 50 products for Plantoga.
 
 Usage:
     uv run python seed.py
@@ -6,8 +6,11 @@ Usage:
 
 import asyncio
 import random
+import re
+from datetime import datetime, timezone
 
-from app.db.models import Category, Product
+from app.core.security import hash_password
+from app.db.models import BlogCategory, BlogPost, Category, Product, User
 from app.db.session import async_session_factory
 
 UNSPLASH = "https://images.unsplash.com/photo-{id}?w=600&q=80"
@@ -38,15 +41,15 @@ CATEGORIES = [
 
 PRODUCTS = [
     # Indoor Plants (cat: indoor-plants)
-    {"name": "Money Plant Golden", "cat": "indoor-plants", "price": 249, "desc": "Air-purifying trailing vine perfect for shelves and hanging baskets.", "sunlight": "Low to Bright Indirect", "watering": "Once a week", "tags": ["air-purifying", "low-maintenance", "indoor"], "care_tips": ["Water when topsoil feels dry", "Prune to encourage bushier growth"], "badge": "Bestseller"},
-    {"name": "Snake Plant Sansevieria", "cat": "indoor-plants", "price": 399, "desc": "Hardy succulent that thrives on neglect and purifies air at night.", "sunlight": "Low to Bright Indirect", "watering": "Every 2 weeks", "tags": ["air-purifying", "low-maintenance", "bedroom"], "care_tips": ["Avoid overwatering", "Tolerates low light well"], "badge": "Trending"},
-    {"name": "Peace Lily", "cat": "indoor-plants", "price": 549, "desc": "Elegant white-flowering plant that removes toxins from indoor air.", "sunlight": "Low to Medium Indirect", "watering": "Twice a week", "tags": ["air-purifying", "flowering", "indoor"], "care_tips": ["Keep soil moist but not soggy", "Mist leaves in dry weather"]},
-    {"name": "Pothos Marble Queen", "cat": "indoor-plants", "price": 199, "desc": "Variegated trailing plant with stunning white and green leaves.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["trailing", "variegated", "indoor"], "care_tips": ["More light means more variegation", "Trim yellow leaves"]},
+    {"name": "Money Plant Golden", "cat": "indoor-plants", "price": 249, "desc": "Air-purifying trailing vine perfect for shelves and hanging baskets.", "sunlight": "Low to Bright Indirect", "watering": "Once a week", "tags": ["air-purifying", "low-maintenance", "indoor", "beginner-friendly"], "care_tips": ["Water when topsoil feels dry", "Prune to encourage bushier growth"], "badge": "Bestseller"},
+    {"name": "Snake Plant Sansevieria", "cat": "indoor-plants", "price": 399, "desc": "Hardy succulent that thrives on neglect and purifies air at night.", "sunlight": "Low to Bright Indirect", "watering": "Every 2 weeks", "tags": ["air-purifying", "low-maintenance", "bedroom", "beginner-friendly"], "care_tips": ["Avoid overwatering", "Tolerates low light well"], "badge": "Trending"},
+    {"name": "Peace Lily", "cat": "indoor-plants", "price": 549, "desc": "Elegant white-flowering plant that removes toxins from indoor air.", "sunlight": "Low to Medium Indirect", "watering": "Twice a week", "tags": ["air-purifying", "flowering", "indoor", "beginner-friendly"], "care_tips": ["Keep soil moist but not soggy", "Mist leaves in dry weather"]},
+    {"name": "Pothos Marble Queen", "cat": "indoor-plants", "price": 199, "desc": "Variegated trailing plant with stunning white and green leaves.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["trailing", "variegated", "indoor", "low-maintenance", "beginner-friendly"], "care_tips": ["More light means more variegation", "Trim yellow leaves"]},
     {"name": "Areca Palm", "cat": "indoor-plants", "price": 699, "desc": "Tropical palm that adds lush greenery and humidifies your room.", "sunlight": "Bright Indirect", "watering": "Twice a week", "tags": ["air-purifying", "tropical", "large"], "care_tips": ["Mist regularly", "Avoid direct sunlight to prevent leaf burn"], "badge": "Popular"},
-    {"name": "ZZ Plant", "cat": "indoor-plants", "price": 449, "desc": "Glossy-leaved virtually indestructible houseplant.", "sunlight": "Low to Bright Indirect", "watering": "Every 2-3 weeks", "tags": ["low-maintenance", "modern", "indoor"], "care_tips": ["Drought tolerant – do not overwater", "Wipe leaves for shine"]},
+    {"name": "ZZ Plant", "cat": "indoor-plants", "price": 449, "desc": "Glossy-leaved virtually indestructible houseplant.", "sunlight": "Low to Bright Indirect", "watering": "Every 2-3 weeks", "tags": ["low-maintenance", "modern", "indoor", "beginner-friendly"], "care_tips": ["Drought tolerant – do not overwater", "Wipe leaves for shine"]},
     {"name": "Rubber Plant", "cat": "indoor-plants", "price": 499, "desc": "Bold burgundy leaves that make a dramatic statement in any room.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["statement", "air-purifying", "indoor"], "care_tips": ["Clean leaves monthly", "Rotate for even growth"]},
-    {"name": "Jade Plant", "cat": "indoor-plants", "price": 349, "desc": "Lucky succulent symbolising prosperity and good fortune.", "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks", "tags": ["succulent", "lucky", "desktop"], "care_tips": ["Let soil dry completely between waterings", "Avoid cold drafts"]},
-    {"name": "Spider Plant", "cat": "indoor-plants", "price": 199, "desc": "Cheerful cascading foliage with baby plantlets on arching stems.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["pet-safe", "hanging", "beginner"], "care_tips": ["Safe for cats and dogs", "Propagate babies in water"]},
+    {"name": "Jade Plant", "cat": "indoor-plants", "price": 349, "desc": "Lucky succulent symbolising prosperity and good fortune.", "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks", "tags": ["succulent", "lucky", "desktop", "low-maintenance", "beginner-friendly"], "care_tips": ["Let soil dry completely between waterings", "Avoid cold drafts"]},
+    {"name": "Spider Plant", "cat": "indoor-plants", "price": 199, "desc": "Cheerful cascading foliage with baby plantlets on arching stems.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["pet-safe", "hanging", "beginner", "low-maintenance", "beginner-friendly"], "care_tips": ["Safe for cats and dogs", "Propagate babies in water"]},
     {"name": "Philodendron Brasil", "cat": "indoor-plants", "price": 299, "desc": "Heart-shaped variegated leaves in lime green and dark green.", "sunlight": "Medium to Bright Indirect", "watering": "Once a week", "tags": ["trailing", "variegated", "tropical"], "care_tips": ["Grows fast in bright light", "Trim leggy vines"]},
     # Outdoor Plants
     {"name": "Bougainvillea", "cat": "outdoor-plants", "price": 349, "desc": "Vibrant paper-like flowers in magenta that bloom year round.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["flowering", "drought-tolerant", "climber"], "care_tips": ["Needs 6+ hours of sun", "Prune after each flowering cycle"], "badge": "Bestseller"},
@@ -64,7 +67,7 @@ PRODUCTS = [
     {"name": "Echeveria Elegans", "cat": "cacti-succulents", "price": 199, "desc": "Blue-green rosette succulent, perfect for terrariums.", "sunlight": "Bright Direct", "watering": "Every 2 weeks", "tags": ["succulent", "rosette", "terrarium"], "care_tips": ["Use well-draining soil", "Avoid water on leaves"]},
     {"name": "Haworthia Zebra", "cat": "cacti-succulents", "price": 249, "desc": "Compact striped succulent that thrives on a bright windowsill.", "sunlight": "Bright Indirect", "watering": "Every 2-3 weeks", "tags": ["succulent", "compact", "desktop"], "care_tips": ["Perfect for small pots", "Tolerates some shade"]},
     {"name": "Barrel Cactus", "cat": "cacti-succulents", "price": 349, "desc": "Spherical ribbed cactus with golden spines.", "sunlight": "Full Sun", "watering": "Monthly", "tags": ["cactus", "drought-tolerant", "statement"], "care_tips": ["Minimal watering in winter", "Needs excellent drainage"]},
-    {"name": "Aloe Vera", "cat": "cacti-succulents", "price": 199, "desc": "Medicinal gel-filled leaves useful for skin care.", "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks", "tags": ["medicinal", "succulent", "beginner"], "care_tips": ["Harvest outer leaves for gel", "Let soil dry between waterings"], "badge": "Essential"},
+    {"name": "Aloe Vera", "cat": "cacti-succulents", "price": 199, "desc": "Medicinal gel-filled leaves useful for skin care.", "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks", "tags": ["medicinal", "succulent", "beginner", "low-maintenance", "beginner-friendly"], "care_tips": ["Harvest outer leaves for gel", "Let soil dry between waterings"], "badge": "Essential"},
     {"name": "String of Pearls", "cat": "cacti-succulents", "price": 299, "desc": "Delicate trailing succulent with bead-like leaves.", "sunlight": "Bright Indirect", "watering": "Every 2 weeks", "tags": ["trailing", "hanging", "unique"], "care_tips": ["Bottom watering recommended", "Avoid overwatering"]},
     # Vegetable Seeds
     {"name": "Tomato Seeds (Cherry)", "cat": "vegetable-seeds", "price": 99, "desc": "Pack of 50 seeds – sweet cherry tomatoes, harvest in 60 days.", "sunlight": "Full Sun", "watering": "Daily", "tags": ["seeds", "edible", "kitchen-garden"], "care_tips": ["Start indoors 6 weeks before last frost", "Stake when 30 cm tall"]},
@@ -98,6 +101,153 @@ PRODUCTS = [
 ]
 
 
+BLOG_POSTS = [
+    {
+        "title": "10 Types of Fertilizers That Help Grow Plants",
+        "excerpt": "From vermicompost to liquid seaweed, understand which fertilizer works best for your garden and when to apply it.",
+        "category": BlogCategory.GROW,
+        "cover": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1200&q=80",
+        "author": "Plantoga Team",
+        "content": """## Choosing the Right Fertilizer
+
+Plants need three primary nutrients: **Nitrogen (N)**, **Phosphorus (P)**, and **Potassium (K)**. Different fertilizers supply these in different ratios.
+
+### Organic Fertilizers
+1. **Vermicompost** — Worm castings rich in micronutrients. Great for all plants.
+2. **Neem Cake** — Slow-release nitrogen + natural pest deterrent.
+3. **Bone Meal** — High phosphorus; ideal for flowering plants and bulbs.
+4. **Fish Emulsion** — Fast-acting liquid with balanced NPK.
+5. **Seaweed Extract** — Packed with trace minerals and growth hormones.
+
+### Synthetic Fertilizers
+6. **NPK 19-19-19** — Balanced all-purpose granular feed.
+7. **DAP (Diammonium Phosphate)** — Boosts root development.
+8. **Urea** — Very high nitrogen; use sparingly for leafy greens.
+
+### Specialty Options
+9. **Epsom Salt** — Provides magnesium; great for tomatoes and roses.
+10. **Coconut Husk Chips** — Slow-release potassium and improved aeration.
+
+### When to Fertilize
+- **Growing season** (March\u2013October): Feed every 2\u20134 weeks.
+- **Winter**: Reduce or stop feeding \u2014 most plants are dormant.
+
+Always water the soil before applying fertilizer to avoid root burn.""",
+    },
+    {
+        "title": "13 Ways to Save Your Drying or Dead Plant",
+        "excerpt": "Don't give up on your wilting houseplant just yet. Here are 13 proven techniques to revive even the most neglected greenery.",
+        "category": BlogCategory.CARE,
+        "cover": "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=1200&q=80",
+        "author": "Plantoga Team",
+        "content": """## Is Your Plant Dying? Here's How to Save It
+
+Every plant parent has been there \u2014 yellowing leaves, drooping stems, dry soil. But most plants are more resilient than you think.
+
+### 1. Check the Soil Moisture
+Stick your finger 2 inches into the soil. Bone dry? Time for a deep soak. Soggy? You may be overwatering.
+
+### 2. Inspect for Root Rot
+Gently remove the plant from its pot. Healthy roots are white or tan; mushy brown roots mean rot. Trim the damaged ones with sterile scissors.
+
+### 3. Adjust Your Watering Schedule
+Most indoor plants prefer to dry out slightly between waterings. Set a weekly reminder rather than watering on a fixed schedule.
+
+### 4. Move to Better Light
+A plant that's stretching or losing colour likely needs more light. Shift it closer to a window, but avoid harsh afternoon sun.
+
+### 5. Trim Dead Foliage
+Removing yellow or brown leaves lets the plant redirect energy to new growth.
+
+### 6\u201313: More Quick Wins
+- **Repot** into fresh potting mix if the soil is compacted.
+- **Mist** tropical plants to raise humidity.
+- **Feed** with diluted liquid fertiliser during the growing season.
+- **Check for pests** \u2014 look under leaves for mealybugs or spider mites.
+- **Quarantine** infected plants away from healthy ones.
+- **Reduce fertiliser** if leaf tips are burnt.
+- **Prune leggy stems** to encourage bushier regrowth.
+- **Be patient** \u2014 recovery takes 2\u20134 weeks.
+
+With a little attention, most houseplants bounce back beautifully.""",
+    },
+    {
+        "title": "How to Set Up a Balcony Garden",
+        "excerpt": "Transform your apartment balcony into a lush green retreat with this step-by-step guide to container gardening.",
+        "category": BlogCategory.DIY,
+        "cover": "https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=1200&q=80",
+        "author": "Plantoga Team",
+        "content": """## Your Balcony Garden, Step by Step
+
+You don't need a backyard to be a gardener. A balcony \u2014 even a small one \u2014 can host a thriving container garden.
+
+### Step 1: Assess Your Space
+- **Direction**: South or west-facing gets the most sun.
+- **Weight limit**: Check with your building \u2014 large pots filled with wet soil are heavy.
+- **Wind exposure**: Higher floors may need wind barriers.
+
+### Step 2: Choose the Right Containers
+- Minimum **6-inch pots** for herbs; **10-12 inch** for vegetables and larger plants.
+- Ensure every pot has **drainage holes**.
+- Self-watering planters are ideal if you travel often.
+
+### Step 3: Pick Your Plants
+**Full Sun (6+ hours):** Tomatoes, chillies, bougainvillea, marigold.
+**Part Shade (3\u20135 hours):** Money plant, ferns, lettuce, coriander.
+**Low Light (indirect):** Snake plant, ZZ plant, pothos.
+
+### Step 4: Soil & Feeding
+Use a **quality potting mix** \u2014 not garden soil, which compacts in pots. Mix in cocopeat and perlite for better drainage.
+
+### Step 5: Watering
+- Water **early morning** or **late evening**.
+- Check soil moisture daily in summer; every 2\u20133 days in winter.
+- Mulch the surface with pebbles to reduce evaporation.
+
+### Bonus: Vertical Gardening
+Hang planters on railings, use wall-mounted pockets, or install a trellis for climbers like money plant or passion fruit.""",
+    },
+    {
+        "title": "5 Plants That Purify Indoor Air",
+        "excerpt": "NASA research shows these houseplants actively remove toxins like formaldehyde and benzene from your home.",
+        "category": BlogCategory.TIPS,
+        "cover": "https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=1200&q=80",
+        "author": "Plantoga Team",
+        "content": """## Breathe Easier with These Air-Purifying Plants
+
+Indoor air can be 2\u20135 times more polluted than outdoor air. Houseplants are a natural, beautiful way to filter toxins.
+
+### 1. Snake Plant (Sansevieria)
+- **Removes:** Formaldehyde, benzene, trichloroethylene
+- **Bonus:** Releases oxygen at night \u2014 perfect for bedrooms
+- **Care:** Water every 2\u20133 weeks; tolerates low light
+
+### 2. Peace Lily
+- **Removes:** Ammonia, formaldehyde, benzene
+- **Bonus:** Beautiful white blooms year-round
+- **Care:** Keep soil moist; thrives in low to medium light
+
+### 3. Areca Palm
+- **Removes:** Formaldehyde, xylene, toluene
+- **Bonus:** Acts as a natural humidifier
+- **Care:** Bright indirect light; water twice weekly
+
+### 4. Money Plant (Pothos)
+- **Removes:** Formaldehyde, carbon monoxide
+- **Bonus:** Nearly impossible to kill
+- **Care:** Water weekly; grows in water or soil
+
+### 5. Rubber Plant
+- **Removes:** Formaldehyde
+- **Bonus:** Large dramatic leaves make a design statement
+- **Care:** Bright indirect light; wipe leaves monthly
+
+### How Many Plants Do You Need?
+NASA recommends **1 plant per 100 sq ft** for noticeable air quality improvement. A typical 2BHK apartment benefits from 6\u201310 plants.""",
+    },
+]
+
+
 def _pick_images() -> list[str]:
     return random.sample(PLANT_IMAGES, k=random.randint(1, 3))
 
@@ -112,8 +262,22 @@ async def seed() -> None:
         # Clear existing seed data so the script is re-runnable
         await db.execute(Product.__table__.delete())
         await db.execute(Category.__table__.delete())
+        await db.execute(BlogPost.__table__.delete())
+        await db.execute(User.__table__.delete())
         await db.flush()
-        print("Cleared existing products and categories.\n")
+        print("Cleared existing data.\n")
+
+        # Admin user
+        admin = User(
+            email="admin@example.com",
+            hashed_password=hash_password("adminadmin"),
+            full_name="Admin",
+            is_active=True,
+            is_admin=True,
+        )
+        db.add(admin)
+        await db.flush()
+        print(f"  Admin user: {admin.email} (id={admin.id})")
 
         slug_to_id: dict[str, int] = {}
 
@@ -138,7 +302,6 @@ async def seed() -> None:
         for p in PRODUCTS:
             cat_id = slug_to_id[p["cat"]]
             slug = p["name"].lower().strip()
-            import re
             slug = re.sub(r"[^\w\s-]", "", slug)
             slug = re.sub(r"[\s_]+", "-", slug)
             slug = re.sub(r"-+", "-", slug).strip("-")
@@ -161,8 +324,27 @@ async def seed() -> None:
             )
             db.add(product)
 
+        for bp in BLOG_POSTS:
+            slug = bp["title"].lower().strip()
+            slug = re.sub(r"[^\w\s-]", "", slug)
+            slug = re.sub(r"[\s_]+", "-", slug)
+            slug = re.sub(r"-+", "-", slug).strip("-")
+
+            post = BlogPost(
+                title=bp["title"],
+                slug=slug,
+                excerpt=bp["excerpt"],
+                content=bp["content"],
+                cover_image_url=bp["cover"],
+                category=bp["category"],
+                author_name=bp["author"],
+                is_published=True,
+                published_at=datetime.now(timezone.utc),
+            )
+            db.add(post)
+
         await db.commit()
-        print(f"\nSeeded {len(CATEGORIES)} categories and {len(PRODUCTS)} products.")
+        print(f"\nSeeded 1 admin, {len(CATEGORIES)} categories, {len(PRODUCTS)} products, and {len(BLOG_POSTS)} blog posts.")
 
 
 if __name__ == "__main__":

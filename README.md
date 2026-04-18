@@ -1,8 +1,8 @@
-# GOgreen — Your Independent Solution for Gardening & Farming
+# Plantoga — Your Independent Solution for Gardening & Farming
 
 A full-stack e-commerce platform for plants, seeds, pots, and gardening essentials. Built from scratch with **FastAPI** (backend) and **React + Vite** (frontend).
 
-GOgreen is designed to be the one-stop shop for everything green — from indoor air-purifying plants to organic fertilisers and kitchen-garden seeds.
+Plantoga is designed to be the one-stop shop for everything green — from indoor air-purifying plants to organic fertilisers and kitchen-garden seeds.
 
 ## Prerequisites
 
@@ -17,8 +17,8 @@ GOgreen is designed to be the one-stop shop for everything green — from indoor
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/harsh-1-0-1/GOgreen.git
-cd GOgreen
+git clone https://github.com/harsh-1-0-1/Plantoga.git
+cd Plantoga
 
 # 2. Set up environment
 cp .env.example backend/.env
@@ -93,7 +93,7 @@ Once the backend is running, visit:
 ## Architecture
 
 ```
-GOgreen/
+Plantoga/
 ├── backend/
 │   ├── app/
 │   │   ├── api/v1/          # Route handlers (auth, products, cart, orders, admin, ...)

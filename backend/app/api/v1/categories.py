@@ -78,7 +78,7 @@ async def upload_category_image(
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
     data = await image.read()
-    result = upload_image(data, folder="gogreen/categories")
+    result = upload_image(data, folder="plantoga/categories")
     cat.image_url = result["url"]
     await db.flush()
     await db.refresh(cat)

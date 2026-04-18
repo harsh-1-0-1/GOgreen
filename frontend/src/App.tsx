@@ -17,6 +17,8 @@ import CheckoutPage from '@/pages/CheckoutPage';
 import OrdersPage from '@/pages/OrdersPage';
 import OrderDetailPage from '@/pages/OrderDetailPage';
 import NotFoundPage from '@/pages/NotFoundPage';
+import BlogListPage from '@/pages/BlogListPage';
+import BlogDetailPage from '@/pages/BlogDetailPage';
 
 import AdminLayout from '@/components/admin/AdminLayout';
 import DashboardPage from '@/pages/admin/DashboardPage';
@@ -60,6 +62,8 @@ export default function App() {
               <Route path="/checkout" element={<CheckoutPage />} />
               <Route path="/orders" element={<OrdersPage />} />
               <Route path="/orders/:id" element={<OrderDetailPage />} />
+              <Route path="/blog" element={<BlogListPage />} />
+              <Route path="/blog/:slug" element={<BlogDetailPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route element={<Layout />}>

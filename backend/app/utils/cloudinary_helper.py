@@ -20,7 +20,7 @@ def _ensure_configured() -> None:
     _configured = True
 
 
-def upload_image(file_bytes: bytes, folder: str = "gogreen") -> dict:
+def upload_image(file_bytes: bytes, folder: str = "plantoga") -> dict:
     _ensure_configured()
     result = cloudinary.uploader.upload(file_bytes, folder=folder)
     logger.info("Cloudinary upload: public_id={}", result["public_id"])
