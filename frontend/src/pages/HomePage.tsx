@@ -219,14 +219,19 @@ function TestimonialSection() {
 
 export default function HomePage() {
   return (
-    <div>
-      <ErrorBoundary><HeroBanner /></ErrorBoundary>
-      <QuickAccessStrip />
+    <div className="flex flex-col gap-10 md:gap-16 pb-12 md:pb-20">
+      <div className="flex flex-col">
+        <ErrorBoundary><HeroBanner /></ErrorBoundary>
+        <QuickAccessStrip />
+      </div>
 
-      <ErrorBoundary><NewToPlantsSection /></ErrorBoundary>
-      <ErrorBoundary><BestDecorSection /></ErrorBoundary>
-      <ErrorBoundary><LowMaintenanceSection /></ErrorBoundary>
-      <ErrorBoundary><PlantCareSection /></ErrorBoundary>
+      <div className="flex flex-col gap-2 sm:gap-3">
+        <ErrorBoundary><NewToPlantsSection /></ErrorBoundary>
+        <ErrorBoundary><BestDecorSection /></ErrorBoundary>
+        <ErrorBoundary><LowMaintenanceSection /></ErrorBoundary>
+        <ErrorBoundary><PlantCareSection /></ErrorBoundary>
+      </div>
+
       <FeatureStrip />
       <PromoCTASection />
       <ErrorBoundary><BlogSection /></ErrorBoundary>
