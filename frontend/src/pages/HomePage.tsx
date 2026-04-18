@@ -222,8 +222,7 @@ export default function HomePage() {
     <div>
       <ErrorBoundary><HeroBanner /></ErrorBoundary>
       <QuickAccessStrip />
-      <ErrorBoundary><CategoryGrid /></ErrorBoundary>
-      <ErrorBoundary><BestsellerCarousel /></ErrorBoundary>
+
       <ErrorBoundary><NewToPlantsSection /></ErrorBoundary>
       <ErrorBoundary><BestDecorSection /></ErrorBoundary>
       <ErrorBoundary><LowMaintenanceSection /></ErrorBoundary>

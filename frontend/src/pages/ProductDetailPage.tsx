@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Droplets, Minus, Plus, ShoppingCart, Sun } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProduct, useProducts } from '@/hooks/useProducts';
@@ -109,6 +109,7 @@ export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading, isError } = useProduct(slug!);
   const addItem = useCartStore((s) => s.addItem);
+  const navigate = useNavigate();
   const [qty, setQty] = useState(1);
 
   const { data: similar } = useProducts({ limit: 5 });
@@ -134,6 +135,15 @@ export default function ProductDetailPage() {
       toast.success(`${product!.name} added to cart`);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to add');
+    }
+  }
+
+  async function handleBuyNow() {
+    try {
+      await addItem(product!.id, qty);
+      navigate('/checkout');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to process');
     }
   }
 
@@ -238,7 +248,13 @@ export default function ProductDetailPage() {
                   className="flex-1 py-3.5 bg-primary text-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-primary/90 transition"
                 >
                   <ShoppingCart size={18} />
-                  Add to Cart — ₹{(product.price * qty).toFixed(0)}
+                  Add to Cart
+                </button>
+                <button
+                  onClick={handleBuyNow}
+                  className="flex-1 py-3.5 border-2 border-primary text-primary bg-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-primary/5 transition"
+                >
+                  Buy It Now
                 </button>
               </div>
             )}
@@ -279,10 +295,16 @@ export default function ProductDetailPage() {
             </div>
             <button
               onClick={handleAddToCart}
-              className="flex-1 py-3 bg-primary text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+              className="flex-1 py-3 bg-primary text-white rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
               <ShoppingCart size={16} />
-              Add — ₹{(product.price * qty).toFixed(0)}
+              Add to Cart
+            </button>
+            <button
+              onClick={handleBuyNow}
+              className="flex-1 py-3 border-2 border-primary text-primary bg-white rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+            >
+              Buy It Now
             </button>
           </div>
         </div>
