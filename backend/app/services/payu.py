@@ -44,7 +44,7 @@ def verify_payu_hash(
 
 def get_payu_form_data(
     order_id: int, amount: float, firstname: str, email: str,
-    phone: str, productinfo: str = "GOgreen Order",
+    phone: str, productinfo: str = "Plantoga Order",
 ) -> dict:
     key = settings.PAYU_KEY
     salt = settings.PAYU_SALT

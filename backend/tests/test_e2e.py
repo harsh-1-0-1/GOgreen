@@ -105,7 +105,7 @@ async def test_full_happy_path(client: AsyncClient, monkeypatch):
     reverse_str = (
         f"testsalt|success||||||"
         f"|||||{email}|"
-        f"{firstname}|GOgreen Order|{amount}|{txnid}|testkey"
+        f"{firstname}|Plantoga Order|{amount}|{txnid}|testkey"
     )
     expected_hash = hashlib.sha512(reverse_str.encode()).hexdigest()
 
@@ -115,7 +115,7 @@ async def test_full_happy_path(client: AsyncClient, monkeypatch):
             "status": "success",
             "txnid": txnid,
             "amount": amount,
-            "productinfo": "GOgreen Order",
+            "productinfo": "Plantoga Order",
             "firstname": firstname,
             "email": email,
             "mihpayid": mihpayid,

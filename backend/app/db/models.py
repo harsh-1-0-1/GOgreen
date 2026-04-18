@@ -164,3 +164,26 @@ class Address(Base):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
 
     user: Mapped["User"] = relationship(back_populates="addresses")
+
+
+class BlogCategory(str, enum.Enum):
+    GROW = "GROW"
+    CARE = "CARE"
+    DIY = "DIY"
+    TIPS = "TIPS"
+
+
+class BlogPost(Base):
+    __tablename__ = "blog_posts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    excerpt: Mapped[str] = mapped_column(String(200), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    cover_image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    category: Mapped[BlogCategory] = mapped_column(Enum(BlogCategory), nullable=False)
+    author_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

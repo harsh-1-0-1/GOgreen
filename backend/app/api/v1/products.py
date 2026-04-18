@@ -99,7 +99,7 @@ async def create_product(
     image_urls: list[str] = []
     for img in images[:5]:
         data = await img.read()
-        result = upload_image(data, folder="gogreen/products")
+        result = upload_image(data, folder="plantoga/products")
         image_urls.append(result["url"])
 
     payload = ProductCreate(

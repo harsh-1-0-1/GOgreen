@@ -5,80 +5,12 @@ import { useProducts } from '@/hooks/useProducts';
 import ProductCard from '@/components/product/ProductCard';
 import SkeletonCard from '@/components/ui/SkeletonCard';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
-
-function HeroBanner() {
-  return (
-    <section className="relative overflow-hidden">
-      {/* Mobile: image as background */}
-      <div
-        className="md:hidden min-h-[60vh] flex items-center bg-cover bg-center relative"
-        style={{ backgroundImage: `url('https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=800&h=800&fit=crop')` }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-black/20" />
-        <div className="relative z-10 px-4 py-12 text-white space-y-4">
-          <span className="inline-block px-3 py-1 bg-white/20 text-xs rounded-full backdrop-blur-sm">
-            India's #1 Online Plant Store
-          </span>
-          <h1 className="text-3xl font-bold leading-tight">
-            Bring Nature<br />
-            <span className="text-accent">Home</span>
-          </h1>
-          <p className="text-white/80 text-sm max-w-sm">
-            Choose from 5000+ plants, pots, and gardening essentials.
-          </p>
-          <Link
-            to="/products"
-            className="block w-full text-center px-6 py-3.5 bg-accent text-white font-semibold rounded-full hover:bg-accent/90 transition"
-          >
-            Shop Now
-          </Link>
-        </div>
-      </div>
-
-      {/* Desktop: two-column layout */}
-      <div className="hidden md:block bg-gradient-to-br from-primary to-primary-light">
-        <div className="max-w-7xl mx-auto px-4 py-16 lg:py-24 flex items-center gap-8">
-          <div className="flex-1 text-white space-y-6 text-center md:text-left">
-            <span className="inline-block px-3 py-1 bg-white/20 text-sm rounded-full backdrop-blur-sm">
-              India's #1 Online Plant Store
-            </span>
-            <h1 className="text-4xl lg:text-5xl xl:text-6xl font-bold leading-tight">
-              Bring Nature<br />
-              <span className="text-accent">Home</span>
-            </h1>
-            <p className="text-white/80 text-lg max-w-lg">
-              Choose from 5000+ plants, pots, and gardening essentials.
-              Delivered with care to your doorstep.
-            </p>
-            <div className="flex flex-wrap gap-3 justify-center md:justify-start">
-              <Link
-                to="/products"
-                className="px-6 py-3 bg-accent text-white font-semibold rounded-full hover:bg-accent/90 transition flex items-center gap-2"
-              >
-                Shop Now <ArrowRight size={18} />
-              </Link>
-              <Link
-                to="/products?category=indoor-plants"
-                className="px-6 py-3 bg-white/15 text-white font-medium rounded-full backdrop-blur-sm hover:bg-white/25 transition"
-              >
-                Explore Indoor Plants
-              </Link>
-            </div>
-          </div>
-          <div className="flex-1 max-w-md">
-            <img
-              src="https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=600&h=600&fit=crop"
-              alt="Beautiful indoor plant"
-              className="rounded-3xl shadow-2xl w-full aspect-square object-cover"
-              loading="lazy"
-            />
-          </div>
-        </div>
-        <div className="absolute -bottom-1 left-0 right-0 h-16 bg-bg" style={{ clipPath: 'ellipse(55% 100% at 50% 100%)' }} />
-      </div>
-    </section>
-  );
-}
+import HeroBanner from '@/components/home/HeroBanner';
+import QuickAccessStrip from '@/components/home/QuickAccessStrip';
+import ThemedProductSection from '@/components/home/ThemedProductSection';
+import BlogSection from '@/components/home/BlogSection';
+import PromoCTASection from '@/components/home/PromoCTASection';
+import AboutSection from '@/components/home/AboutSection';
 
 function CategoryGrid() {
   const { data: categories, isLoading } = useCategories();
@@ -187,6 +119,74 @@ function FeatureStrip() {
   );
 }
 
+function NewToPlantsSection() {
+  const { data } = useProducts({ tags: 'beginner-friendly', limit: 6 });
+  if (!data?.items.length) return null;
+  return (
+    <ThemedProductSection
+      bgType="image"
+      bgValue="https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=1200&q=80"
+      headline="New to plants?"
+      subheadline="Start with the easy ones."
+      headlineColor="#F4C542"
+      products={data.items}
+      cardStyle="view-product"
+      layout="cards-right-overlay"
+    />
+  );
+}
+
+function BestDecorSection() {
+  const { data } = useProducts({ tags: 'indoor', limit: 6 });
+  if (!data?.items.length) return null;
+  return (
+    <ThemedProductSection
+      bgType="image"
+      bgValue="https://images.unsplash.com/photo-1463320726281-696a485928c7?w=1200&q=80"
+      headline="Best decor plants"
+      subheadline="To instantly upgrade your space"
+      headlineColor="#F4C542"
+      products={data.items}
+      cardStyle="view-product"
+      layout="cards-right-overlay"
+    />
+  );
+}
+
+function LowMaintenanceSection() {
+  const { data } = useProducts({ tags: 'low-maintenance', limit: 6 });
+  if (!data?.items.length) return null;
+  return (
+    <ThemedProductSection
+      bgType="image"
+      bgValue="https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=1200&q=80"
+      headline="Less care. More green."
+      subheadline="Low-maintenance plants for your home."
+      headlineColor="#A3E635"
+      products={data.items}
+      cardStyle="view-product"
+      layout="cards-right-overlay"
+    />
+  );
+}
+
+function PlantCareSection() {
+  const { data } = useProducts({ category_slug: 'plant-care', limit: 6 });
+  if (!data?.items.length) return null;
+  return (
+    <ThemedProductSection
+      bgType="image"
+      bgValue="https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1200&q=80"
+      headline="Plant care made simple"
+      subheadline="Fertilizers for growth, strength, and greener leaves."
+      headlineColor="#F4C542"
+      products={data.items}
+      cardStyle="view-product"
+      layout="cards-right-overlay"
+    />
+  );
+}
+
 function TestimonialSection() {
   const testimonials = [
     { name: 'Priya M.', text: 'Received my money plant in perfect condition! The packaging was amazing.', city: 'Mumbai' },
@@ -221,10 +221,18 @@ export default function HomePage() {
   return (
     <div>
       <ErrorBoundary><HeroBanner /></ErrorBoundary>
+      <QuickAccessStrip />
       <ErrorBoundary><CategoryGrid /></ErrorBoundary>
       <ErrorBoundary><BestsellerCarousel /></ErrorBoundary>
+      <ErrorBoundary><NewToPlantsSection /></ErrorBoundary>
+      <ErrorBoundary><BestDecorSection /></ErrorBoundary>
+      <ErrorBoundary><LowMaintenanceSection /></ErrorBoundary>
+      <ErrorBoundary><PlantCareSection /></ErrorBoundary>
       <FeatureStrip />
+      <PromoCTASection />
+      <ErrorBoundary><BlogSection /></ErrorBoundary>
       <ErrorBoundary><TestimonialSection /></ErrorBoundary>
+      <AboutSection />
     </div>
   );
 }
