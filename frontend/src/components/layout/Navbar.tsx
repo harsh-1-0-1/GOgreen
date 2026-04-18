@@ -241,7 +241,10 @@ export default function Navbar() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+
+  const lastScrollY = useRef(0);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -258,10 +261,27 @@ export default function Navbar() {
   // Cleanup hover timeout on unmount
   useEffect(() => () => clearTimeout(hoverTimeoutRef.current), []);
 
-  // Scroll-based sticky shadow
+  // Scroll-based sticky shadow and hide/show on scroll
   useEffect(() => {
     function onScroll() {
-      setScrolled(window.scrollY > 60);
+      const currentScrollY = window.scrollY;
+      setScrolled(currentScrollY > 60);
+
+      // Handle hide/show logic based on scroll direction
+      if (currentScrollY < 100) {
+        setHidden(false);
+      } else {
+        const diff = currentScrollY - lastScrollY.current;
+        if (diff > 10) {
+          // Scrolling down deliberately
+          setHidden(true);
+        } else if (diff < -10) {
+          // Scrolling up deliberately
+          setHidden(false);
+        }
+      }
+      
+      lastScrollY.current = currentScrollY;
     }
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
@@ -372,8 +392,9 @@ export default function Navbar() {
   return (
     <header
       className={clsx(
-        'sticky top-0 z-50 bg-white transition-shadow duration-200',
+        'sticky top-0 z-50 bg-white transition-all duration-300 ease-in-out',
         scrolled && 'shadow-md border-b border-gray-100',
+        hidden && '-translate-y-full'
       )}
     >
       {/* ================================================================ */}

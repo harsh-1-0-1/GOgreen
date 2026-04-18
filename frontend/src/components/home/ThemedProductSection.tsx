@@ -131,7 +131,7 @@ function ViewProductCard({
         <img
           src={product.images?.[0] || PLACEHOLDER}
           alt={product.name}
-          className="w-full h-40 sm:h-48 object-contain"
+          className="w-full h-48 sm:h-56 md:h-64 object-contain"
           loading="lazy"
         />
       </div>
@@ -284,7 +284,7 @@ function RightOverlayLayout({
   }
 
   return (
-    <section className="relative overflow-hidden min-h-[500px] md:min-h-[600px]">
+    <section className="relative overflow-hidden min-h-[600px] md:min-h-[75vh]">
       {/* Full-width background image */}
       <img
         src={bgValue}
@@ -295,7 +295,7 @@ function RightOverlayLayout({
       <div className="absolute inset-0 bg-black/40" />
 
       {/* Content overlay */}
-      <div className="relative z-10 h-full min-h-[500px] md:min-h-[600px] flex flex-col md:flex-row items-center">
+      <div className="relative z-10 h-full min-h-[600px] md:min-h-[75vh] flex flex-col md:flex-row items-center">
         {/* Left: headline */}
         <div className="md:w-[40%] p-6 md:p-10 lg:p-14 flex items-center">
           <div className="space-y-3 md:space-y-4">

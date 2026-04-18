@@ -98,7 +98,7 @@ export default function HeroBanner() {
 
   return (
     <section
-      className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-hidden group"
+      className="relative w-full overflow-hidden group"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={handleTouchStart}
@@ -106,14 +106,14 @@ export default function HeroBanner() {
     >
       {/* ---- Slider Track ---- */}
       <div
-        className="flex transition-transform duration-700 ease-in-out h-[60vh] md:h-[600px]"
-        style={{ transform: `translateX(calc(-${current * 100}% - ${current * 24}px))` }}
+        className="flex transition-transform duration-700 ease-in-out h-[70vh] md:h-[85vh] min-h-[500px]"
+        style={{ transform: `translateX(-${current * 100}%)` }}
       >
         {SLIDES.map((slide, i) => {
           return (
             <div
               key={i}
-              className="w-full shrink-0 relative rounded-2xl md:rounded-[32px] overflow-hidden mr-6"
+              className="w-full shrink-0 relative overflow-hidden"
               style={{ backgroundColor: slide.bg }}
               aria-hidden={i !== current}
             >
