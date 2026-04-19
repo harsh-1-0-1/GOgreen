@@ -106,8 +106,12 @@ export default function HeroBanner() {
     >
       {/* ---- Slider Track ---- */}
       <div
-        className="flex transition-transform duration-700 ease-in-out h-[70vh] md:h-[85vh] min-h-[500px]"
-        style={{ transform: `translateX(-${current * 100}%)` }}
+        className="flex transition-transform duration-700 ease-in-out"
+        style={{
+          transform: `translateX(-${current * 100}%)`,
+          /* Ugaoo-style: approx 55vh on desktop, full on mobile */
+          height: 'clamp(420px, 58vh, 680px)',
+        }}
       >
         {SLIDES.map((slide, i) => {
           return (
@@ -117,23 +121,36 @@ export default function HeroBanner() {
               style={{ backgroundColor: slide.bg }}
               aria-hidden={i !== current}
             >
-              {/* Mobile background image + overlay */}
+              {/* Mobile: full-bleed background image + gradient overlay */}
               <img
                 src={slide.image}
                 alt=""
                 className="absolute inset-0 w-full h-full object-cover md:hidden"
                 loading={i === 0 ? 'eager' : 'lazy'}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent md:hidden" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent md:hidden" />
 
-              {/* Content wrapper */}
-              <div className="relative h-full max-w-7xl mx-auto flex items-center">
+              {/* Content wrapper — full-width, constrained max */}
+              <div className="relative h-full flex items-stretch">
+
                 {/* ---- Text column ---- */}
-                <div className="relative z-10 flex-1 px-6 md:px-12 lg:px-16 flex items-center justify-center md:justify-start py-12 md:py-0">
-                  <div className="text-center md:text-left max-w-md space-y-4 md:space-y-6">
+                <div className="relative z-10 w-full md:w-[48%] lg:w-[44%] flex items-center px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28 py-10 md:py-0">
+                  <div className="text-center md:text-left max-w-md w-full space-y-5 md:space-y-6">
+
+                    {/* Offer badge (mobile only, above headline) */}
+                    {slide.starburst && (
+                      <div className="md:hidden">
+                        <span className="inline-block px-4 py-1.5 bg-accent/90 backdrop-blur-sm rounded-full text-xs font-bold text-[#1B4332] shadow">
+                          {slide.starburst}
+                        </span>
+                      </div>
+                    )}
+
                     <h2
                       className={clsx(
-                        'text-3xl sm:text-4xl md:text-[52px] font-bold leading-tight',
+                        'font-bold leading-[1.15] tracking-tight',
+                        /* Mobile: big, Desktop: even bigger */
+                        'text-[2rem] sm:text-[2.4rem] md:text-[2.8rem] lg:text-[3.2rem] xl:text-[3.6rem]',
                         slide.dark
                           ? 'text-white'
                           : 'text-white md:text-[#1B4332]',
@@ -144,56 +161,56 @@ export default function HeroBanner() {
 
                     <p
                       className={clsx(
-                        'text-base md:text-lg opacity-90',
+                        'text-[15px] md:text-[16px] lg:text-[17px] leading-relaxed',
                         slide.dark
-                          ? 'text-white'
-                          : 'text-white md:text-gray-600',
+                          ? 'text-white/80'
+                          : 'text-white/90 md:text-gray-500',
                       )}
                     >
                       {slide.subtext}
                     </p>
 
-                    <Link
-                      to={slide.ctaLink}
-                      className={clsx(
-                        'inline-block px-8 py-3.5 rounded-full font-semibold text-sm md:text-base transition-colors shadow-lg hover:shadow-xl hover:-translate-y-0.5',
-                        slide.ctaClass,
-                      )}
-                    >
-                      {slide.ctaText}
-                    </Link>
-
-                    {/* Mobile starburst — simple pill */}
-                    {slide.starburst && (
-                      <div className="md:hidden mt-4">
-                        <span className="inline-block px-4 py-1.5 bg-accent rounded-full text-xs font-bold text-[#1B4332] shadow-sm">
-                          {slide.starburst}
-                        </span>
-                      </div>
-                    )}
+                    <div className="flex flex-col sm:flex-row items-center md:items-start gap-3">
+                      <Link
+                        to={slide.ctaLink}
+                        className={clsx(
+                          'inline-flex items-center justify-center px-8 py-3 rounded-lg font-semibold text-[14px] md:text-[15px] transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md',
+                          slide.ctaClass,
+                        )}
+                      >
+                        {slide.ctaText}
+                      </Link>
+                    </div>
                   </div>
                 </div>
 
                 {/* ---- Desktop image column ---- */}
-                <div className="hidden md:block flex-1 h-full relative overflow-hidden">
+                <div className="hidden md:block flex-1 relative overflow-hidden">
                   <img
                     src={slide.image}
                     alt={slide.headline}
-                    className="w-full h-full object-cover object-center scale-105"
+                    className="w-full h-full object-cover object-center"
                     loading={i === 0 ? 'eager' : 'lazy'}
+                  />
+                  {/* Subtle fade from bg color on the left edge of the image */}
+                  <div
+                    className="absolute inset-y-0 left-0 w-24 pointer-events-none"
+                    style={{
+                      background: `linear-gradient(to right, ${slide.bg}, transparent)`,
+                    }}
                   />
                 </div>
 
-                {/* Desktop starburst — clip-path star */}
+                {/* Desktop starburst — clip-path star, positioned at the seam */}
                 {slide.starburst && (
                   <div
-                    className="absolute z-20 hidden md:flex left-[48%] top-1/2 -translate-x-1/2 -translate-y-1/2 w-[140px] h-[140px] items-center justify-center drop-shadow-xl"
+                    className="absolute z-20 hidden md:flex left-[44%] top-1/2 -translate-x-1/2 -translate-y-1/2 w-[130px] h-[130px] lg:w-[148px] lg:h-[148px] items-center justify-center drop-shadow-xl"
                     style={{
                       clipPath: STARBURST_CLIP,
                       backgroundColor: '#F4A261',
                     }}
                   >
-                    <span className="text-xs font-extrabold text-[#1B4332] leading-tight text-center px-6">
+                    <span className="text-[11px] font-extrabold text-[#1B4332] leading-tight text-center px-5">
                       {slide.starburst}
                     </span>
                   </div>
@@ -201,8 +218,8 @@ export default function HeroBanner() {
 
                 {/* Trust badge */}
                 {slide.trustBadge && (
-                  <div className="absolute z-20 top-4 right-4 md:top-8 md:right-8 w-[76px] h-[76px] md:w-[100px] md:h-[100px] rounded-full border-[3px] border-primary bg-white/95 flex items-center justify-center text-center p-2 shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
-                    <span className="text-[8px] md:text-[10px] font-bold text-primary leading-tight">
+                  <div className="absolute z-20 top-5 right-5 md:top-8 md:right-10 w-[72px] h-[72px] md:w-[88px] md:h-[88px] lg:w-[100px] lg:h-[100px] rounded-full border-[3px] border-primary bg-white/95 flex items-center justify-center text-center p-2 shadow-[0_8px_30px_rgb(0,0,0,0.14)]">
+                    <span className="text-[8px] md:text-[9px] lg:text-[10px] font-bold text-primary leading-tight">
                       {slide.trustBadge}
                     </span>
                   </div>
@@ -217,20 +234,20 @@ export default function HeroBanner() {
       <button
         onClick={prev}
         aria-label="Previous slide"
-        className="absolute left-6 md:left-10 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center shadow-xl text-[#1B4332] hover:bg-white hover:scale-105 transition-all opacity-0 group-hover:opacity-100"
+        className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 z-20 w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-lg text-[#1B4332] hover:bg-white hover:scale-105 transition-all opacity-0 group-hover:opacity-100 duration-200"
       >
-        <ChevronLeft size={24} />
+        <ChevronLeft size={22} />
       </button>
       <button
         onClick={next}
         aria-label="Next slide"
-        className="absolute right-6 md:right-10 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center shadow-xl text-[#1B4332] hover:bg-white hover:scale-105 transition-all opacity-0 group-hover:opacity-100"
+        className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 z-20 w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-lg text-[#1B4332] hover:bg-white hover:scale-105 transition-all opacity-0 group-hover:opacity-100 duration-200"
       >
-        <ChevronRight size={24} />
+        <ChevronRight size={22} />
       </button>
 
       {/* ---- Dot indicators ---- */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 bg-black/20 backdrop-blur-md rounded-full px-4 py-2">
+      <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2">
         {SLIDES.map((_, i) => (
           <button
             key={i}
@@ -239,8 +256,8 @@ export default function HeroBanner() {
             className={clsx(
               'rounded-full transition-all duration-300',
               i === current
-                ? 'w-8 h-2.5 bg-white'
-                : 'w-2.5 h-2.5 bg-white/50 hover:bg-white/80',
+                ? 'w-7 h-2 bg-white shadow-sm'
+                : 'w-2 h-2 bg-white/50 hover:bg-white/80',
             )}
           />
         ))}

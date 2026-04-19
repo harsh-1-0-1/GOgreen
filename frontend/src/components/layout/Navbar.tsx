@@ -393,47 +393,44 @@ export default function Navbar() {
     <header
       className={clsx(
         'sticky top-0 z-50 bg-white transition-all duration-300 ease-in-out',
-        scrolled && 'shadow-md border-b border-gray-100',
+        scrolled && 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] border-b border-gray-100',
         hidden && '-translate-y-full'
       )}
     >
       {/* ================================================================ */}
-      {/* ROW 1 — Logo · Search · Icons                                    */}
+      {/* ROW 1 — Logo · Search · Icons (Ugaoo-style)                      */}
       {/* ================================================================ */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center gap-3 sm:gap-4">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-[60px] sm:h-[68px] flex items-center gap-3 sm:gap-5">
+
         {/* Hamburger (mobile) */}
         <button
-          className="lg:hidden p-2 -ml-1 touch-target"
+          className="lg:hidden p-2 -ml-1 text-gray-700 hover:text-primary transition-colors touch-target"
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
         >
           <Menu size={22} />
         </button>
 
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-primary flex items-center justify-center">
-            <Leaf size={18} className="text-white" />
+        {/* Logo — left-aligned, prominent */}
+        <Link to="/" className="flex items-center gap-2 shrink-0 group">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+            <Leaf size={20} className="text-white" />
           </div>
-          <span className="text-lg sm:text-xl font-bold text-primary tracking-tight">
+          <span className="text-xl sm:text-2xl font-bold text-primary tracking-tight leading-none">
             Plantoga
           </span>
         </Link>
 
-        {/* Desktop search */}
+        {/* Desktop Search — centered, wide pill with embedded button */}
         <div
           ref={searchContainerRef}
-          className="hidden md:block flex-1 max-w-xl mx-4 relative"
+          className="hidden md:block flex-1 max-w-2xl mx-auto relative"
         >
           <form onSubmit={handleSearch}>
-            <div className="relative">
-              <Search
-                size={18}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
-              />
+            <div className="relative flex items-center">
               <input
                 type="text"
-                placeholder="Search for Garden..."
+                placeholder="Search plants, seeds, pots & more..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setSearchFocused(true)}
@@ -443,14 +440,21 @@ export default function Navbar() {
                     (e.target as HTMLInputElement).blur();
                   }
                 }}
-                className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-full bg-gray-50/80 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary-light transition placeholder:text-gray-400"
+                className="w-full pl-5 pr-14 py-2.5 text-sm border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-primary focus:bg-white transition-all duration-200 placeholder:text-gray-400 text-gray-800"
               />
+              <button
+                type="submit"
+                className="absolute right-1.5 h-8 w-8 bg-primary hover:bg-primary/90 text-white rounded-full flex items-center justify-center transition-colors shadow-sm"
+                aria-label="Search"
+              >
+                <Search size={15} />
+              </button>
             </div>
           </form>
 
           {/* Suggestions dropdown */}
           {showSuggestions && (
-            <div className="absolute top-full mt-1.5 left-0 right-0 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-dropdown">
+            <div className="absolute top-full mt-2 left-0 right-0 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-dropdown">
               {suggestions!.map((product) => (
                 <Link
                   key={product.id}
@@ -459,23 +463,16 @@ export default function Navbar() {
                     setSearchFocused(false);
                     setSearchQuery('');
                   }}
-                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
                 >
                   <img
-                    src={
-                      product.images?.[0] ||
-                      'https://placehold.co/40x40?text=🌱'
-                    }
+                    src={product.images?.[0] || 'https://placehold.co/40x40?text=🌱'}
                     alt=""
-                    className="w-10 h-10 rounded-lg object-cover shrink-0 bg-gray-100"
+                    className="w-10 h-10 rounded-xl object-cover shrink-0 bg-gray-100"
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">
-                      {product.name}
-                    </p>
-                    <p className="text-xs text-primary font-semibold">
-                      ₹{product.price}
-                    </p>
+                    <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
+                    <p className="text-xs text-primary font-semibold mt-0.5">₹{product.price}</p>
                   </div>
                 </Link>
               ))}
@@ -485,23 +482,23 @@ export default function Navbar() {
                   setSearchFocused(false);
                   setSearchQuery('');
                 }}
-                className="block px-4 py-2.5 text-sm text-primary font-medium border-t hover:bg-gray-50 text-center"
+                className="flex items-center justify-center gap-2 px-4 py-3 text-sm text-primary font-semibold hover:bg-primary/5 transition-colors"
               >
-                See all results for &ldquo;{debouncedQuery}&rdquo;
+                <Search size={14} /> View all results for &ldquo;{debouncedQuery}&rdquo;
               </Link>
             </div>
           )}
         </div>
 
-        {/* Right icons */}
-        <div className="flex items-center gap-0.5 sm:gap-1 ml-auto">
+        {/* Right Icons — clean, spaced */}
+        <div className="flex items-center gap-1 ml-auto">
           {/* Mobile search toggle */}
           <button
-            className="md:hidden p-2 touch-target"
+            className="md:hidden p-2 text-gray-700 hover:text-primary transition-colors touch-target"
             onClick={() => setSearchOpen(!searchOpen)}
             aria-label="Search"
           >
-            <Search size={20} />
+            <Search size={22} />
           </button>
 
           {/* WhatsApp */}
@@ -509,21 +506,21 @@ export default function Navbar() {
             href={`https://wa.me/${WHATSAPP_NUMBER}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden sm:flex p-2 text-gray-600 hover:text-green-600 transition-colors touch-target"
+            className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full text-gray-600 hover:text-green-600 hover:bg-green-50 transition-all"
             aria-label="WhatsApp"
           >
-            <WhatsAppIcon size={20} />
+            <WhatsAppIcon size={21} />
           </a>
 
           {/* Account */}
           {user ? (
             <div className="relative hidden md:block">
               <button
-                className="p-2 flex items-center gap-1.5 text-gray-600 hover:text-primary transition-colors touch-target"
+                className="flex items-center justify-center w-10 h-10 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                 aria-label="Account menu"
               >
-                <User size={20} />
+                <User size={21} />
               </button>
               {userMenuOpen && (
                 <>
@@ -531,19 +528,15 @@ export default function Navbar() {
                     className="fixed inset-0 z-40"
                     onClick={() => setUserMenuOpen(false)}
                   />
-                  <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-50 py-1.5 overflow-hidden animate-dropdown">
-                    <div className="px-4 py-2.5 border-b border-gray-100">
-                      <p className="text-sm font-semibold text-gray-800 truncate">
-                        {user.full_name || 'Account'}
-                      </p>
-                      <p className="text-xs text-gray-400 truncate">
-                        {user.email}
-                      </p>
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 py-2 overflow-hidden animate-dropdown">
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{user.full_name || 'Account'}</p>
+                      <p className="text-xs text-gray-400 truncate mt-0.5">{user.email}</p>
                     </div>
                     {user.is_admin && (
                       <Link
                         to="/admin"
-                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-gray-50 text-primary font-medium"
+                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-gray-50 text-primary font-medium transition-colors"
                         onClick={() => setUserMenuOpen(false)}
                       >
                         <Settings size={15} /> Admin Panel
@@ -551,7 +544,7 @@ export default function Navbar() {
                     )}
                     <Link
                       to="/orders"
-                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-gray-50 text-gray-700"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-gray-50 text-gray-700 transition-colors"
                       onClick={() => setUserMenuOpen(false)}
                     >
                       <Package size={15} /> My Orders
@@ -561,7 +554,7 @@ export default function Navbar() {
                         logout();
                         setUserMenuOpen(false);
                       }}
-                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-gray-50 text-red-500"
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-red-50 text-red-500 transition-colors"
                     >
                       <LogOut size={15} /> Logout
                     </button>
@@ -571,23 +564,23 @@ export default function Navbar() {
             </div>
           ) : (
             <button
-              className="hidden md:flex p-2 text-gray-600 hover:text-primary transition-colors touch-target"
+              className="hidden md:flex items-center justify-center w-10 h-10 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
               onClick={openAuthModal}
               aria-label="Login"
             >
-              <User size={20} />
+              <User size={21} />
             </button>
           )}
 
           {/* Cart */}
           <button
-            className="hidden md:flex p-2 relative text-gray-600 hover:text-primary transition-colors touch-target"
+            className="hidden md:flex items-center justify-center w-10 h-10 rounded-full relative text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
             onClick={openDrawer}
             aria-label="Cart"
           >
-            <ShoppingBag size={20} />
+            <ShoppingBag size={21} />
             {itemCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 bg-accent text-white text-[10px] font-bold w-[18px] h-[18px] rounded-full flex items-center justify-center">
+              <span className="absolute top-0.5 right-0.5 bg-accent text-white text-[9px] font-bold w-[17px] h-[17px] rounded-full flex items-center justify-center shadow-sm">
                 {itemCount > 9 ? '9+' : itemCount}
               </span>
             )}
@@ -598,9 +591,12 @@ export default function Navbar() {
       {/* ================================================================ */}
       {/* ROW 2 — Category navigation (desktop only)                       */}
       {/* ================================================================ */}
+      {/* ================================================================ */}
+      {/* ROW 2 — Category navigation (desktop only, Ugaoo-style)          */}
+      {/* ================================================================ */}
       <nav className="hidden lg:block border-t border-gray-100">
-        <div className="max-w-7xl mx-auto px-4">
-          <ul className="flex items-center text-[13px] font-semibold tracking-wide">
+        <div className="max-w-[1400px] mx-auto px-6">
+          <ul className="flex items-center text-[12.5px] font-semibold tracking-[0.06em]">
             {NAV_ITEMS.map((item) => {
               const hasDropdown = item.groups && item.groups.length > 0;
               const isOpen = activeDropdown === item.label;
@@ -611,17 +607,13 @@ export default function Navbar() {
                 <li
                   key={item.label}
                   className="relative"
-                  onMouseEnter={
-                    hasDropdown
-                      ? () => handleDropdownEnter(item.label)
-                      : undefined
-                  }
+                  onMouseEnter={hasDropdown ? () => handleDropdownEnter(item.label) : undefined}
                   onMouseLeave={hasDropdown ? handleDropdownLeave : undefined}
                 >
                   <Link
                     to={item.href}
                     className={clsx(
-                      'block px-3 xl:px-4 py-3 transition-colors relative whitespace-nowrap',
+                      'flex items-center gap-1 px-3 xl:px-4 py-3.5 transition-colors relative whitespace-nowrap group',
                       item.highlight
                         ? 'text-accent hover:text-accent/80'
                         : active
@@ -630,19 +622,29 @@ export default function Navbar() {
                     )}
                   >
                     {item.label}
-                    {active && (
-                      <span className="absolute bottom-0 left-3 right-3 xl:left-4 xl:right-4 h-0.5 bg-primary rounded-full" />
+                    {hasDropdown && (
+                      <ChevronDown
+                        size={12}
+                        className={clsx('opacity-60 transition-transform duration-200 mt-px', isOpen && 'rotate-180')}
+                      />
                     )}
+                    {/* Active underline */}
+                    <span
+                      className={clsx(
+                        'absolute bottom-0 left-3 right-3 xl:left-4 xl:right-4 h-[2px] bg-primary rounded-full transition-transform duration-200 origin-left',
+                        active ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+                      )}
+                    />
                   </Link>
 
-                  {/* Dropdown */}
+                  {/* Mega Dropdown */}
                   {hasDropdown && isOpen && (
                     <div
                       className={clsx(
-                        'absolute top-full left-0 bg-white rounded-b-xl shadow-xl border border-t-0 border-gray-100 z-50 animate-dropdown',
+                        'absolute top-full left-0 bg-white rounded-b-2xl shadow-2xl border border-t-0 border-gray-100 z-50 animate-dropdown',
                         isWide
-                          ? 'grid grid-cols-2 gap-8 p-6 w-[520px]'
-                          : 'p-5 w-60',
+                          ? 'grid grid-cols-2 gap-8 p-6 w-[540px]'
+                          : 'p-5 w-64',
                       )}
                       onMouseEnter={() => {
                         clearTimeout(hoverTimeoutRef.current);
@@ -655,18 +657,19 @@ export default function Navbar() {
                           {col.map((group, gi) => (
                             <div key={gi}>
                               {group.title && (
-                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2.5 pb-1.5 border-b border-gray-100">
                                   {group.title}
                                 </p>
                               )}
-                              <div className="space-y-0.5">
+                              <div className="space-y-0">
                                 {group.links.map((link) => (
                                   <Link
                                     key={link.href}
                                     to={link.href}
                                     onClick={() => setActiveDropdown(null)}
-                                    className="block py-1.5 text-sm font-normal text-gray-600 hover:text-primary hover:translate-x-0.5 transition-all"
+                                    className="flex items-center gap-1.5 py-1.5 text-[13px] font-normal text-gray-600 hover:text-primary hover:translate-x-1 transition-all duration-150"
                                   >
+                                    <span className="w-1 h-1 rounded-full bg-gray-300 group-hover:bg-primary transition-colors shrink-0" />
                                     {link.label}
                                   </Link>
                                 ))}
@@ -687,23 +690,28 @@ export default function Navbar() {
       {/* ================================================================ */}
       {/* Mobile search bar (toggle)                                       */}
       {/* ================================================================ */}
+      {/* Mobile Search Bar */}
       {searchOpen && (
-        <form onSubmit={handleSearch} className="md:hidden px-3 pb-3">
-          <div className="relative">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <input
-              type="text"
-              autoFocus
-              placeholder="Search for Garden..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-light/40"
-            />
-          </div>
-        </form>
+        <div className="md:hidden px-4 pb-3 pt-1 bg-white border-t border-gray-100">
+          <form onSubmit={handleSearch}>
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                autoFocus
+                placeholder="Search plants, seeds, pots..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-5 pr-12 py-2.5 border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-primary text-sm transition-all"
+              />
+              <button
+                type="submit"
+                className="absolute right-1.5 h-8 w-8 bg-primary text-white rounded-full flex items-center justify-center"
+              >
+                <Search size={14} />
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       {/* ================================================================ */}
@@ -716,20 +724,20 @@ export default function Navbar() {
             onClick={closeDrawer}
           />
           <div className="fixed top-0 left-0 w-[300px] h-full bg-white z-50 shadow-2xl flex flex-col lg:hidden overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b">
+            {/* Mobile Drawer Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <Link
                 to="/"
                 onClick={closeDrawer}
                 className="flex items-center gap-2"
               >
-                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-sm">
                   <Leaf size={16} className="text-white" />
                 </div>
-                <span className="text-lg font-bold text-primary">Plantoga</span>
+                <span className="text-lg font-bold text-primary tracking-tight">Plantoga</span>
               </Link>
-              <button onClick={closeDrawer} className="p-2 touch-target">
-                <X size={20} />
+              <button onClick={closeDrawer} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
+                <X size={18} />
               </button>
             </div>
 
