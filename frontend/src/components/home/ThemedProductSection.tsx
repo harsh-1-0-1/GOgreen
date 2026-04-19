@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
@@ -103,7 +103,7 @@ function GridCard({ product }: { product: Product }) {
 }
 
 // ---------------------------------------------------------------------------
-// Card: View Product (for "New to plants?") — compact, horizontal 3-up
+// Card: View Product — used inside the carousel
 // ---------------------------------------------------------------------------
 
 function ViewProductCard({
@@ -117,7 +117,7 @@ function ViewProductCard({
   return (
     <Link
       to={`/products/${product.slug}`}
-      className="flex flex-col bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-lg transition-shadow min-w-0"
+      className="flex flex-col bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 min-w-0 h-full"
     >
       <div className="px-3 pt-3">
         <span
@@ -131,7 +131,7 @@ function ViewProductCard({
         <img
           src={product.images?.[0] || PLACEHOLDER}
           alt={product.name}
-          className="w-full h-48 sm:h-56 md:h-64 object-contain"
+          className="w-full h-48 sm:h-52 md:h-56 object-contain"
           loading="lazy"
         />
       </div>
@@ -261,8 +261,24 @@ function CardsBelowLayout({
 }
 
 // ---------------------------------------------------------------------------
-// Layout: cards-right-overlay — full background image, content floats on top
+// Layout: cards-right-overlay — Ugaoo-style sliding carousel
 // ---------------------------------------------------------------------------
+
+function useVisibleCount() {
+  const getCount = () => {
+    if (typeof window === 'undefined') return 3;
+    if (window.innerWidth < 640) return 1;
+    if (window.innerWidth < 1024) return 2;
+    return 3;
+  };
+  const [count, setCount] = useState(getCount);
+  useEffect(() => {
+    const handler = () => setCount(getCount());
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return count;
+}
 
 function RightOverlayLayout({
   bgValue,
@@ -271,33 +287,63 @@ function RightOverlayLayout({
   headlineColor,
   products,
 }: ThemedProductSectionProps) {
-  const PAGE_SIZE = 3;
-  const [page, setPage] = useState(0);
-  const totalPages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
-  const visible = products.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const [index, setIndex] = useState(0);
+  const [animating, setAnimating] = useState(false);
+  const visibleCount = useVisibleCount();
+  const trackRef = useRef<HTMLDivElement>(null);
+  const total = products.length;
+  const maxIndex = Math.max(0, total - visibleCount);
 
-  function next() {
-    setPage((p) => (p + 1) % totalPages);
-  }
-  function prev() {
-    setPage((p) => (p - 1 + totalPages) % totalPages);
-  }
+  const go = useCallback(
+    (next: number) => {
+      if (animating) return;
+      const clamped = Math.max(0, Math.min(next, maxIndex));
+      setIndex(clamped);
+      setAnimating(true);
+    },
+    [animating, maxIndex],
+  );
+
+  // When animating ends reset flag
+  useEffect(() => {
+    if (!animating) return;
+    const t = setTimeout(() => setAnimating(false), 520);
+    return () => clearTimeout(t);
+  }, [animating]);
+
+  const prev = () => go(index === 0 ? maxIndex : index - 1);
+  const next = () => go(index >= maxIndex ? 0 : index + 1);
+
+  // Gap between cards in px (matches the gap-4 class)
+  const GAP = 16;
+
+  // translateX = index * (cardWidth + gap)
+  // cardWidth = (trackWidth - gap * (visible-1)) / visible  → handled by CSS `calc`
+  // We translate by index * (100% / visibleCount + gap/visibleCount) of the track
+  // Easiest: translate by `calc(index * (100% / visibleCount + gapPx / visibleCount))`
+  // But since each card is `calc((100% - gap*(n-1)) / n)` wide, the step is that same width + gap.
+  // Expressed as a percentage of the track:  step = 100/n %  (gap cancels in ratio)
+  // So: translateX = -index * (100 / visibleCount)%   plus   -index * gapPx
+  const translateX = `calc(-${index} * (${100 / visibleCount}% + ${GAP}px))`;
+
+  const dotCount = maxIndex + 1;
 
   return (
     <section className="relative overflow-hidden min-h-[600px] md:min-h-[75vh]">
-      {/* Full-width background image */}
+      {/* Full-width background */}
       <img
         src={bgValue}
         alt=""
         className="absolute inset-0 w-full h-full object-cover"
         loading="lazy"
       />
-      <div className="absolute inset-0 bg-black/40" />
+      <div className="absolute inset-0 bg-black/45" />
 
-      {/* Content overlay */}
+      {/* Content */}
       <div className="relative z-10 h-full min-h-[600px] md:min-h-[75vh] flex flex-col md:flex-row items-center">
+
         {/* Left: headline */}
-        <div className="md:w-[40%] p-6 md:p-10 lg:p-14 flex items-center">
+        <div className="md:w-[38%] p-6 md:p-10 lg:p-14 flex items-center shrink-0">
           <div className="space-y-3 md:space-y-4">
             <h2
               className="text-4xl md:text-5xl lg:text-[60px] font-bold italic leading-[1.05]"
@@ -313,29 +359,74 @@ function RightOverlayLayout({
           </div>
         </div>
 
-        {/* Right: 3 product cards over the background */}
-        <div className="md:w-[60%] p-4 sm:p-6 md:p-8 lg:p-10 relative flex flex-col justify-center">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 relative">
-            {visible.map((product, i) => (
-              <ViewProductCard key={product.id} product={product} index={page * PAGE_SIZE + i} />
-            ))}
-          </div>
+        {/* Right: carousel */}
+        <div className="md:w-[62%] p-4 sm:p-6 md:p-8 relative flex flex-col justify-center gap-4">
 
-          {/* Arrows */}
+          {/* Arrow: prev */}
           <button
             onClick={prev}
             aria-label="Previous"
-            className="absolute left-0 sm:-left-1 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center text-gray-700 hover:bg-white transition z-20"
+            className="absolute left-0 sm:-left-1 top-1/2 -translate-y-6 w-10 h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center text-gray-700 hover:bg-white hover:scale-110 transition-all duration-200 z-20"
           >
             <ChevronLeft size={20} />
           </button>
+
+          {/* Clipping window */}
+          <div className="overflow-hidden rounded-2xl">
+            {/* Sliding track */}
+            <div
+              ref={trackRef}
+              className="flex"
+              style={{
+                gap: `${GAP}px`,
+                transform: `translateX(${translateX})`,
+                transition: 'transform 0.48s cubic-bezier(0.4, 0, 0.2, 1)',
+                willChange: 'transform',
+              }}
+            >
+              {products.map((product, i) => (
+                <div
+                  key={product.id}
+                  style={{
+                    flex: `0 0 calc(${100 / visibleCount}% - ${
+                      (GAP * (visibleCount - 1)) / visibleCount
+                    }px)`,
+                    minWidth: 0,
+                  }}
+                >
+                  <ViewProductCard product={product} index={i} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Arrow: next */}
           <button
             onClick={next}
             aria-label="Next"
-            className="absolute right-0 sm:-right-1 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center text-gray-700 hover:bg-white transition z-20"
+            className="absolute right-0 sm:-right-1 top-1/2 -translate-y-6 w-10 h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center text-gray-700 hover:bg-white hover:scale-110 transition-all duration-200 z-20"
           >
             <ChevronRight size={20} />
           </button>
+
+          {/* Dot indicators */}
+          {dotCount > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-1">
+              {Array.from({ length: dotCount }).map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => go(i)}
+                  aria-label={`Go to slide ${i + 1}`}
+                  className={clsx(
+                    'rounded-full transition-all duration-300',
+                    i === index
+                      ? 'w-6 h-2 bg-white'
+                      : 'w-2 h-2 bg-white/40 hover:bg-white/70',
+                  )}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </section>
