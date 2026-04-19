@@ -187,3 +187,27 @@ class BlogPost(Base):
     is_published: Mapped[bool] = mapped_column(Boolean, default=False)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class Banner(Base):
+    __tablename__ = "banners"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
+    subtitle: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cta_text: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    cta_link: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    image_public_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    badge_text: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bg_color: Mapped[str] = mapped_column(String(20), default="#F5F0E8")
+    text_color: Mapped[str] = mapped_column(String(20), default="#1B4332")
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    placement: Mapped[str] = mapped_column(String(20), default="hero")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=_utcnow, nullable=True
+    )

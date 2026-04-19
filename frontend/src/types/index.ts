@@ -120,6 +120,25 @@ export interface CheckoutResponse {
   payu_form_data: Record<string, string>;
 }
 
+export interface Banner {
+  id: number;
+  title: string;
+  subtitle?: string;
+  cta_text?: string;
+  cta_link?: string;
+  image_url?: string;
+  badge_text?: string;
+  bg_color: string;
+  text_color: string;
+  position: number;
+  placement: string;
+  is_active: boolean;
+  valid_from?: string;
+  valid_until?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface BlogPost {
   id: number;
   title: string;

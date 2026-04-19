@@ -1,3 +1,4 @@
+import os
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -6,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -79,5 +81,8 @@ async def general_exception_handler(_request: Request, exc: Exception) -> JSONRe
         content={"detail": "Internal server error"},
     )
 
+
+os.makedirs("static/banners", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.include_router(api_router)
