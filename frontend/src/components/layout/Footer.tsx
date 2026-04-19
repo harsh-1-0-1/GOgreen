@@ -94,7 +94,7 @@ const SOCIALS = [
 export default function Footer() {
   return (
     <footer className="bg-[#1B4332] text-white mt-10 sm:mt-20 mb-14 md:mb-0">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-10 sm:py-14">
+      <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 py-10 sm:py-14">
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-6">
           {/* Logo column */}
           <div className="col-span-2 lg:col-span-1 mb-2 lg:mb-0">
@@ -144,7 +144,7 @@ export default function Footer() {
 
       {/* Bottom bar */}
       <div className="border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white/40">
+        <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white/40">
           <span>© 2024 Plantoga. All rights reserved.</span>
           <div className="flex items-center gap-3">
             <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">VISA</span>

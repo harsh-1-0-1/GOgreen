@@ -400,7 +400,7 @@ export default function Navbar() {
       {/* ================================================================ */}
       {/* ROW 1 — Logo · Search · Icons (Ugaoo-style)                      */}
       {/* ================================================================ */}
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-[60px] sm:h-[68px] flex items-center gap-3 sm:gap-5">
+      <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 h-[64px] sm:h-[76px] flex items-center gap-3 sm:gap-6">
 
         {/* Hamburger (mobile) */}
         <button
@@ -408,15 +408,15 @@ export default function Navbar() {
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
         >
-          <Menu size={22} />
+          <Menu size={24} />
         </button>
 
         {/* Logo — left-aligned, prominent */}
-        <Link to="/" className="flex items-center gap-2 shrink-0 group">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
-            <Leaf size={20} className="text-white" />
+        <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-primary flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+            <Leaf size={22} className="text-white" />
           </div>
-          <span className="text-xl sm:text-2xl font-bold text-primary tracking-tight leading-none">
+          <span className="text-2xl sm:text-[28px] font-bold text-primary tracking-tight leading-none">
             Plantoga
           </span>
         </Link>
@@ -424,7 +424,7 @@ export default function Navbar() {
         {/* Desktop Search — centered, wide pill with embedded button */}
         <div
           ref={searchContainerRef}
-          className="hidden md:block flex-1 max-w-2xl mx-auto relative"
+          className="hidden md:block flex-1 mx-auto relative"
         >
           <form onSubmit={handleSearch}>
             <div className="relative flex items-center">
@@ -440,7 +440,7 @@ export default function Navbar() {
                     (e.target as HTMLInputElement).blur();
                   }
                 }}
-                className="w-full pl-5 pr-14 py-2.5 text-sm border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-primary focus:bg-white transition-all duration-200 placeholder:text-gray-400 text-gray-800"
+                className="w-full pl-5 pr-14 py-3 text-sm border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-primary focus:bg-white transition-all duration-200 placeholder:text-gray-400 text-gray-800"
               />
               <button
                 type="submit"
@@ -509,14 +509,14 @@ export default function Navbar() {
             className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full text-gray-600 hover:text-green-600 hover:bg-green-50 transition-all"
             aria-label="WhatsApp"
           >
-            <WhatsAppIcon size={21} />
+            <WhatsAppIcon size={22} />
           </a>
 
           {/* Account */}
           {user ? (
             <div className="relative hidden md:block">
               <button
-                className="flex items-center justify-center w-10 h-10 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
+                className="flex items-center justify-center w-11 h-11 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                 aria-label="Account menu"
               >
@@ -564,17 +564,17 @@ export default function Navbar() {
             </div>
           ) : (
             <button
-              className="hidden md:flex items-center justify-center w-10 h-10 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
+              className="hidden md:flex items-center justify-center w-11 h-11 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
               onClick={openAuthModal}
               aria-label="Login"
             >
-              <User size={21} />
+              <User size={22} />
             </button>
           )}
 
           {/* Cart */}
           <button
-            className="hidden md:flex items-center justify-center w-10 h-10 rounded-full relative text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
+            className="hidden md:flex items-center justify-center w-11 h-11 rounded-full relative text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
             onClick={openDrawer}
             aria-label="Cart"
           >
@@ -595,8 +595,8 @@ export default function Navbar() {
       {/* ROW 2 — Category navigation (desktop only, Ugaoo-style)          */}
       {/* ================================================================ */}
       <nav className="hidden lg:block border-t border-gray-100">
-        <div className="max-w-[1400px] mx-auto px-6">
-          <ul className="flex items-center justify-center text-[12.5px] font-semibold tracking-[0.06em] gap-0.5">
+        <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16">
+          <ul className="flex items-center justify-center text-[14px] font-semibold tracking-[0.03em] gap-0">
             {NAV_ITEMS.map((item) => {
               const hasDropdown = item.groups && item.groups.length > 0;
               const isOpen = activeDropdown === item.label;
@@ -613,7 +613,7 @@ export default function Navbar() {
                   <Link
                     to={item.href}
                     className={clsx(
-                      'flex items-center gap-1 px-3.5 py-3.5 transition-colors relative whitespace-nowrap group',
+                      'flex items-center gap-1.5 px-5 py-4 transition-colors relative whitespace-nowrap group',
                       item.highlight
                         ? 'text-accent hover:text-accent/80'
                         : active
@@ -631,7 +631,7 @@ export default function Navbar() {
                     {/* Active underline */}
                     <span
                       className={clsx(
-                        'absolute bottom-0 left-3.5 right-3.5 h-[2px] bg-primary rounded-full transition-transform duration-200 origin-left',
+                        'absolute bottom-0 left-5 right-5 h-[2px] bg-primary rounded-full transition-transform duration-200 origin-left',
                         active ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
                       )}
                     />
