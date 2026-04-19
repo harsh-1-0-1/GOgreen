@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import clsx from 'clsx';
@@ -82,22 +82,6 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
   );
 }
 
-function useVisibleCount() {
-  const getCount = () => {
-    if (typeof window === 'undefined') return 3;
-    if (window.innerWidth < 640) return 1;
-    if (window.innerWidth < 1024) return 2;
-    return 3;
-  };
-  const [count, setCount] = useState(getCount);
-  useEffect(() => {
-    const handler = () => setCount(getCount());
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
-  return count;
-}
-
 function FullScreenCarouselLayout({
   bgValue,
   headline,
@@ -105,19 +89,46 @@ function FullScreenCarouselLayout({
   headlineColor,
   products,
 }: ThemedProductSectionProps) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
-  const visibleCount = useVisibleCount();
-  const maxIndex = Math.max(0, products.length - visibleCount);
+
+  const dotCount = products.length;
+
+  function handleScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    if (!el.firstElementChild) return;
+    const cardWidth = el.firstElementChild.clientWidth;
+    const gap = 20; 
+    const newIndex = Math.round(el.scrollLeft / (cardWidth + gap));
+    if (newIndex !== index) {
+      setIndex(newIndex);
+    }
+  }
+
+  function scrollToA(i: number) {
+    if (scrollContainerRef.current) {
+      const el = scrollContainerRef.current;
+      const cardWidth = el.firstElementChild?.clientWidth || 0;
+      const gap = 20;
+      el.scrollTo({ left: i * (cardWidth + gap), behavior: 'smooth' });
+    }
+  }
 
   function prev() {
-    setIndex((i) => (i === 0 ? maxIndex : i - 1));
-  }
-  function next() {
-    setIndex((i) => (i >= maxIndex ? 0 : i + 1));
+    if (scrollContainerRef.current) {
+      const el = scrollContainerRef.current;
+      const cardWidth = el.firstElementChild?.clientWidth || 0;
+      el.scrollBy({ left: -(cardWidth + 20), behavior: 'smooth' });
+    }
   }
 
-  const dotCount = maxIndex + 1;
-  const GAP = 20;
+  function next() {
+    if (scrollContainerRef.current) {
+      const el = scrollContainerRef.current;
+      const cardWidth = el.firstElementChild?.clientWidth || 0;
+      el.scrollBy({ left: cardWidth + 20, behavior: 'smooth' });
+    }
+  }
 
   return (
     <section className="relative w-full overflow-hidden h-dvh min-h-[640px]">
@@ -149,22 +160,18 @@ function FullScreenCarouselLayout({
 
         {/* Cards carousel */}
         <div className="relative px-10 sm:px-14 md:px-16 lg:px-20 pb-6 max-w-[1300px] mx-auto w-full">
-          <div className="overflow-hidden">
+          <div className="relative w-full">
+            <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
             <div
-              className="flex transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]"
-              style={{
-                gap: `${GAP}px`,
-                transform: `translateX(calc(-${index} * (${100 / visibleCount}% + ${GAP - (GAP / visibleCount)}px)))`,
-                willChange: 'transform',
-              }}
+              ref={scrollContainerRef}
+              onScroll={handleScroll}
+              className="flex gap-5 overflow-x-auto snap-x snap-mandatory pt-2 pb-6 hide-scrollbar"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {products.map((product, i) => (
                 <div
                   key={product.id}
-                  className="shrink-0"
-                  style={{
-                    width: `calc(${100 / visibleCount}% - ${GAP * (visibleCount - 1) / visibleCount}px)`,
-                  }}
+                  className="shrink-0 snap-start w-[82%] sm:w-[44%] lg:w-[28%]"
                 >
                   <ProductCard product={product} index={i} />
                 </div>
@@ -193,11 +200,11 @@ function FullScreenCarouselLayout({
 
         {/* Dots */}
         {dotCount > 1 && (
-          <div className="flex items-center justify-center gap-2 pb-5">
+          <div className="flex items-center justify-center gap-2 pb-5 mt-2">
             {Array.from({ length: dotCount }).map((_, i) => (
               <button
                 key={i}
-                onClick={() => setIndex(i)}
+                onClick={() => scrollToA(i)}
                 aria-label={`Go to slide ${i + 1}`}
                 className={clsx(
                   'rounded-full transition-all duration-300',
@@ -209,6 +216,7 @@ function FullScreenCarouselLayout({
             ))}
           </div>
         )}
+
       </div>
     </section>
   );
