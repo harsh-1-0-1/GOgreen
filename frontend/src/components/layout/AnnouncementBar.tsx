@@ -49,7 +49,7 @@ export default function AnnouncementBar() {
 
   return (
     <div
-      className="relative w-full h-9 sm:h-10 flex items-center overflow-hidden text-white text-xs sm:text-[13px] tracking-wide"
+      className="relative w-full h-9 sm:h-[38px] flex items-center overflow-hidden text-white text-[11.5px] sm:text-[12.5px] font-medium tracking-[0.04em]"
       style={{ backgroundColor: '#1B4332' }}
     >
       <div className="animate-marquee flex items-center whitespace-nowrap">
@@ -62,7 +62,7 @@ export default function AnnouncementBar() {
       <button
         onClick={dismiss}
         aria-label="Close announcement"
-        className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 flex items-center justify-center rounded-full text-white/70 hover:text-white hover:bg-white/10 transition-colors text-base leading-none"
+        className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 z-10 w-5 h-5 flex items-center justify-center rounded-full text-white/60 hover:text-white hover:bg-white/15 transition-colors text-sm leading-none"
       >
         ×
       </button>
