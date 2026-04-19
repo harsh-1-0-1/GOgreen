@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
-import { FolderTree, LayoutDashboard, MoreHorizontal, Package, ShoppingCart, Users, X } from 'lucide-react';
+import { FolderTree, Image, LayoutDashboard, MoreHorizontal, Package, ShoppingCart, Users, X } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
@@ -10,6 +10,7 @@ const NAV = [
   { to: '/admin/categories', icon: FolderTree, label: 'Categories' },
   { to: '/admin/orders', icon: ShoppingCart, label: 'Orders' },
   { to: '/admin/users', icon: Users, label: 'Users' },
+  { to: '/admin/banners', icon: Image, label: 'Banners' },
 ];
 
 const MOBILE_TABS = NAV.slice(0, 3); // Dashboard, Products, Categories

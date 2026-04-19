@@ -3,87 +3,82 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 
-// ---------------------------------------------------------------------------
-// Slide data
-// ---------------------------------------------------------------------------
+import { useBanners } from '@/hooks/useBanners';
+import type { Banner } from '@/types';
 
-interface Slide {
-  bg: string;
-  headline: string;
-  subtext: string;
-  ctaText: string;
-  ctaLink: string;
-  ctaClass: string;
-  image: string;
-  dark?: boolean;
-  starburst?: string;
-  trustBadge?: string;
-}
-
-const SLIDES: Slide[] = [
-  {
-    bg: '#F5F0E8',
-    headline: 'Get your first plant set!',
-    subtext: 'Handpicked plants delivered to your door',
-    ctaText: 'Shop Now',
-    ctaLink: '/products',
-    ctaClass: 'bg-accent text-[#1B4332] hover:bg-accent/90',
-    image:
-      'https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=800&h=1000&fit=crop',
-    starburst: '4 plants starting @₹699',
-    trustBadge: 'Trusted by 10M+ Plant Parents',
-  },
-  {
-    bg: '#E8F0E8',
-    headline: 'Less care. More green.',
-    subtext: 'Low-maintenance plants for your home.',
-    ctaText: 'Shop Plants',
-    ctaLink: '/products?category=indoor-plants',
-    ctaClass: 'bg-primary text-white hover:bg-primary/90',
-    image:
-      'https://images.unsplash.com/photo-1545241047-6083a3684587?w=800&h=1000&fit=crop',
-  },
-  {
-    bg: '#1B4332',
-    headline: 'New to plants?',
-    subtext: 'Start with the easy ones.',
-    ctaText: 'See Beginner Plants',
-    ctaLink: '/products?tag=beginner-friendly',
-    ctaClass: 'bg-white text-[#1B4332] hover:bg-gray-100',
-    image:
-      'https://images.unsplash.com/photo-1622467827417-bbe2237067a9?w=800&h=1000&fit=crop',
-    dark: true,
-  },
-];
+const FALLBACK_SLIDE: Banner = {
+  id: 0,
+  title: "India's favourite plant store",
+  subtitle: 'Plants, seeds & pots delivered to your door',
+  cta_text: 'Shop Now',
+  cta_link: '/products',
+  bg_color: '#2D6A4F',
+  text_color: '#FFFFFF',
+  image_url:
+    'https://images.unsplash.com/photo-1545241047-6083a3684587?w=1400&h=600&fit=crop',
+  placement: 'hero',
+  position: 0,
+  is_active: true,
+};
 
 const STARBURST_CLIP =
   'polygon(50% 0%,66% 18%,85% 5%,80% 28%,100% 35%,87% 50%,100% 65%,80% 72%,85% 95%,66% 82%,50% 100%,34% 82%,15% 95%,20% 72%,0% 65%,13% 50%,0% 35%,20% 28%,15% 5%,34% 18%)';
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+function isDarkBg(hex: string): boolean {
+  const c = hex.replace('#', '');
+  if (c.length !== 6) return false;
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  return r * 0.299 + g * 0.587 + b * 0.114 < 128;
+}
+
+function SlidesSkeleton() {
+  return (
+    <section className="w-full overflow-hidden">
+      <div
+        className="animate-pulse bg-[#f0ebe3]"
+        style={{ height: 'clamp(420px, 58vh, 680px)' }}
+      >
+        <div className="flex items-center h-full px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28">
+          <div className="space-y-5 w-full max-w-md">
+            <div className="h-10 w-3/4 bg-gray-300/40 rounded-lg" />
+            <div className="h-5 w-1/2 bg-gray-300/30 rounded" />
+            <div className="h-12 w-36 bg-gray-300/40 rounded-lg" />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 export default function HeroBanner() {
+  const { data: banners = [], isLoading } = useBanners('hero');
+  const slides = banners.length > 0 ? banners : [FALLBACK_SLIDE];
+
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
   const touchStartRef = useRef(0);
 
+  useEffect(() => {
+    setCurrent(0);
+  }, [banners]);
+
   const next = useCallback(
-    () => setCurrent((c) => (c + 1) % SLIDES.length),
-    [],
+    () => setCurrent((c) => (c + 1) % slides.length),
+    [slides.length],
   );
 
   const prev = useCallback(
-    () => setCurrent((c) => (c - 1 + SLIDES.length) % SLIDES.length),
-    [],
+    () => setCurrent((c) => (c - 1 + slides.length) % slides.length),
+    [slides.length],
   );
 
-  // Auto-advance every 4 s — resets whenever slide changes or pause toggles
   useEffect(() => {
-    if (paused) return;
+    if (paused || slides.length <= 1) return;
     const id = setTimeout(next, 4000);
     return () => clearTimeout(id);
-  }, [paused, next, current]);
+  }, [paused, next, current, slides.length]);
 
   function handleTouchStart(e: React.TouchEvent) {
     touchStartRef.current = e.touches[0].clientX;
@@ -96,6 +91,8 @@ export default function HeroBanner() {
     }
   }
 
+  if (isLoading) return <SlidesSkeleton />;
+
   return (
     <section
       className="relative w-full overflow-hidden group"
@@ -104,44 +101,44 @@ export default function HeroBanner() {
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* ---- Slider Track ---- */}
       <div
         className="flex transition-transform duration-700 ease-in-out"
         style={{
           transform: `translateX(-${current * 100}%)`,
-          /* Ugaoo-style: approx 55vh on desktop, full on mobile */
           height: 'clamp(420px, 58vh, 680px)',
         }}
       >
-        {SLIDES.map((slide, i) => {
+        {slides.map((slide, i) => {
+          const dark = isDarkBg(slide.bg_color);
+          const textColor = slide.text_color || (dark ? '#FFFFFF' : '#1B4332');
+
           return (
             <div
-              key={i}
+              key={slide.id || i}
               className="w-full shrink-0 relative overflow-hidden"
-              style={{ backgroundColor: slide.bg }}
+              style={{ backgroundColor: slide.bg_color }}
               aria-hidden={i !== current}
             >
-              {/* Mobile: full-bleed background image + gradient overlay */}
-              <img
-                src={slide.image}
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover md:hidden"
-                loading={i === 0 ? 'eager' : 'lazy'}
-              />
+              {slide.image_url && (
+                <img
+                  src={slide.image_url}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover md:hidden"
+                  loading={i === 0 ? 'eager' : 'lazy'}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent md:hidden" />
 
-              {/* Content wrapper — full-width, constrained max */}
               <div className="relative h-full flex items-stretch">
-
-                {/* ---- Text column ---- */}
                 <div className="relative z-10 w-full md:w-[48%] lg:w-[44%] flex items-center px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28 py-10 md:py-0">
                   <div className="text-center md:text-left max-w-md w-full space-y-5 md:space-y-6">
-
-                    {/* Offer badge (mobile only, above headline) */}
-                    {slide.starburst && (
+                    {slide.badge_text && (
                       <div className="md:hidden">
                         <span className="inline-block px-4 py-1.5 bg-accent/90 backdrop-blur-sm rounded-full text-xs font-bold text-[#1B4332] shadow">
-                          {slide.starburst}
+                          {slide.badge_text}
                         </span>
                       </div>
                     )}
@@ -149,60 +146,71 @@ export default function HeroBanner() {
                     <h2
                       className={clsx(
                         'font-bold leading-[1.15] tracking-tight',
-                        /* Mobile: big, Desktop: even bigger */
                         'text-[2rem] sm:text-[2.4rem] md:text-[2.8rem] lg:text-[3.2rem] xl:text-[3.6rem]',
-                        slide.dark
+                        dark
                           ? 'text-white'
                           : 'text-white md:text-[#1B4332]',
                       )}
+                      style={{ color: undefined }}
                     >
-                      {slide.headline}
+                      <span className="hidden md:inline" style={{ color: textColor }}>
+                        {slide.title}
+                      </span>
+                      <span className="md:hidden">{slide.title}</span>
                     </h2>
 
-                    <p
-                      className={clsx(
-                        'text-[15px] md:text-[16px] lg:text-[17px] leading-relaxed',
-                        slide.dark
-                          ? 'text-white/80'
-                          : 'text-white/90 md:text-gray-500',
-                      )}
-                    >
-                      {slide.subtext}
-                    </p>
-
-                    <div className="flex flex-col sm:flex-row items-center md:items-start gap-3">
-                      <Link
-                        to={slide.ctaLink}
+                    {slide.subtitle && (
+                      <p
                         className={clsx(
-                          'inline-flex items-center justify-center px-8 py-3 rounded-lg font-semibold text-[14px] md:text-[15px] transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md',
-                          slide.ctaClass,
+                          'text-[15px] md:text-[16px] lg:text-[17px] leading-relaxed',
+                          dark
+                            ? 'text-white/80'
+                            : 'text-white/90 md:text-gray-500',
                         )}
                       >
-                        {slide.ctaText}
-                      </Link>
-                    </div>
+                        {slide.subtitle}
+                      </p>
+                    )}
+
+                    {slide.cta_text && slide.cta_link && (
+                      <div className="flex flex-col sm:flex-row items-center md:items-start gap-3">
+                        <Link
+                          to={slide.cta_link}
+                          className={clsx(
+                            'inline-flex items-center justify-center px-8 py-3 rounded-lg font-semibold text-[14px] md:text-[15px] transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md',
+                            dark
+                              ? 'bg-white text-[#1B4332] hover:bg-gray-100'
+                              : 'bg-accent text-[#1B4332] hover:bg-accent/90',
+                          )}
+                        >
+                          {slide.cta_text}
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* ---- Desktop image column ---- */}
                 <div className="hidden md:block flex-1 relative overflow-hidden">
-                  <img
-                    src={slide.image}
-                    alt={slide.headline}
-                    className="w-full h-full object-cover object-center"
-                    loading={i === 0 ? 'eager' : 'lazy'}
-                  />
-                  {/* Subtle fade from bg color on the left edge of the image */}
+                  {slide.image_url && (
+                    <img
+                      src={slide.image_url}
+                      alt={slide.title}
+                      className="w-full h-full object-cover object-center"
+                      loading={i === 0 ? 'eager' : 'lazy'}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  )}
                   <div
                     className="absolute inset-y-0 left-0 w-24 pointer-events-none"
                     style={{
-                      background: `linear-gradient(to right, ${slide.bg}, transparent)`,
+                      background: `linear-gradient(to right, ${slide.bg_color}, transparent)`,
                     }}
                   />
                 </div>
 
-                {/* Desktop starburst — clip-path star, positioned at the seam */}
-                {slide.starburst && (
+                {slide.badge_text && (
                   <div
                     className="absolute z-20 hidden md:flex left-[44%] top-1/2 -translate-x-1/2 -translate-y-1/2 w-[130px] h-[130px] lg:w-[148px] lg:h-[148px] items-center justify-center drop-shadow-xl"
                     style={{
@@ -211,16 +219,7 @@ export default function HeroBanner() {
                     }}
                   >
                     <span className="text-[11px] font-extrabold text-[#1B4332] leading-tight text-center px-5">
-                      {slide.starburst}
-                    </span>
-                  </div>
-                )}
-
-                {/* Trust badge */}
-                {slide.trustBadge && (
-                  <div className="absolute z-20 top-5 right-5 md:top-8 md:right-10 w-[72px] h-[72px] md:w-[88px] md:h-[88px] lg:w-[100px] lg:h-[100px] rounded-full border-[3px] border-primary bg-white/95 flex items-center justify-center text-center p-2 shadow-[0_8px_30px_rgb(0,0,0,0.14)]">
-                    <span className="text-[8px] md:text-[9px] lg:text-[10px] font-bold text-primary leading-tight">
-                      {slide.trustBadge}
+                      {slide.badge_text}
                     </span>
                   </div>
                 )}
@@ -230,7 +229,6 @@ export default function HeroBanner() {
         })}
       </div>
 
-      {/* ---- Arrow buttons ---- */}
       <button
         onClick={prev}
         aria-label="Previous slide"
@@ -246,9 +244,8 @@ export default function HeroBanner() {
         <ChevronRight size={22} />
       </button>
 
-      {/* ---- Dot indicators ---- */}
       <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2">
-        {SLIDES.map((_, i) => (
+        {slides.map((_, i) => (
           <button
             key={i}
             onClick={() => setCurrent(i)}

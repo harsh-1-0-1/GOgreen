@@ -10,7 +10,7 @@ import re
 from datetime import datetime, timezone
 
 from app.core.security import hash_password
-from app.db.models import BlogCategory, BlogPost, Category, Product, User
+from app.db.models import Banner, BlogCategory, BlogPost, Category, Product, User
 from app.db.session import async_session_factory
 
 UNSPLASH = "https://images.unsplash.com/photo-{id}?w=600&q=80"
@@ -260,6 +260,7 @@ def _original_price(price: float) -> float:
 async def seed() -> None:
     async with async_session_factory() as db:
         # Clear existing seed data so the script is re-runnable
+        await db.execute(Banner.__table__.delete())
         await db.execute(Product.__table__.delete())
         await db.execute(Category.__table__.delete())
         await db.execute(BlogPost.__table__.delete())
@@ -343,8 +344,74 @@ async def seed() -> None:
             )
             db.add(post)
 
+        banners_seed = [
+            Banner(
+                title="Get your first plant set!",
+                subtitle="Handpicked plants delivered to your door",
+                cta_text="Shop Now",
+                cta_link="/products",
+                badge_text="4 Plants @ ₹699",
+                placement="hero",
+                position=0,
+                bg_color="#F5F0E8",
+                text_color="#1B4332",
+                image_url="https://images.unsplash.com/photo-1545241047-6083a3684587?w=1400&h=600&fit=crop&crop=center",
+            ),
+            Banner(
+                title="Less care. More green.",
+                subtitle="Low-maintenance plants for your home.",
+                cta_text="Shop Plants",
+                cta_link="/products?tags=low-maintenance",
+                placement="hero",
+                position=1,
+                bg_color="#E8F0E8",
+                text_color="#1B4332",
+                image_url="https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&h=600&fit=crop&crop=center",
+            ),
+            Banner(
+                title="New to plants?",
+                subtitle="Start with the easy ones.",
+                cta_text="See Beginner Plants",
+                cta_link="/products?tags=beginner-friendly",
+                placement="hero",
+                position=2,
+                bg_color="#1B4332",
+                text_color="#FFFFFF",
+                image_url="https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&h=600&fit=crop&crop=center",
+            ),
+            Banner(
+                title="Free Delivery Above ₹499 | Shop Now",
+                cta_link="/products",
+                placement="announcement",
+                position=0,
+                bg_color="#1B4332",
+                text_color="#FFFFFF",
+            ),
+            Banner(
+                title="Get 4 Plants @ just ₹699!",
+                cta_link="/products?tags=bundle",
+                placement="announcement",
+                position=1,
+                bg_color="#1B4332",
+                text_color="#FFFFFF",
+            ),
+            Banner(
+                title="Next-Day Delivery Available",
+                cta_link="/next-day-delivery",
+                placement="announcement",
+                position=2,
+                bg_color="#1B4332",
+                text_color="#FFFFFF",
+            ),
+        ]
+        db.add_all(banners_seed)
+
         await db.commit()
-        print(f"\nSeeded 1 admin, {len(CATEGORIES)} categories, {len(PRODUCTS)} products, and {len(BLOG_POSTS)} blog posts.")
+        print(
+            f"\nSeeded 1 admin, {len(CATEGORIES)} categories, "
+            f"{len(PRODUCTS)} products, {len(BLOG_POSTS)} blog posts, "
+            f"and {len(banners_seed)} banners."
+        )
 
 
 if __name__ == "__main__":

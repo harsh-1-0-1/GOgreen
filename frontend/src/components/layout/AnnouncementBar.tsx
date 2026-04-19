@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-const COOKIE_NAME = 'bar_dismissed';
-const COOKIE_MAX_AGE = 86400; // 24 hours
+import { useBanners } from '@/hooks/useBanners';
 
-const messages = [
-  { text: 'Free Delivery Above ₹499 | Shop Now', to: '/products' },
-  { text: 'Get 4 Plants @ just ₹699!', to: '/products?tag=bundle' },
-  { text: 'Next-Day Delivery Available', to: '/pages/next-day-delivery' },
-] as const;
+const COOKIE_NAME = 'bar_dismissed';
+const COOKIE_MAX_AGE = 86400;
+
+const FALLBACK_MESSAGES = [
+  { title: 'Free Delivery Above ₹499 | Shop Now', cta_link: '/products' },
+];
 
 function getCookie(name: string): string | undefined {
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
@@ -20,15 +20,23 @@ function setCookie(name: string, value: string, maxAge: number) {
 }
 
 const Separator = () => (
-  <span className="mx-4 text-white/50 text-[10px] sm:text-xs select-none" aria-hidden>
+  <span
+    className="mx-4 text-white/50 text-[10px] sm:text-xs select-none"
+    aria-hidden
+  >
     ✦
   </span>
 );
 
 export default function AnnouncementBar() {
-  const [visible, setVisible] = useState(() => getCookie(COOKIE_NAME) !== '1');
+  const { data: banners = [] } = useBanners('announcement');
+  const [visible, setVisible] = useState(
+    () => getCookie(COOKIE_NAME) !== '1',
+  );
 
   if (!visible) return null;
+
+  const messages = banners.length > 0 ? banners : FALLBACK_MESSAGES;
 
   function dismiss() {
     setCookie(COOKIE_NAME, '1', COOKIE_MAX_AGE);
@@ -39,10 +47,10 @@ export default function AnnouncementBar() {
     <span key={i} className="inline-flex items-center whitespace-nowrap">
       {i > 0 && <Separator />}
       <Link
-        to={msg.to}
+        to={msg.cta_link || '/products'}
         className="hover:underline underline-offset-2 transition-colors"
       >
-        {msg.text}
+        {msg.title}
       </Link>
     </span>
   ));

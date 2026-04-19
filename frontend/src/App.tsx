@@ -26,6 +26,7 @@ import ProductsAdminPage from '@/pages/admin/ProductsAdminPage';
 import CategoriesAdminPage from '@/pages/admin/CategoriesAdminPage';
 import OrdersAdminPage from '@/pages/admin/OrdersAdminPage';
 import UsersAdminPage from '@/pages/admin/UsersAdminPage';
+import BannersAdminPage from '@/pages/admin/BannersAdminPage';
 
 function AppInit() {
   const hydrateFromStorage = useAuthStore((s) => s.hydrateFromStorage);
@@ -73,6 +74,7 @@ export default function App() {
                 <Route path="categories" element={<CategoriesAdminPage />} />
                 <Route path="orders" element={<OrdersAdminPage />} />
                 <Route path="users" element={<UsersAdminPage />} />
+                <Route path="banners" element={<BannersAdminPage />} />
               </Route>
             </Route>
           </Routes>
