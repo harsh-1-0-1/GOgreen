@@ -596,7 +596,7 @@ export default function Navbar() {
       {/* ================================================================ */}
       <nav className="hidden lg:block border-t border-gray-100">
         <div className="max-w-[1400px] mx-auto px-6">
-          <ul className="flex items-center text-[12.5px] font-semibold tracking-[0.06em]">
+          <ul className="flex items-center justify-center text-[12.5px] font-semibold tracking-[0.06em] gap-0.5">
             {NAV_ITEMS.map((item) => {
               const hasDropdown = item.groups && item.groups.length > 0;
               const isOpen = activeDropdown === item.label;
@@ -613,7 +613,7 @@ export default function Navbar() {
                   <Link
                     to={item.href}
                     className={clsx(
-                      'flex items-center gap-1 px-3 xl:px-4 py-3.5 transition-colors relative whitespace-nowrap group',
+                      'flex items-center gap-1 px-3.5 py-3.5 transition-colors relative whitespace-nowrap group',
                       item.highlight
                         ? 'text-accent hover:text-accent/80'
                         : active
@@ -631,7 +631,7 @@ export default function Navbar() {
                     {/* Active underline */}
                     <span
                       className={clsx(
-                        'absolute bottom-0 left-3 right-3 xl:left-4 xl:right-4 h-[2px] bg-primary rounded-full transition-transform duration-200 origin-left',
+                        'absolute bottom-0 left-3.5 right-3.5 h-[2px] bg-primary rounded-full transition-transform duration-200 origin-left',
                         active ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
                       )}
                     />
