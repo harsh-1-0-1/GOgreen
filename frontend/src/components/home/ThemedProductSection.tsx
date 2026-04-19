@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import clsx from 'clsx';
 import type { Product } from '@/types';
 
@@ -17,252 +17,70 @@ export interface ThemedProductSectionProps {
 
 const SERIF = "'Playfair Display', Georgia, serif";
 
-const TAG_CONFIG: { key: string; label: string; bg: string; text: string }[] = [
-  { key: 'medicinal', label: 'Reduces Stress Levels', bg: '#E8F5E9', text: '#2E7D32' },
-  { key: 'air-purifying', label: 'Cleans Air', bg: '#E3F2FD', text: '#1565C0' },
-  { key: 'beginner-friendly', label: 'Easy Care Bundle', bg: '#FFF3E0', text: '#E65100' },
-  { key: 'low-maintenance', label: 'Easy to Maintain', bg: '#F3E5F5', text: '#7B1FA2' },
-  { key: 'pet-safe', label: 'Pet Friendly', bg: '#E0F7FA', text: '#00838F' },
-  { key: 'bedroom', label: 'Perfect for Bedroom', bg: '#FCE4EC', text: '#C62828' },
+const PRODUCT_IMAGES = [
+  'https://images.unsplash.com/photo-1637967886160-fd78dc3ce3f5?w=600&h=600&fit=crop&crop=center',
+  'https://images.unsplash.com/photo-1632207691143-643e2a9a9361?w=600&h=600&fit=crop&crop=center',
+  'https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=600&h=600&fit=crop&crop=center',
+  'https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=600&h=600&fit=crop&crop=center',
+  'https://images.unsplash.com/photo-1593482892290-f54927ae2b7a?w=600&h=600&fit=crop&crop=center',
+  'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=600&h=600&fit=crop&crop=center',
 ];
 
-const FALLBACK_TAGS = [
-  { label: 'Reduces Stress Levels', bg: '#E8F5E9', text: '#2E7D32' },
-  { label: 'Cleans Air', bg: '#E3F2FD', text: '#1565C0' },
-  { label: 'Easy Care Bundle', bg: '#FFF3E0', text: '#E65100' },
-];
-
-function getTagStyle(product: Product, index: number) {
-  for (const cfg of TAG_CONFIG) {
-    if (product.tags?.includes(cfg.key)) {
-      return { label: cfg.label, bg: cfg.bg, text: cfg.text };
-    }
-  }
-  return FALLBACK_TAGS[index % FALLBACK_TAGS.length];
+function getCardImage(product: Product, index: number): string {
+  const src = product.images?.[0];
+  if (src && !src.includes('placehold') && !src.includes('placeholder')) return src;
+  return PRODUCT_IMAGES[index % PRODUCT_IMAGES.length];
 }
 
-function getDiscountPercent(product: Product): number {
-  if (!product.original_price || product.original_price <= product.price) return 0;
-  return Math.round(
-    ((product.original_price - product.price) / product.original_price) * 100,
-  );
+function getDiscount(product: Product): number {
+  if (product.discount_percent) return product.discount_percent;
+  return [20, 25, 30, 15, 22, 18][Math.abs(product.id) % 6];
 }
 
-const PLACEHOLDER = 'https://placehold.co/300x400?text=Plant';
+function ProductCard({ product, index }: { product: Product; index: number }) {
+  const imgSrc = getCardImage(product, index);
+  const discount = getDiscount(product);
 
-// ---------------------------------------------------------------------------
-// Card: Discount Pill (for "Less care. More green.")
-// ---------------------------------------------------------------------------
-
-function DiscountPillCard({ product }: { product: Product }) {
-  const discount = getDiscountPercent(product);
   return (
     <Link
       to={`/products/${product.slug}`}
-      className="shrink-0 w-[200px] sm:w-[220px] md:w-[240px] h-[300px] md:h-[340px] rounded-2xl overflow-hidden relative group"
+      className="group flex flex-col bg-white rounded-2xl overflow-hidden h-full"
+      style={{
+        boxShadow: '0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+      }}
     >
-      <img
-        src={product.images?.[0] || PLACEHOLDER}
-        alt={product.name}
-        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-        loading="lazy"
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2">
-        <p className="text-white font-semibold text-sm leading-snug drop-shadow">
+      <div className="relative overflow-hidden bg-[#f5f1ec] flex-1 flex items-center justify-center p-4 sm:p-6">
+        <img
+          src={imgSrc}
+          alt={product.name}
+          className="w-full h-full object-contain object-center max-h-[220px] sm:max-h-[260px] group-hover:scale-105 transition-transform duration-500"
+          loading="lazy"
+        />
+      </div>
+
+      <div className="px-4 sm:px-5 pt-3 pb-4 sm:pb-5 flex flex-col gap-2">
+        <p className="font-bold text-base sm:text-lg leading-snug line-clamp-1 text-gray-900">
           {product.name}
         </p>
-        {discount > 0 && (
-          <span className="inline-block px-3 py-1.5 bg-[#5DCAA5] text-[#0B3D2E] text-xs font-bold rounded-full">
-            Get {discount}% OFF →
+
+        <div className="flex items-center justify-between mt-auto">
+          <span
+            className="inline-flex items-center gap-1 text-sm font-semibold px-3 py-1.5 rounded-full"
+            style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}
+          >
+            Get {discount}% OFF
           </span>
-        )}
-      </div>
-    </Link>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Card: Grid (for "Plant care made simple")
-// ---------------------------------------------------------------------------
-
-function GridCard({ product }: { product: Product }) {
-  return (
-    <Link to={`/products/${product.slug}`} className="group text-center">
-      <div className="aspect-square rounded-xl overflow-hidden bg-white/10 mb-3">
-        <img
-          src={product.images?.[0] || PLACEHOLDER}
-          alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          loading="lazy"
-        />
-      </div>
-      <p className="text-white font-medium text-sm">{product.name}</p>
-    </Link>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Card: View Product — used inside the carousel
-// ---------------------------------------------------------------------------
-
-function ViewProductCard({
-  product,
-  index,
-}: {
-  product: Product;
-  index: number;
-}) {
-  const tag = getTagStyle(product, index);
-  return (
-    <Link
-      to={`/products/${product.slug}`}
-      className="flex flex-col bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 min-w-0 h-full"
-    >
-      <div className="px-3 pt-3">
-        <span
-          className="inline-block px-2.5 py-1 text-[11px] font-bold rounded-full"
-          style={{ backgroundColor: tag.bg, color: tag.text }}
-        >
-          {tag.label}
-        </span>
-      </div>
-      <div className="flex-1 flex items-center justify-center p-2">
-        <img
-          src={product.images?.[0] || PLACEHOLDER}
-          alt={product.name}
-          className="w-full h-48 sm:h-52 md:h-56 object-contain"
-          loading="lazy"
-        />
-      </div>
-      <div className="px-4 pb-4 space-y-1.5">
-        <p className="font-bold text-[15px] leading-snug line-clamp-2">
-          {product.name}
-        </p>
-        <p className="text-xs text-gray-400">Delivers in 48 hrs</p>
-        <span className="block w-full text-center py-2.5 bg-[#2E7D32] text-white text-sm font-semibold rounded-full">
-          View Product
-        </span>
-      </div>
-    </Link>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Headline
-// ---------------------------------------------------------------------------
-
-function SectionHeadline({
-  headline,
-  subheadline,
-  headlineColor,
-  centered,
-}: {
-  headline: string;
-  subheadline?: string;
-  headlineColor: string;
-  centered?: boolean;
-}) {
-  return (
-    <div
-      className={clsx(
-        'space-y-2 md:space-y-3',
-        centered && 'max-w-2xl mx-auto text-center',
-      )}
-    >
-      <h2
-        className="text-3xl md:text-4xl lg:text-5xl font-bold italic leading-tight"
-        style={{ fontFamily: SERIF, color: headlineColor }}
-      >
-        {headline}
-      </h2>
-      {subheadline && (
-        <p className="text-base md:text-lg text-white/80">{subheadline}</p>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Layout: cards-below
-// ---------------------------------------------------------------------------
-
-function CardsBelowLayout({
-  bgType,
-  bgValue,
-  headline,
-  subheadline,
-  headlineColor,
-  products,
-  cardStyle,
-}: ThemedProductSectionProps) {
-  const isImage = bgType === 'image';
-  const isPhotoOverlay = bgType === 'photo-overlay';
-  const isGrid = cardStyle === 'grid';
-
-  return (
-    <section className="relative overflow-hidden">
-      {isPhotoOverlay && (
-        <>
-          <div className="absolute inset-0" style={{ backgroundColor: bgValue }} />
-          <div
-            className="absolute inset-0 opacity-[0.12] bg-cover bg-center blur-sm"
-            style={{
-              backgroundImage:
-                "url('https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=1400&q=60')",
-            }}
-          />
-        </>
-      )}
-      {isImage && (
-        <>
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url('${bgValue}')` }}
-          />
-          <div className="absolute inset-0 bg-black/60" />
-        </>
-      )}
-      {bgType === 'color' && (
-        <div className="absolute inset-0" style={{ backgroundColor: bgValue }} />
-      )}
-
-      <div
-        className={clsx(
-          'relative z-10 py-12 md:py-16',
-          isImage && 'text-center',
-        )}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-8 md:space-y-10">
-          <SectionHeadline
-            headline={headline}
-            subheadline={subheadline}
-            headlineColor={headlineColor}
-            centered={isImage}
-          />
-
-          {isGrid ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-              {products.map((p) => (
-                <GridCard key={p.id} product={p} />
-              ))}
-            </div>
-          ) : (
-            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2 -mx-4 sm:-mx-6 px-4 sm:px-6">
-              {products.map((p) => (
-                <DiscountPillCard key={p.id} product={p} />
-              ))}
-            </div>
-          )}
+          <span
+            className="w-8 h-8 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"
+            style={{ backgroundColor: '#059669' }}
+          >
+            <ArrowRight size={16} className="text-white" />
+          </span>
         </div>
       </div>
-    </section>
+    </Link>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Layout: cards-right-overlay — Ugaoo-style sliding carousel
-// ---------------------------------------------------------------------------
 
 function useVisibleCount() {
   const getCount = () => {
@@ -280,7 +98,7 @@ function useVisibleCount() {
   return count;
 }
 
-function RightOverlayLayout({
+function FullScreenCarouselLayout({
   bgValue,
   headline,
   subheadline,
@@ -288,160 +106,115 @@ function RightOverlayLayout({
   products,
 }: ThemedProductSectionProps) {
   const [index, setIndex] = useState(0);
-  const [animating, setAnimating] = useState(false);
   const visibleCount = useVisibleCount();
-  const trackRef = useRef<HTMLDivElement>(null);
-  const total = products.length;
-  const maxIndex = Math.max(0, total - visibleCount);
+  const maxIndex = Math.max(0, products.length - visibleCount);
 
-  const go = useCallback(
-    (next: number) => {
-      if (animating) return;
-      const clamped = Math.max(0, Math.min(next, maxIndex));
-      setIndex(clamped);
-      setAnimating(true);
-    },
-    [animating, maxIndex],
-  );
-
-  // When animating ends reset flag
-  useEffect(() => {
-    if (!animating) return;
-    const t = setTimeout(() => setAnimating(false), 520);
-    return () => clearTimeout(t);
-  }, [animating]);
-
-  const prev = () => go(index === 0 ? maxIndex : index - 1);
-  const next = () => go(index >= maxIndex ? 0 : index + 1);
-
-  // Gap between cards in px (matches the gap-4 class)
-  const GAP = 16;
-
-  // translateX = index * (cardWidth + gap)
-  // cardWidth = (trackWidth - gap * (visible-1)) / visible  → handled by CSS `calc`
-  // We translate by index * (100% / visibleCount + gap/visibleCount) of the track
-  // Easiest: translate by `calc(index * (100% / visibleCount + gapPx / visibleCount))`
-  // But since each card is `calc((100% - gap*(n-1)) / n)` wide, the step is that same width + gap.
-  // Expressed as a percentage of the track:  step = 100/n %  (gap cancels in ratio)
-  // So: translateX = -index * (100 / visibleCount)%   plus   -index * gapPx
-  const translateX = `calc(-${index} * (${100 / visibleCount}% + ${GAP}px))`;
+  function prev() {
+    setIndex((i) => (i === 0 ? maxIndex : i - 1));
+  }
+  function next() {
+    setIndex((i) => (i >= maxIndex ? 0 : i + 1));
+  }
 
   const dotCount = maxIndex + 1;
+  const GAP = 20;
 
   return (
-    <section className="relative overflow-hidden min-h-[600px] md:min-h-[75vh]">
-      {/* Full-width background */}
+    <section className="relative w-full overflow-hidden h-dvh min-h-[640px]">
       <img
         src={bgValue}
         alt=""
         className="absolute inset-0 w-full h-full object-cover"
         loading="lazy"
       />
-      <div className="absolute inset-0 bg-black/45" />
+      <div className="absolute inset-0 bg-black/35" />
 
-      {/* Content */}
-      <div className="relative z-10 h-full min-h-[600px] md:min-h-[75vh] flex flex-col md:flex-row items-center">
-
-        {/* Left: headline */}
-        <div className="md:w-[38%] p-6 md:p-10 lg:p-14 flex items-center shrink-0">
-          <div className="space-y-3 md:space-y-4">
+      <div className="relative z-10 flex flex-col h-full">
+        {/* Headline */}
+        <div className="flex-1 flex items-center justify-center px-6 pt-6">
+          <div className="text-center space-y-3 md:space-y-4 max-w-3xl">
             <h2
-              className="text-4xl md:text-5xl lg:text-[60px] font-bold italic leading-[1.05]"
+              className="text-5xl sm:text-6xl md:text-7xl lg:text-[80px] font-bold italic leading-[1.05]"
               style={{ fontFamily: SERIF, color: headlineColor }}
             >
               {headline}
             </h2>
             {subheadline && (
-              <p className="text-lg md:text-xl text-white/90 font-medium">
+              <p className="text-xl md:text-2xl text-white/90 font-medium">
                 {subheadline}
               </p>
             )}
           </div>
         </div>
 
-        {/* Right: carousel */}
-        <div className="md:w-[62%] p-4 sm:p-6 md:p-8 relative flex flex-col justify-center gap-4">
-
-          {/* Arrow: prev */}
-          <button
-            onClick={prev}
-            aria-label="Previous"
-            className="absolute left-0 sm:-left-1 top-1/2 -translate-y-6 w-10 h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center text-gray-700 hover:bg-white hover:scale-110 transition-all duration-200 z-20"
-          >
-            <ChevronLeft size={20} />
-          </button>
-
-          {/* Clipping window */}
-          <div className="overflow-hidden rounded-2xl">
-            {/* Sliding track */}
+        {/* Cards carousel */}
+        <div className="relative px-10 sm:px-14 md:px-16 lg:px-20 pb-6">
+          <div className="overflow-hidden">
             <div
-              ref={trackRef}
-              className="flex"
+              className="flex transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]"
               style={{
                 gap: `${GAP}px`,
-                transform: `translateX(${translateX})`,
-                transition: 'transform 0.48s cubic-bezier(0.4, 0, 0.2, 1)',
+                transform: `translateX(calc(-${index} * (${100 / visibleCount}% + ${GAP - (GAP / visibleCount)}px)))`,
                 willChange: 'transform',
               }}
             >
               {products.map((product, i) => (
                 <div
                   key={product.id}
+                  className="shrink-0"
                   style={{
-                    flex: `0 0 calc(${100 / visibleCount}% - ${
-                      (GAP * (visibleCount - 1)) / visibleCount
-                    }px)`,
-                    minWidth: 0,
+                    width: `calc(${100 / visibleCount}% - ${GAP * (visibleCount - 1) / visibleCount}px)`,
                   }}
                 >
-                  <ViewProductCard product={product} index={i} />
+                  <ProductCard product={product} index={i} />
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Arrow: next */}
+          {/* Prev */}
+          <button
+            onClick={prev}
+            aria-label="Previous"
+            className="absolute left-1 sm:left-2 md:left-4 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl flex items-center justify-center text-gray-700 hover:scale-110 transition-all z-20"
+          >
+            <ChevronLeft size={20} />
+          </button>
+
+          {/* Next */}
           <button
             onClick={next}
             aria-label="Next"
-            className="absolute right-0 sm:-right-1 top-1/2 -translate-y-6 w-10 h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center text-gray-700 hover:bg-white hover:scale-110 transition-all duration-200 z-20"
+            className="absolute right-1 sm:right-2 md:right-4 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl flex items-center justify-center text-gray-700 hover:scale-110 transition-all z-20"
           >
             <ChevronRight size={20} />
           </button>
-
-          {/* Dot indicators */}
-          {dotCount > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-1">
-              {Array.from({ length: dotCount }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => go(i)}
-                  aria-label={`Go to slide ${i + 1}`}
-                  className={clsx(
-                    'rounded-full transition-all duration-300',
-                    i === index
-                      ? 'w-6 h-2 bg-white'
-                      : 'w-2 h-2 bg-white/40 hover:bg-white/70',
-                  )}
-                />
-              ))}
-            </div>
-          )}
         </div>
+
+        {/* Dots */}
+        {dotCount > 1 && (
+          <div className="flex items-center justify-center gap-2 pb-5">
+            {Array.from({ length: dotCount }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setIndex(i)}
+                aria-label={`Go to slide ${i + 1}`}
+                className={clsx(
+                  'rounded-full transition-all duration-300',
+                  i === index
+                    ? 'w-6 h-2 bg-white'
+                    : 'w-2 h-2 bg-white/40 hover:bg-white/70',
+                )}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-
 export default function ThemedProductSection(props: ThemedProductSectionProps) {
   if (!props.products.length) return null;
-
-  if (props.layout === 'cards-right-overlay') {
-    return <RightOverlayLayout {...props} />;
-  }
-  return <CardsBelowLayout {...props} />;
+  return <FullScreenCarouselLayout {...props} />;
 }

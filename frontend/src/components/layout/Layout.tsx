@@ -8,7 +8,7 @@ import AuthModal from '@/components/auth/AuthModal';
 
 export default function Layout() {
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen overflow-x-clip">
       <AnnouncementBar />
       <Navbar />
       <main className="flex-1 pb-16 md:pb-0">
