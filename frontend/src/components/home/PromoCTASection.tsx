@@ -23,8 +23,8 @@ const CARDS = [
 export default function PromoCTASection() {
   return (
     <section className="w-full py-10 sm:py-14 bg-white">
-      <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24">
-        <div className="grid md:grid-cols-2 gap-5 sm:gap-6">
+      <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 max-w-7xl">
+        <div className="grid md:grid-cols-2 gap-4 sm:gap-5">
           {CARDS.map((card) => (
             <div
               key={card.link}

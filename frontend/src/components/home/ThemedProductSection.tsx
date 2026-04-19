@@ -44,22 +44,22 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
   return (
     <Link
       to={`/products/${product.slug}`}
-      className="group flex flex-col bg-white rounded-2xl overflow-hidden h-full"
+      className="group flex flex-col bg-white rounded-2xl overflow-hidden h-full p-3 sm:p-4"
       style={{
         boxShadow: '0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
       }}
     >
-      <div className="relative overflow-hidden bg-[#f5f1ec] flex-1 flex items-center justify-center p-4 sm:p-6">
+      <div className="relative overflow-hidden rounded-xl bg-[#f5f1ec] shrink-0 aspect-[4/3] sm:aspect-square flex items-center justify-center p-3 sm:p-4">
         <img
           src={imgSrc}
           alt={product.name}
-          className="w-full h-full object-contain object-center max-h-[220px] sm:max-h-[260px] group-hover:scale-105 transition-transform duration-500"
+          className="w-full h-full object-contain object-center group-hover:scale-105 transition-transform duration-500"
           loading="lazy"
         />
       </div>
 
-      <div className="px-4 sm:px-5 pt-3 pb-4 sm:pb-5 flex flex-col gap-2">
-        <p className="font-bold text-base sm:text-lg leading-snug line-clamp-1 text-gray-900">
+      <div className="pt-3 sm:pt-4 flex flex-col gap-1.5 sm:gap-2 flex-1">
+        <p className="font-bold text-sm sm:text-base leading-snug line-clamp-1 text-gray-900">
           {product.name}
         </p>
 
@@ -148,7 +148,7 @@ function FullScreenCarouselLayout({
         </div>
 
         {/* Cards carousel */}
-        <div className="relative px-10 sm:px-14 md:px-16 lg:px-20 pb-6">
+        <div className="relative px-10 sm:px-14 md:px-16 lg:px-20 pb-6 max-w-[1300px] mx-auto w-full">
           <div className="overflow-hidden">
             <div
               className="flex transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]"

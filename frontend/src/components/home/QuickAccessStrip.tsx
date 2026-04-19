@@ -102,7 +102,7 @@ function CategoryTile({ tile }: { tile: Tile }) {
 export default function QuickAccessStrip() {
   return (
     <section className="w-full py-4 sm:py-6">
-      <div className="flex gap-3 sm:gap-4 lg:gap-5 overflow-x-auto lg:overflow-visible scrollbar-hide px-4 sm:px-6 lg:px-10 xl:px-16 w-full pb-2 lg:pb-0">
+      <div className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto lg:overflow-visible scrollbar-hide px-4 sm:px-6 lg:px-10 xl:px-16 w-full pb-2 lg:pb-0">
         {TILES.map((tile) =>
           tile.type === 'promo' ? (
             <PromoTile key={tile.label} tile={tile} />

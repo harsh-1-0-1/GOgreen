@@ -109,11 +109,13 @@ export default function HomePage() {
       <ErrorBoundary><HeroBanner /></ErrorBoundary>
       <QuickAccessStrip />
 
-      {/* Full-screen themed sections — no gaps, edge to edge */}
-      <ErrorBoundary><NewToPlantsSection /></ErrorBoundary>
-      <ErrorBoundary><BestDecorSection /></ErrorBoundary>
-      <ErrorBoundary><LowMaintenanceSection /></ErrorBoundary>
-      <ErrorBoundary><PlantCareSection /></ErrorBoundary>
+      {/* Full-screen themed sections with gaps */}
+      <div className="flex flex-col gap-4 md:gap-6 bg-white pb-6 md:pb-8 mt-6 md:mt-8">
+        <ErrorBoundary><NewToPlantsSection /></ErrorBoundary>
+        <ErrorBoundary><BestDecorSection /></ErrorBoundary>
+        <ErrorBoundary><LowMaintenanceSection /></ErrorBoundary>
+        <ErrorBoundary><PlantCareSection /></ErrorBoundary>
+      </div>
 
       <FeatureStrip />
       <ErrorBoundary><BlogSection /></ErrorBoundary>
