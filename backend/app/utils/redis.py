@@ -11,11 +11,16 @@ redis_client: aioredis.Redis | None = None
 
 async def init_redis() -> None:
     global redis_client
-    redis_client = aioredis.from_url(
-        settings.REDIS_URL,
-        decode_responses=True,
-    )
-    logger.info("Redis connection pool initialised")
+    try:
+        redis_client = aioredis.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+        )
+        await redis_client.ping()
+        logger.info("Redis connection pool initialised")
+    except Exception as e:
+        logger.warning(f"Redis connection failed: {e}. Running without cache.")
+        redis_client = None
 
 
 async def close_redis() -> None:
