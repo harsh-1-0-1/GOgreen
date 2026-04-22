@@ -63,7 +63,7 @@ function BlogCard({
           {post.category}
         </span>
 
-        <h3 className="font-bold text-lg leading-snug line-clamp-2 text-gray-900 group-hover:text-[#1B4332] transition-colors">
+        <h3 className="font-bold text-lg leading-snug line-clamp-2 text-gray-900 group-hover:text-[#16A34A] transition-colors">
           {post.title}
         </h3>
 
@@ -72,8 +72,8 @@ function BlogCard({
         </p>
 
         <div className="mt-5 flex items-center gap-2">
-          <span className="w-8 h-px bg-[#1B4332]" />
-          <span className="text-sm font-medium text-[#1B4332]">Read More</span>
+          <span className="w-8 h-px bg-[#16A34A]" />
+          <span className="text-sm font-medium text-[#16A34A]">Read More</span>
         </div>
       </div>
     </Link>
@@ -89,7 +89,7 @@ export default function BlogSection() {
         <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24">
           <h2
             className="text-2xl sm:text-4xl font-bold text-center mb-10"
-            style={{ color: '#1B4332' }}
+            style={{ color: '#16A34A' }}
           >
             Blogs
           </h2>
@@ -113,7 +113,7 @@ export default function BlogSection() {
       <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24">
         <h2
           className="text-2xl sm:text-4xl font-bold text-center mb-10"
-          style={{ color: '#1B4332' }}
+          style={{ color: '#16A34A' }}
         >
           Blogs
         </h2>
@@ -128,7 +128,7 @@ export default function BlogSection() {
           <Link
             to="/blog"
             className="inline-flex items-center gap-1.5 text-sm font-semibold hover:underline"
-            style={{ color: '#1B4332' }}
+            style={{ color: '#16A34A' }}
           >
             View all articles <ArrowRight size={16} />
           </Link>

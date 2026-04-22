@@ -7,7 +7,7 @@ const A = ({ to, children }: { to: string; children: React.ReactNode }) => (
     to={to}
     className="font-semibold hover:opacity-80 transition-opacity"
     style={{
-      color: '#1B4332',
+      color: '#16A34A',
       textDecoration: 'underline',
       textDecorationColor: '#52B788',
       textUnderlineOffset: '3px',
@@ -126,7 +126,7 @@ export default function AboutSection() {
                   className="inline-flex items-center px-4 py-2 text-[13px] rounded-full"
                   style={{
                     border: '1.5px solid #52B788',
-                    color: '#1B4332',
+                    color: '#16A34A',
                   }}
                 >
                   {pill}

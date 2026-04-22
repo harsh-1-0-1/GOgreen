@@ -27,39 +27,64 @@ PLANT_IMAGES = [
 ]
 
 CATEGORIES = [
+    # Top-level
     {"name": "Plants", "slug": "plants", "parent_id": None},
+    {"name": "Seeds", "slug": "seeds", "parent_id": None},
+    {"name": "Pots & Planters", "slug": "pots-planters", "parent_id": None},
+    {"name": "Plant Care", "slug": "plant-care", "parent_id": None},
+    # Plants subcategories
     {"name": "Indoor Plants", "slug": "indoor-plants", "parent_slug": "plants"},
     {"name": "Outdoor Plants", "slug": "outdoor-plants", "parent_slug": "plants"},
     {"name": "Flowering Plants", "slug": "flowering-plants", "parent_slug": "plants"},
     {"name": "Cacti & Succulents", "slug": "cacti-succulents", "parent_slug": "plants"},
-    {"name": "Seeds", "slug": "seeds", "parent_id": None},
+    {"name": "XL Plants", "slug": "xl-plants", "parent_slug": "plants"},
+    {"name": "Low Maintenance Plants", "slug": "low-maintenance-plants", "parent_slug": "plants"},
+    {"name": "Air Purifying Plants", "slug": "air-purifying-plants", "parent_slug": "plants"},
+    {"name": "Hanging Plants", "slug": "hanging-plants", "parent_slug": "plants"},
+    {"name": "Pet-Friendly Plants", "slug": "pet-friendly-plants", "parent_slug": "plants"},
+    {"name": "Fruit Plants", "slug": "fruit-plants", "parent_slug": "plants"},
+    # Seeds subcategories
     {"name": "Vegetable Seeds", "slug": "vegetable-seeds", "parent_slug": "seeds"},
     {"name": "Flower Seeds", "slug": "flower-seeds", "parent_slug": "seeds"},
-    {"name": "Pots & Planters", "slug": "pots-planters", "parent_id": None},
-    {"name": "Plant Care", "slug": "plant-care", "parent_id": None},
+    {"name": "Microgreen Seeds", "slug": "microgreen-seeds", "parent_slug": "seeds"},
+    {"name": "Herb Seeds", "slug": "herb-seeds", "parent_slug": "seeds"},
+    {"name": "Flower Bulbs", "slug": "flower-bulbs", "parent_slug": "seeds"},
+    {"name": "Seeds Kits", "slug": "seeds-kits", "parent_slug": "seeds"},
+    # Pots subcategories
+    {"name": "Plastic Pots", "slug": "plastic-pots", "parent_slug": "pots-planters"},
+    {"name": "Ceramic Pots", "slug": "ceramic-pots", "parent_slug": "pots-planters"},
+    {"name": "Metal Planters", "slug": "metal-planters", "parent_slug": "pots-planters"},
+    {"name": "Wooden Planters", "slug": "wooden-planters", "parent_slug": "pots-planters"},
+    {"name": "Hanging Planters", "slug": "hanging-planters", "parent_slug": "pots-planters"},
+    {"name": "Plant Stands", "slug": "plant-stands", "parent_slug": "pots-planters"},
+    # Plant Care subcategories
+    {"name": "Potting Mix & Fertilizers", "slug": "potting-mix-fertilizers", "parent_slug": "plant-care"},
+    {"name": "Garden Tools", "slug": "garden-tools", "parent_slug": "plant-care"},
+    {"name": "Watering Tools", "slug": "watering-tools", "parent_slug": "plant-care"},
+    {"name": "Pest Control", "slug": "pest-control", "parent_slug": "plant-care"},
 ]
 
 PRODUCTS = [
     # Indoor Plants (cat: indoor-plants)
-    {"name": "Money Plant Golden", "cat": "indoor-plants", "price": 249, "desc": "Air-purifying trailing vine perfect for shelves and hanging baskets.", "sunlight": "Low to Bright Indirect", "watering": "Once a week", "tags": ["air-purifying", "low-maintenance", "indoor", "beginner-friendly"], "care_tips": ["Water when topsoil feels dry", "Prune to encourage bushier growth"], "badge": "Bestseller"},
-    {"name": "Snake Plant Sansevieria", "cat": "indoor-plants", "price": 399, "desc": "Hardy succulent that thrives on neglect and purifies air at night.", "sunlight": "Low to Bright Indirect", "watering": "Every 2 weeks", "tags": ["air-purifying", "low-maintenance", "bedroom", "beginner-friendly"], "care_tips": ["Avoid overwatering", "Tolerates low light well"], "badge": "Trending"},
-    {"name": "Peace Lily", "cat": "indoor-plants", "price": 549, "desc": "Elegant white-flowering plant that removes toxins from indoor air.", "sunlight": "Low to Medium Indirect", "watering": "Twice a week", "tags": ["air-purifying", "flowering", "indoor", "beginner-friendly"], "care_tips": ["Keep soil moist but not soggy", "Mist leaves in dry weather"]},
+    {"name": "Money Plant Golden", "cat": "indoor-plants", "price": 249, "desc": "Air-purifying trailing vine perfect for shelves and hanging baskets.", "sunlight": "Low to Bright Indirect", "watering": "Once a week", "tags": ["air-purifying", "low-maintenance", "indoor", "beginner-friendly", "workspace", "living-room"], "care_tips": ["Water when topsoil feels dry", "Prune to encourage bushier growth"], "badge": "Bestseller"},
+    {"name": "Snake Plant Sansevieria", "cat": "indoor-plants", "price": 399, "desc": "Hardy succulent that thrives on neglect and purifies air at night.", "sunlight": "Low to Bright Indirect", "watering": "Every 2 weeks", "tags": ["air-purifying", "low-maintenance", "bedroom", "beginner-friendly", "workspace"], "care_tips": ["Avoid overwatering", "Tolerates low light well"], "badge": "Trending"},
+    {"name": "Peace Lily", "cat": "indoor-plants", "price": 549, "desc": "Elegant white-flowering plant that removes toxins from indoor air.", "sunlight": "Low to Medium Indirect", "watering": "Twice a week", "tags": ["air-purifying", "flowering", "indoor", "beginner-friendly", "living-room"], "care_tips": ["Keep soil moist but not soggy", "Mist leaves in dry weather"]},
     {"name": "Pothos Marble Queen", "cat": "indoor-plants", "price": 199, "desc": "Variegated trailing plant with stunning white and green leaves.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["trailing", "variegated", "indoor", "low-maintenance", "beginner-friendly"], "care_tips": ["More light means more variegation", "Trim yellow leaves"]},
-    {"name": "Areca Palm", "cat": "indoor-plants", "price": 699, "desc": "Tropical palm that adds lush greenery and humidifies your room.", "sunlight": "Bright Indirect", "watering": "Twice a week", "tags": ["air-purifying", "tropical", "large"], "care_tips": ["Mist regularly", "Avoid direct sunlight to prevent leaf burn"], "badge": "Popular"},
-    {"name": "ZZ Plant", "cat": "indoor-plants", "price": 449, "desc": "Glossy-leaved virtually indestructible houseplant.", "sunlight": "Low to Bright Indirect", "watering": "Every 2-3 weeks", "tags": ["low-maintenance", "modern", "indoor", "beginner-friendly"], "care_tips": ["Drought tolerant – do not overwater", "Wipe leaves for shine"]},
-    {"name": "Rubber Plant", "cat": "indoor-plants", "price": 499, "desc": "Bold burgundy leaves that make a dramatic statement in any room.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["statement", "air-purifying", "indoor"], "care_tips": ["Clean leaves monthly", "Rotate for even growth"]},
-    {"name": "Jade Plant", "cat": "indoor-plants", "price": 349, "desc": "Lucky succulent symbolising prosperity and good fortune.", "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks", "tags": ["succulent", "lucky", "desktop", "low-maintenance", "beginner-friendly"], "care_tips": ["Let soil dry completely between waterings", "Avoid cold drafts"]},
-    {"name": "Spider Plant", "cat": "indoor-plants", "price": 199, "desc": "Cheerful cascading foliage with baby plantlets on arching stems.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["pet-safe", "hanging", "beginner", "low-maintenance", "beginner-friendly"], "care_tips": ["Safe for cats and dogs", "Propagate babies in water"]},
+    {"name": "Areca Palm", "cat": "indoor-plants", "price": 699, "desc": "Tropical palm that adds lush greenery and humidifies your room.", "sunlight": "Bright Indirect", "watering": "Twice a week", "tags": ["air-purifying", "tropical", "large", "living-room"], "care_tips": ["Mist regularly", "Avoid direct sunlight to prevent leaf burn"], "badge": "Popular"},
+    {"name": "ZZ Plant", "cat": "indoor-plants", "price": 449, "desc": "Glossy-leaved virtually indestructible houseplant.", "sunlight": "Low to Bright Indirect", "watering": "Every 2-3 weeks", "tags": ["low-maintenance", "modern", "indoor", "beginner-friendly", "workspace", "living-room"], "care_tips": ["Drought tolerant – do not overwater", "Wipe leaves for shine"]},
+    {"name": "Rubber Plant", "cat": "indoor-plants", "price": 499, "desc": "Bold burgundy leaves that make a dramatic statement in any room.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["statement", "air-purifying", "indoor", "living-room"], "care_tips": ["Clean leaves monthly", "Rotate for even growth"]},
+    {"name": "Jade Plant", "cat": "indoor-plants", "price": 349, "desc": "Lucky succulent symbolising prosperity and good fortune.", "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks", "tags": ["succulent", "lucky", "desktop", "low-maintenance", "beginner-friendly", "workspace"], "care_tips": ["Let soil dry completely between waterings", "Avoid cold drafts"]},
+    {"name": "Spider Plant", "cat": "indoor-plants", "price": 199, "desc": "Cheerful cascading foliage with baby plantlets on arching stems.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["pet-safe", "hanging", "beginner", "low-maintenance", "beginner-friendly", "bedroom"], "care_tips": ["Safe for cats and dogs", "Propagate babies in water"]},
     {"name": "Philodendron Brasil", "cat": "indoor-plants", "price": 299, "desc": "Heart-shaped variegated leaves in lime green and dark green.", "sunlight": "Medium to Bright Indirect", "watering": "Once a week", "tags": ["trailing", "variegated", "tropical"], "care_tips": ["Grows fast in bright light", "Trim leggy vines"]},
     # Outdoor Plants
-    {"name": "Bougainvillea", "cat": "outdoor-plants", "price": 349, "desc": "Vibrant paper-like flowers in magenta that bloom year round.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["flowering", "drought-tolerant", "climber"], "care_tips": ["Needs 6+ hours of sun", "Prune after each flowering cycle"], "badge": "Bestseller"},
-    {"name": "Hibiscus Red", "cat": "outdoor-plants", "price": 299, "desc": "Classic tropical shrub with large scarlet blooms.", "sunlight": "Full Sun", "watering": "Daily in summer", "tags": ["flowering", "tropical", "outdoor"], "care_tips": ["Feed monthly during growing season", "Protect from frost"]},
+    {"name": "Bougainvillea", "cat": "outdoor-plants", "price": 349, "desc": "Vibrant paper-like flowers in magenta that bloom year round.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["flowering", "drought-tolerant", "climber", "balcony"], "care_tips": ["Needs 6+ hours of sun", "Prune after each flowering cycle"], "badge": "Bestseller"},
+    {"name": "Hibiscus Red", "cat": "outdoor-plants", "price": 299, "desc": "Classic tropical shrub with large scarlet blooms.", "sunlight": "Full Sun", "watering": "Daily in summer", "tags": ["flowering", "tropical", "outdoor", "balcony"], "care_tips": ["Feed monthly during growing season", "Protect from frost"]},
     {"name": "Mogra Jasmine", "cat": "outdoor-plants", "price": 399, "desc": "Intensely fragrant white flowers, a beloved Indian garden classic.", "sunlight": "Full Sun to Part Shade", "watering": "Every 2 days", "tags": ["fragrant", "flowering", "traditional"], "care_tips": ["Prune in early spring", "Apply organic compost monthly"]},
-    {"name": "Curry Leaf Plant", "cat": "outdoor-plants", "price": 249, "desc": "Essential kitchen garden herb with aromatic leaves.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["herb", "edible", "kitchen-garden"], "care_tips": ["Full sun is essential", "Pick leaves regularly to encourage growth"]},
+    {"name": "Curry Leaf Plant", "cat": "outdoor-plants", "price": 249, "desc": "Essential kitchen garden herb with aromatic leaves.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["herb", "edible", "kitchen-garden", "balcony"], "care_tips": ["Full sun is essential", "Pick leaves regularly to encourage growth"]},
     {"name": "Tulsi Holy Basil", "cat": "outdoor-plants", "price": 149, "desc": "Sacred Indian herb with medicinal and culinary uses.", "sunlight": "Full Sun", "watering": "Daily", "tags": ["herb", "medicinal", "sacred"], "care_tips": ["Pinch flower buds for bushy growth", "Keep well-watered in summer"]},
     # Flowering Plants
-    {"name": "Anthurium Red", "cat": "flowering-plants", "price": 599, "desc": "Glossy heart-shaped red spathes that bloom for weeks.", "sunlight": "Bright Indirect", "watering": "Twice a week", "tags": ["flowering", "indoor", "gift"], "care_tips": ["High humidity preferred", "Avoid direct sun"], "badge": "Gift Pick"},
-    {"name": "Orchid Phalaenopsis White", "cat": "flowering-plants", "price": 799, "desc": "Elegant butterfly orchid with long-lasting cascading blooms.", "sunlight": "Bright Indirect", "watering": "Once a week (ice cube method)", "tags": ["flowering", "elegant", "gift"], "care_tips": ["Water with 3 ice cubes weekly", "Repot every 2 years"]},
+    {"name": "Anthurium Red", "cat": "flowering-plants", "price": 599, "desc": "Glossy heart-shaped red spathes that bloom for weeks.", "sunlight": "Bright Indirect", "watering": "Twice a week", "tags": ["flowering", "indoor", "gift", "gifting"], "care_tips": ["High humidity preferred", "Avoid direct sun"], "badge": "Gift Pick"},
+    {"name": "Orchid Phalaenopsis White", "cat": "flowering-plants", "price": 799, "desc": "Elegant butterfly orchid with long-lasting cascading blooms.", "sunlight": "Bright Indirect", "watering": "Once a week (ice cube method)", "tags": ["flowering", "elegant", "gift", "gifting"], "care_tips": ["Water with 3 ice cubes weekly", "Repot every 2 years"]},
     {"name": "Chrysanthemum Yellow", "cat": "flowering-plants", "price": 199, "desc": "Cheerful pom-pom blooms in bright sunshine yellow.", "sunlight": "Full Sun to Part Shade", "watering": "Every 2 days", "tags": ["flowering", "outdoor", "festive"], "care_tips": ["Deadhead spent flowers", "Feed fortnightly"]},
     {"name": "Rose Plant Red", "cat": "flowering-plants", "price": 349, "desc": "Classic hybrid tea rose bush with fragrant deep-red blooms.", "sunlight": "Full Sun", "watering": "Every 2 days", "tags": ["flowering", "fragrant", "classic"], "care_tips": ["Prune in winter", "Spray neem oil for pests"]},
     {"name": "Kalanchoe Pink", "cat": "flowering-plants", "price": 249, "desc": "Long-blooming succulent with clusters of tiny pink flowers.", "sunlight": "Bright Direct", "watering": "Every 10 days", "tags": ["succulent", "flowering", "desktop"], "care_tips": ["Drought tolerant", "Short daylight triggers reblooming"]},
@@ -89,7 +114,7 @@ PRODUCTS = [
     {"name": "Metal Planter Gold (Set of 3)", "cat": "pots-planters", "price": 1299, "desc": "Set of 3 gold-finished geometric metal planters.", "tags": ["metal", "gold", "geometric", "set"], "care_tips": ["Use inner plastic liner to prevent rust"]},
     # Plant Care
     {"name": "Organic Vermicompost (5 kg)", "cat": "plant-care", "price": 299, "desc": "Nutrient-rich worm-cast compost for all plants.", "tags": ["organic", "compost", "fertiliser"], "care_tips": ["Mix into topsoil every 2 months"]},
-    {"name": "Neem Oil Spray (500 ml)", "cat": "plant-care", "price": 249, "desc": "Cold-pressed neem oil – natural pesticide and fungicide.", "tags": ["organic", "pest-control", "neem"], "care_tips": ["Dilute before spraying", "Apply in evening to avoid leaf burn"], "badge": "Essential"},
+    {"name": "Neem Oil Spray (500 ml)", "cat": "plant-care", "price": 249, "desc": "Cold-pressed neem oil – natural pesticide and fungicide.", "tags": ["organic", "pest-control", "neem", "spray"], "care_tips": ["Dilute before spraying", "Apply in evening to avoid leaf burn"], "badge": "Essential"},
     {"name": "Cocopeat Block (5 kg)", "cat": "plant-care", "price": 199, "desc": "Expands to 75 litres – improves soil aeration and water retention.", "tags": ["soil-amendment", "cocopeat", "organic"], "care_tips": ["Soak in water to expand", "Mix with perlite for best results"]},
     {"name": "Perlite (1 litre)", "cat": "plant-care", "price": 149, "desc": "Lightweight volcanic glass for improving drainage.", "tags": ["soil-amendment", "drainage", "perlite"], "care_tips": ["Mix 20-30% with potting soil"]},
     {"name": "Liquid Seaweed Fertiliser (500 ml)", "cat": "plant-care", "price": 349, "desc": "Concentrated organic feed that boosts root growth.", "tags": ["organic", "fertiliser", "liquid"], "care_tips": ["Dilute 5 ml per litre of water", "Apply fortnightly"]},
@@ -98,6 +123,80 @@ PRODUCTS = [
     {"name": "Garden Gloves (Pair)", "cat": "plant-care", "price": 199, "desc": "Thorn-proof nitrile-coated gloves for safe gardening.", "tags": ["tools", "gloves", "safety"], "care_tips": ["Wash after use and air dry"]},
     {"name": "Seedling Tray (72 cells)", "cat": "plant-care", "price": 149, "desc": "Reusable plastic tray for starting seeds indoors.", "tags": ["tools", "propagation", "seeds"], "care_tips": ["Use dome lid for humidity until germination"]},
     {"name": "Moss Stick (2 ft)", "cat": "plant-care", "price": 129, "desc": "Coir moss pole for supporting climbing plants like Money Plant.", "tags": ["support", "moss-stick", "climbing"], "care_tips": ["Keep moss moist for aerial roots to grip"]},
+    # ── XL Plants ──
+    {"name": "Fiddle Leaf Fig XL", "cat": "xl-plants", "price": 2499, "desc": "Statement floor plant with large violin-shaped leaves, 4 ft tall.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["xl", "statement", "indoor", "living-room"], "care_tips": ["Wipe leaves monthly", "Rotate quarterly for even growth"], "badge": "XL"},
+    {"name": "Bird of Paradise XL", "cat": "xl-plants", "price": 1999, "desc": "Tropical beauty with banana-like leaves, 3.5 ft tall.", "sunlight": "Bright Direct to Indirect", "watering": "Twice a week", "tags": ["xl", "tropical", "statement"], "care_tips": ["Needs high humidity", "Mist regularly"]},
+    # ── Low Maintenance Plants ──
+    {"name": "Cast Iron Plant", "cat": "low-maintenance-plants", "price": 599, "desc": "Nearly indestructible plant that thrives in dark corners.", "sunlight": "Low to Bright Indirect", "watering": "Every 2 weeks", "tags": ["low-maintenance", "shade-tolerant", "beginner-friendly"], "care_tips": ["Tolerates neglect well", "Avoid direct sun"]},
+    {"name": "Dracaena Compacta", "cat": "low-maintenance-plants", "price": 499, "desc": "Compact rosette foliage that grows slowly and needs little care.", "sunlight": "Low to Medium Indirect", "watering": "Every 10 days", "tags": ["low-maintenance", "compact", "indoor", "beginner-friendly"], "care_tips": ["Sensitive to fluoride in tap water", "Let soil dry between waterings"]},
+    # ── Air Purifying Plants ──
+    {"name": "Boston Fern", "cat": "air-purifying-plants", "price": 349, "desc": "Lush hanging fern that removes formaldehyde and adds humidity.", "sunlight": "Bright Indirect", "watering": "Keep moist", "tags": ["air-purifying", "hanging", "tropical"], "care_tips": ["Mist daily in dry weather", "Keep away from heating vents"]},
+    {"name": "English Ivy", "cat": "air-purifying-plants", "price": 249, "desc": "Classic trailing vine that filters airborne mold particles.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["air-purifying", "trailing", "indoor"], "care_tips": ["Trim regularly to control growth", "Spider mites love ivy – mist often"]},
+    # ── Hanging Plants ──
+    {"name": "String of Hearts", "cat": "hanging-plants", "price": 399, "desc": "Delicate heart-shaped leaves on trailing silvery vines.", "sunlight": "Bright Indirect", "watering": "Every 10 days", "tags": ["trailing", "hanging", "romantic"], "care_tips": ["Let soil dry between waterings", "Propagate easily from cuttings"]},
+    {"name": "Lipstick Plant", "cat": "hanging-plants", "price": 449, "desc": "Cascading stems with tubular red flowers resembling lipstick.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["hanging", "flowering", "tropical"], "care_tips": ["High humidity encourages blooming", "Prune after flowering"]},
+    # ── Pet-Friendly Plants ──
+    {"name": "Calathea Orbifolia", "cat": "pet-friendly-plants", "price": 599, "desc": "Large round striped leaves, completely safe for cats and dogs.", "sunlight": "Medium Indirect", "watering": "Twice a week", "tags": ["pet-safe", "tropical", "indoor"], "care_tips": ["Use filtered water", "Loves humidity"]},
+    {"name": "Parlor Palm", "cat": "pet-friendly-plants", "price": 449, "desc": "Compact palm safe for pets, thrives in low light.", "sunlight": "Low to Medium Indirect", "watering": "Once a week", "tags": ["pet-safe", "low-maintenance", "indoor", "beginner-friendly"], "care_tips": ["Avoid direct sun", "Wipe leaves to remove dust"]},
+    # ── Fruit Plants ──
+    {"name": "Lemon Plant", "cat": "fruit-plants", "price": 599, "desc": "Dwarf lemon tree that fruits on balconies and terraces.", "sunlight": "Full Sun", "watering": "Every 2 days", "tags": ["fruit", "edible", "outdoor"], "care_tips": ["Needs 6+ hours of sun", "Feed with citrus fertiliser monthly"]},
+    {"name": "Pomegranate Plant", "cat": "fruit-plants", "price": 499, "desc": "Compact pomegranate variety perfect for container growing.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["fruit", "edible", "outdoor"], "care_tips": ["Prune to shape in winter", "Well-drained soil essential"]},
+    # ── Microgreen Seeds ──
+    {"name": "Microgreen Seeds – Mustard", "cat": "microgreen-seeds", "price": 99, "desc": "Spicy microgreens ready to harvest in just 7 days.", "sunlight": "Indirect Light", "watering": "Mist twice daily", "tags": ["seeds", "microgreen", "edible"], "care_tips": ["Use shallow tray with soilless medium", "Harvest at 2 inch height"]},
+    {"name": "Microgreen Seeds – Sunflower", "cat": "microgreen-seeds", "price": 119, "desc": "Nutty, crunchy microgreens packed with nutrients.", "sunlight": "Indirect Light", "watering": "Mist twice daily", "tags": ["seeds", "microgreen", "edible"], "care_tips": ["Soak seeds overnight before sowing", "Blackout for first 3 days"]},
+    # ── Herb Seeds ──
+    {"name": "Basil Seeds (Sweet)", "cat": "herb-seeds", "price": 79, "desc": "Aromatic Italian basil for pesto, salads and cooking.", "sunlight": "Full Sun", "watering": "Daily", "tags": ["seeds", "herb", "edible", "kitchen-garden"], "care_tips": ["Pinch flower buds to extend harvest", "Sow indoors 6 weeks before summer"]},
+    {"name": "Mint Seeds", "cat": "herb-seeds", "price": 69, "desc": "Refreshing spearmint – grows vigorously in pots.", "sunlight": "Part Shade to Full Sun", "watering": "Keep moist", "tags": ["seeds", "herb", "edible", "kitchen-garden"], "care_tips": ["Grows best in containers to control spreading", "Harvest regularly"]},
+    # ── Flower Bulbs ──
+    {"name": "Tuberose Bulbs (Pack of 5)", "cat": "flower-bulbs", "price": 199, "desc": "Fragrant white flowers, a summer garden favourite.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["seeds", "bulb", "fragrant", "flowering"], "care_tips": ["Plant 4 inches deep", "Lift bulbs in winter in cold regions"]},
+    {"name": "Gladiolus Bulbs Mix (Pack of 10)", "cat": "flower-bulbs", "price": 299, "desc": "Tall colourful spikes in mixed colours – ideal for cutting.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["seeds", "bulb", "flowering", "cutting"], "care_tips": ["Stagger planting for continuous blooms", "Support tall stems"]},
+    # ── Seeds Kits ──
+    {"name": "Kitchen Garden Starter Kit", "cat": "seeds-kits", "price": 499, "desc": "Everything to grow tomatoes, chillies, and coriander at home.", "tags": ["seeds", "kit", "kitchen-garden", "beginner-friendly"], "care_tips": ["Follow included instructions", "Place in sunny spot"]},
+    {"name": "Microgreen Growing Kit", "cat": "seeds-kits", "price": 399, "desc": "Tray, medium, and 4 seed varieties for fresh microgreens.", "tags": ["seeds", "kit", "microgreen", "beginner-friendly"], "care_tips": ["Harvest in 7-10 days", "Reuse tray for multiple batches"]},
+    # ── Plastic Pots ──
+    {"name": "Plastic Nursery Pot Set (6 inch, 5 pcs)", "cat": "plastic-pots", "price": 199, "desc": "Durable black nursery pots with drainage holes.", "tags": ["plastic", "nursery", "drainage"], "care_tips": ["Great for repotting and starting plants"]},
+    {"name": "Colourful Plastic Planter (8 inch)", "cat": "plastic-pots", "price": 149, "desc": "Lightweight UV-resistant planter in assorted colours.", "tags": ["plastic", "colourful", "lightweight"], "care_tips": ["Ideal for balcony use"]},
+    # ── Ceramic Pots ──
+    {"name": "Ceramic Planter Matte Black (6 inch)", "cat": "ceramic-pots", "price": 549, "desc": "Sleek matte black ceramic pot with saucer.", "tags": ["ceramic", "black", "modern"], "care_tips": ["Has drainage hole – use saucer indoors"]},
+    {"name": "Hand-Painted Ceramic Pot Blue (5 inch)", "cat": "ceramic-pots", "price": 699, "desc": "Artisan hand-painted pot with traditional blue pattern.", "tags": ["ceramic", "handmade", "decorative"], "care_tips": ["Handle with care – each piece is unique"]},
+    # ── Metal Planters ──
+    {"name": "Iron Bucket Planter Rustic", "cat": "metal-planters", "price": 399, "desc": "Vintage-style galvanised iron bucket planter.", "tags": ["metal", "rustic", "vintage"], "care_tips": ["Drill drainage holes or use as cachepot"]},
+    {"name": "Copper Finish Planter (Set of 2)", "cat": "metal-planters", "price": 899, "desc": "Rose-gold copper finish planters for tabletop display.", "tags": ["metal", "copper", "set"], "care_tips": ["Use plastic liner to prevent oxidation"]},
+    # ── Wooden Planters ──
+    {"name": "Teak Wood Planter Box (12 inch)", "cat": "wooden-planters", "price": 1299, "desc": "Solid teak planter box, weather-resistant for outdoor use.", "tags": ["wooden", "teak", "outdoor"], "care_tips": ["Oil annually to maintain finish"]},
+    {"name": "Pine Crate Planter (Small)", "cat": "wooden-planters", "price": 499, "desc": "Rustic pine crate planter with plastic liner.", "tags": ["wooden", "rustic", "boho"], "care_tips": ["Keep liner intact to prevent rot"]},
+    # ── Hanging Planters ──
+    {"name": "Rattan Hanging Basket (8 inch)", "cat": "hanging-planters", "price": 349, "desc": "Natural rattan basket with coconut coir liner.", "tags": ["hanging", "rattan", "natural"], "care_tips": ["Water slowly to prevent dripping"]},
+    {"name": "Ceramic Hanging Planter White", "cat": "hanging-planters", "price": 599, "desc": "Minimalist white ceramic hanging pot with leather strap.", "tags": ["hanging", "ceramic", "modern"], "care_tips": ["Ensure ceiling hook rated for weight when watered"]},
+    # ── Plant Stands ──
+    {"name": "Bamboo Plant Stand (3-Tier)", "cat": "plant-stands", "price": 1499, "desc": "Three-tier bamboo shelf for displaying multiple plants.", "tags": ["stand", "bamboo", "multi-tier"], "care_tips": ["Wipe with damp cloth", "Place on even surface"]},
+    {"name": "Metal Plant Stand Single (Mid-Century)", "cat": "plant-stands", "price": 699, "desc": "Gold metal mid-century modern plant stand for 8 inch pots.", "tags": ["stand", "metal", "modern"], "care_tips": ["Use felt pads under legs to protect floors"]},
+    # ── Potting Mix & Fertilizers ──
+    {"name": "Premium Potting Mix (10 litres)", "cat": "potting-mix-fertilizers", "price": 349, "desc": "Ready-to-use mix with cocopeat, perlite, and vermicompost.", "tags": ["potting-mix", "organic", "all-purpose"], "care_tips": ["Suitable for all indoor and outdoor plants"]},
+    {"name": "Bone Meal Fertiliser (1 kg)", "cat": "potting-mix-fertilizers", "price": 199, "desc": "High phosphorus organic feed for flowering and fruiting plants.", "tags": ["organic", "fertiliser", "flowering"], "care_tips": ["Mix into soil every 6-8 weeks"]},
+    # ── Garden Tools ──
+    {"name": "3-Piece Garden Tool Set", "cat": "garden-tools", "price": 399, "desc": "Trowel, cultivator, and transplanter with wooden handles.", "tags": ["tools", "garden", "set"], "care_tips": ["Clean after each use to prevent rust"]},
+    {"name": "Garden Knee Pad", "cat": "garden-tools", "price": 249, "desc": "Thick foam knee pad for comfortable gardening sessions.", "tags": ["tools", "comfort", "garden"], "care_tips": ["Wash with soap and water"]},
+    # ── Watering Tools ──
+    {"name": "Long Spout Watering Can (1.5L)", "cat": "watering-tools", "price": 449, "desc": "Precision long-spout can for indoor plants and seedlings.", "tags": ["tools", "watering", "indoor"], "care_tips": ["Copper finish – wipe dry to prevent water spots"]},
+    {"name": "Garden Hose Nozzle (7 Pattern)", "cat": "watering-tools", "price": 349, "desc": "Adjustable spray nozzle with 7 patterns for different tasks.", "tags": ["tools", "watering", "outdoor"], "care_tips": ["Drain water before storing to prevent freezing"]},
+    # ── Pest Control ──
+    {"name": "Organic Insecticidal Soap (500 ml)", "cat": "pest-control", "price": 249, "desc": "Kills aphids, mealybugs, and whiteflies on contact.", "tags": ["organic", "pest-control", "spray", "garden-services"], "care_tips": ["Spray undersides of leaves", "Apply in evening"]},
+    {"name": "Yellow Sticky Traps (Pack of 20)", "cat": "pest-control", "price": 149, "desc": "Non-toxic glue traps for fungus gnats and whiteflies.", "tags": ["pest-control", "trap", "non-toxic"], "care_tips": ["Replace every 2-3 weeks", "Place near plant base"]},
+    # ── Gifting tagged products ──
+    {"name": "Gift Box – Succulent Trio", "cat": "cacti-succulents", "price": 799, "desc": "Three mini succulents in a beautiful gift box with card.", "tags": ["gifting", "succulent", "gift", "combo"], "care_tips": ["Water sparingly – once every 2 weeks"], "badge": "Gift"},
+    {"name": "Gift Set – Money Plant in Ceramic", "cat": "indoor-plants", "price": 599, "desc": "Money Plant in a premium ceramic pot, gift-wrapped.", "tags": ["gifting", "gift", "indoor", "beginner-friendly"], "care_tips": ["Water once a week", "Thrives in any light"], "badge": "Gift"},
+    # ── Offers / combo tagged products ──
+    {"name": "Combo – 4 Air Purifying Plants", "cat": "indoor-plants", "price": 699, "op": 1299, "desc": "Snake Plant, Peace Lily, Money Plant, and Spider Plant bundle.", "tags": ["combo", "offers", "air-purifying", "beginner-friendly", "bundle"], "care_tips": ["Each plant has different watering needs"], "badge": "Value Pack"},
+    {"name": "Combo – Herb Garden Kit", "cat": "seeds", "price": 249, "op": 449, "desc": "Basil, Mint, and Coriander seeds with potting mix and tray.", "tags": ["combo", "offers", "herb", "kitchen-garden", "bundle"], "care_tips": ["Place in sunny spot", "Harvest regularly"]},
+    {"name": "Seed Starter Mega Pack", "cat": "seeds", "price": 399, "desc": "Assorted 10-variety seed pack including vegetables, herbs, and flowers.", "tags": ["seeds", "kit", "beginner-friendly", "variety"], "care_tips": ["Refer to individual seed packets for sowing depth", "Start indoors for best results"]},
+    # ── Corporate Gifts ──
+    {"name": "Corporate Gift – Lucky Bamboo in Glass", "cat": "indoor-plants", "price": 499, "desc": "Elegant lucky bamboo arrangement in a glass vase, perfect for office desks.", "sunlight": "Low to Bright Indirect", "watering": "Keep water level consistent", "tags": ["corporate-gifts", "gifting", "gift", "workspace", "lucky"], "care_tips": ["Change water every 2 weeks", "Avoid direct sunlight"], "badge": "Corporate"},
+    {"name": "Corporate Gift – Air Purifying Desk Set", "cat": "indoor-plants", "price": 899, "desc": "Set of 3 mini air-purifying plants in branded ceramic pots for offices.", "sunlight": "Low to Bright Indirect", "watering": "Once a week", "tags": ["corporate-gifts", "gifting", "gift", "workspace", "air-purifying", "combo"], "care_tips": ["Perfect for conference rooms and desks"], "badge": "Corporate"},
+    {"name": "Corporate Gift – Succulent Terrarium", "cat": "cacti-succulents", "price": 1299, "desc": "Handcrafted glass terrarium with 5 premium succulents, ideal for corporate events.", "tags": ["corporate-gifts", "gifting", "gift", "terrarium", "succulent"], "care_tips": ["Water sparingly once every 3 weeks"], "badge": "Corporate"},
+    # ── Garden Services tagged products ──
+    {"name": "Balcony Garden Setup Service", "cat": "plant-care", "price": 2999, "desc": "Complete balcony garden setup with 10 plants, pots, soil, and expert installation.", "tags": ["garden-services", "balcony", "outdoor", "combo"], "care_tips": ["Our team will guide you on maintenance after setup"]},
+    {"name": "Indoor Plant Styling Service", "cat": "plant-care", "price": 1999, "desc": "Professional plant stylist visits your space and creates a curated indoor garden.", "tags": ["garden-services", "indoor", "living-room", "workspace"], "care_tips": ["Includes plant selection and placement consultation"]},
 ]
 
 
@@ -312,7 +411,7 @@ async def seed() -> None:
                 slug=slug,
                 description=p.get("desc", ""),
                 price=p["price"],
-                original_price=_original_price(p["price"]),
+                original_price=p["op"] if "op" in p else _original_price(p["price"]),
                 stock_qty=random.randint(5, 200),
                 category_id=cat_id,
                 images=_pick_images(),

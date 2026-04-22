@@ -1,9 +1,9 @@
 import { Leaf, RotateCcw, Truck, HeartHandshake } from 'lucide-react';
-import { useProducts } from '@/hooks/useProducts';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import HeroBanner from '@/components/home/HeroBanner';
 import QuickAccessStrip from '@/components/home/QuickAccessStrip';
-import ThemedProductSection from '@/components/home/ThemedProductSection';
+import CategoryHighlightGrid from '@/components/home/CategoryHighlightGrid';
+import TrendingProductsGrid from '@/components/home/TrendingProductsGrid';
 import BlogSection from '@/components/home/BlogSection';
 import PromoCTASection from '@/components/home/PromoCTASection';
 import AboutSection from '@/components/home/AboutSection';
@@ -34,88 +34,15 @@ function FeatureStrip() {
   );
 }
 
-function NewToPlantsSection() {
-  const { data } = useProducts({ tags: 'beginner-friendly', limit: 6 });
-  if (!data?.items.length) return null;
-  return (
-    <ThemedProductSection
-      bgType="image"
-      bgValue="https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=1200&q=80"
-      headline="New to plants?"
-      subheadline="Start with the easy ones."
-      headlineColor="#F4C542"
-      products={data.items}
-      cardStyle="view-product"
-      layout="cards-right-overlay"
-    />
-  );
-}
-
-function BestDecorSection() {
-  const { data } = useProducts({ tags: 'indoor', limit: 6 });
-  if (!data?.items.length) return null;
-  return (
-    <ThemedProductSection
-      bgType="image"
-      bgValue="https://images.unsplash.com/photo-1463320726281-696a485928c7?w=1200&q=80"
-      headline="Best decor plants"
-      subheadline="To instantly upgrade your space"
-      headlineColor="#F4C542"
-      products={data.items}
-      cardStyle="view-product"
-      layout="cards-right-overlay"
-    />
-  );
-}
-
-function LowMaintenanceSection() {
-  const { data } = useProducts({ tags: 'low-maintenance', limit: 6 });
-  if (!data?.items.length) return null;
-  return (
-    <ThemedProductSection
-      bgType="image"
-      bgValue="https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=1200&q=80"
-      headline="Less care. More green."
-      subheadline="Low-maintenance plants for your home."
-      headlineColor="#A3E635"
-      products={data.items}
-      cardStyle="view-product"
-      layout="cards-right-overlay"
-    />
-  );
-}
-
-function PlantCareSection() {
-  const { data } = useProducts({ category_slug: 'plant-care', limit: 6 });
-  if (!data?.items.length) return null;
-  return (
-    <ThemedProductSection
-      bgType="image"
-      bgValue="https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1200&q=80"
-      headline="Plant care made simple"
-      subheadline="Fertilizers for growth, strength, and greener leaves."
-      headlineColor="#F4C542"
-      products={data.items}
-      cardStyle="view-product"
-      layout="cards-right-overlay"
-    />
-  );
-}
-
-
 export default function HomePage() {
   return (
     <div>
       <ErrorBoundary><HeroBanner /></ErrorBoundary>
       <QuickAccessStrip />
-
-      {/* Full-screen themed sections with gaps */}
-      <div className="flex flex-col gap-4 md:gap-6 bg-white pb-6 md:pb-8 mt-6 md:mt-8">
-        <ErrorBoundary><NewToPlantsSection /></ErrorBoundary>
-        <ErrorBoundary><BestDecorSection /></ErrorBoundary>
-        <ErrorBoundary><LowMaintenanceSection /></ErrorBoundary>
-        <ErrorBoundary><PlantCareSection /></ErrorBoundary>
-      </div>
+      <ErrorBoundary><CategoryHighlightGrid /></ErrorBoundary>
+      <ErrorBoundary>
+        <TrendingProductsGrid title="Trending Now" limit={8} />
+      </ErrorBoundary>
 
       <FeatureStrip />
       <ErrorBoundary><BlogSection /></ErrorBoundary>

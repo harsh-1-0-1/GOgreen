@@ -49,9 +49,16 @@ async def list_products(
     count_q = select(func.count()).select_from(Product).where(Product.is_active == True)  # noqa: E712
 
     if category_slug:
-        sub = select(Category.id).where(Category.slug == category_slug).scalar_subquery()
-        query = query.where(Product.category_id == sub)
-        count_q = count_q.where(Product.category_id == sub)
+        cat_ids = select(Category.id).where(
+            or_(
+                Category.slug == category_slug,
+                Category.parent_id.in_(
+                    select(Category.id).where(Category.slug == category_slug)
+                ),
+            )
+        )
+        query = query.where(Product.category_id.in_(cat_ids))
+        count_q = count_q.where(Product.category_id.in_(cat_ids))
 
     if search:
         pattern = f"%{search}%"

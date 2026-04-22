@@ -58,7 +58,7 @@ export default function AnnouncementBar() {
   return (
     <div
       className="relative w-full h-9 sm:h-[38px] flex items-center overflow-hidden text-white text-[11.5px] sm:text-[12.5px] font-medium tracking-[0.04em]"
-      style={{ backgroundColor: '#1B4332' }}
+      style={{ backgroundColor: '#16A34A' }}
     >
       <div className="animate-marquee flex items-center whitespace-nowrap">
         {messageStrip}

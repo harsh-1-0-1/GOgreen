@@ -19,7 +19,8 @@ import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useDebounce } from '@/hooks/useDebounce';
-import type { ProductListResponse } from '@/types';
+import { useBanners } from '@/hooks/useBanners';
+import type { Banner, ProductListResponse } from '@/types';
 
 // ---------------------------------------------------------------------------
 // Types & Data
@@ -66,10 +67,10 @@ const NAV_ITEMS: NavItemDef[] = [
         {
           title: 'Shop by Location',
           links: [
-            { label: 'Balcony', href: '/products?tag=balcony' },
-            { label: 'Workspace', href: '/products?tag=workspace' },
-            { label: 'Living Room', href: '/products?tag=living-room' },
-            { label: 'Bedroom', href: '/products?tag=bedroom' },
+            { label: 'Balcony', href: '/products?tags=balcony' },
+            { label: 'Workspace', href: '/products?tags=workspace' },
+            { label: 'Living Room', href: '/products?tags=living-room' },
+            { label: 'Bedroom', href: '/products?tags=bedroom' },
           ],
         },
         {
@@ -136,14 +137,75 @@ const NAV_ITEMS: NavItemDef[] = [
       ],
     ],
   },
-  { label: 'GIFTING', href: '/products?tag=gifting' },
-  { label: 'CORPORATE GIFTS', href: '/pages/corporate-gifts' },
-  { label: 'GARDEN SERVICES', href: '/pages/garden-services' },
+  { label: 'GIFTING', href: '/products?tags=gifting' },
+  { label: 'CORPORATE GIFTS', href: '/products?tags=corporate-gifts' },
+  { label: 'GARDEN SERVICES', href: '/products?tags=garden-services' },
   { label: 'BLOG', href: '/blog' },
-  { label: 'OFFERS', href: '/products?tag=offers', highlight: true },
+  { label: 'OFFERS', href: '/products?tags=offers', highlight: true },
 ];
 
 const WHATSAPP_NUMBER = '919999999999';
+
+// Collection-style mobile menu entries — visual rows with images.
+// Mirrors the main nav but flattened for thumb-first navigation.
+interface MobileCollection {
+  label: string;
+  href: string;
+  image: string;
+  accent: string; // soft watercolor blob color behind image
+}
+
+const MOBILE_COLLECTIONS: MobileCollection[] = [
+  {
+    label: 'Plants',
+    href: '/products?category=plants',
+    image:
+      'https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=280&q=80',
+    accent: '#f9c8d4', // pink
+  },
+  {
+    label: 'Seeds',
+    href: '/products?category=seeds',
+    image:
+      'https://images.unsplash.com/photo-1592321675774-3de57f3ee0dc?w=280&q=80',
+    accent: '#f9e4a0', // yellow
+  },
+  {
+    label: 'Planters',
+    href: '/products?category=pots-planters',
+    image:
+      'https://images.unsplash.com/photo-1622398925373-3f91b1e275f5?w=280&q=80',
+    accent: '#f9c8d4',
+  },
+  {
+    label: 'Plant Care',
+    href: '/products?category=plant-care',
+    image:
+      'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=280&q=80',
+    accent: '#f9e4a0',
+  },
+  {
+    label: 'Gifting',
+    href: '/products?tags=gifting',
+    image:
+      'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=280&q=80',
+    accent: '#f9c8d4',
+  },
+  {
+    label: 'Blog',
+    href: '/blog',
+    image:
+      'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=280&q=80',
+    accent: '#f9c8d4',
+  },
+  {
+    label: 'Offers',
+    href: '/products?tags=offers',
+    image:
+      'https://images.unsplash.com/photo-1560693225-b8507d6f3aa9?w=280&q=80',
+    accent: '#f9e4a0',
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Small components
@@ -157,76 +219,181 @@ function WhatsAppIcon({ size = 20 }: { size?: number }) {
   );
 }
 
-function MobileNavAccordion({
-  items,
+function bannerToCollection(b: Banner): MobileCollection {
+  return {
+    label: b.title,
+    href: b.cta_link || '/products',
+    image: b.image_url || '',
+    accent: b.bg_color || '#f9c8d4',
+  };
+}
+
+// Map collection labels to their NAV_ITEMS subcategory groups
+const LABEL_TO_NAV: Record<string, NavItemDef | undefined> = {};
+for (const item of NAV_ITEMS) {
+  const key = item.label.charAt(0) + item.label.slice(1).toLowerCase();
+  LABEL_TO_NAV[key] = item;
+}
+LABEL_TO_NAV['Planters'] = NAV_ITEMS.find((n) => n.label === 'POTS & PLANTERS');
+
+function CollectionAccordionRow({
+  item,
+  navItem,
+  expanded,
+  onToggle,
   onNavigate,
 }: {
-  items: NavItemDef[];
+  item: MobileCollection;
+  navItem?: NavItemDef;
+  expanded: boolean;
+  onToggle: () => void;
   onNavigate: () => void;
 }) {
+  const hasGroups = navItem?.groups && navItem.groups.length > 0;
+
+  return (
+    <li className="bg-white rounded-xl overflow-hidden">
+      {/* Main row — image card */}
+      <div className="relative flex items-center overflow-hidden">
+        <Link
+          to={item.href}
+          onClick={onNavigate}
+          className="flex-1 flex items-center active:bg-[#f5f5f5] transition-colors"
+          style={{ height: 100, paddingLeft: 20 }}
+        >
+          <span
+            className="relative z-10"
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: '#16A34A',
+              lineHeight: 1.1,
+            }}
+          >
+            {item.label}
+          </span>
+        </Link>
+
+        {/* Right side: image + optional expand button */}
+        <div className="flex items-center shrink-0" style={{ height: 100 }}>
+          {hasGroups && (
+            <button
+              onClick={onToggle}
+              className="relative z-10 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label={expanded ? 'Collapse' : 'Expand'}
+            >
+              <ChevronDown
+                size={18}
+                className={clsx(
+                  'transition-transform duration-200',
+                  expanded && 'rotate-180',
+                )}
+              />
+            </button>
+          )}
+          <span className="relative shrink-0" style={{ width: 90, height: 100 }}>
+            <span
+              aria-hidden
+              className="absolute"
+              style={{
+                top: 10,
+                left: -25,
+                width: 70,
+                height: 70,
+                opacity: 0.3,
+                borderRadius: '40% 60% 70% 30% / 50% 40% 60% 50%',
+                backgroundColor: item.accent,
+              }}
+            />
+            {item.image && (
+              <img
+                src={item.image}
+                alt=""
+                loading="lazy"
+                className="absolute"
+                style={{
+                  top: 0,
+                  right: 0,
+                  width: 90,
+                  height: 100,
+                  objectFit: 'cover',
+                  zIndex: 1,
+                  borderTopRightRadius: 12,
+                  borderBottomRightRadius: 12,
+                }}
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            )}
+          </span>
+        </div>
+      </div>
+
+      {/* Expanded subcategories */}
+      {expanded && hasGroups && (
+        <div className="px-5 pb-4 pt-1 border-t border-gray-100">
+          {navItem!.groups!.flat().map((group, gi) => (
+            <div key={gi} className={gi > 0 ? 'mt-3' : ''}>
+              {group.title && (
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 pb-1 border-b border-gray-50">
+                  {group.title}
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                {group.links.map((link) => (
+                  <Link
+                    key={link.href}
+                    to={link.href}
+                    onClick={onNavigate}
+                    className="py-2 text-[13px] text-gray-600 hover:text-secondary active:text-secondary transition-colors truncate"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ))}
+          <Link
+            to={navItem!.href}
+            onClick={onNavigate}
+            className="inline-flex items-center gap-1 mt-3 text-xs font-semibold text-secondary hover:underline"
+          >
+            View All {item.label} →
+          </Link>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function MobileCollectionList({ onNavigate }: { onNavigate: () => void }) {
+  const { data: banners = [] } = useBanners('collection');
+  const rows: MobileCollection[] =
+    banners.length > 0
+      ? banners.map(bannerToCollection)
+      : MOBILE_COLLECTIONS;
+
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <div className="space-y-0.5">
-      {items.map((item) => {
-        const hasGroups = item.groups && item.groups.length > 0;
-        const isOpen = expanded === item.label;
-
+    <ul className="flex flex-col gap-2.5 px-3 py-3 bg-[#fafafa]">
+      {rows.map((item) => {
+        const navItem = LABEL_TO_NAV[item.label];
         return (
-          <div key={item.label}>
-            <div className="flex items-center">
-              <Link
-                to={item.href}
-                onClick={onNavigate}
-                className={clsx(
-                  'flex-1 py-3 text-sm font-medium transition-colors',
-                  item.highlight ? 'text-accent' : 'hover:text-primary',
-                )}
-              >
-                {item.label}
-              </Link>
-              {hasGroups && (
-                <button
-                  onClick={() => setExpanded(isOpen ? null : item.label)}
-                  className="p-2 touch-target flex items-center justify-center"
-                >
-                  <ChevronDown
-                    size={16}
-                    className={clsx(
-                      'transition-transform duration-200',
-                      isOpen && 'rotate-180',
-                    )}
-                  />
-                </button>
-              )}
-            </div>
-            {isOpen && hasGroups && (
-              <div className="pl-4 pb-2 space-y-3">
-                {item.groups!.flat().map((group, gi) => (
-                  <div key={gi}>
-                    {group.title && (
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                        {group.title}
-                      </p>
-                    )}
-                    {group.links.map((link) => (
-                      <Link
-                        key={link.href}
-                        to={link.href}
-                        onClick={onNavigate}
-                        className="block py-1.5 text-sm text-gray-500 hover:text-primary transition-colors"
-                      >
-                        {link.label}
-                      </Link>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <CollectionAccordionRow
+            key={item.label}
+            item={item}
+            navItem={navItem}
+            expanded={expanded === item.label}
+            onToggle={() =>
+              setExpanded(expanded === item.label ? null : item.label)
+            }
+            onNavigate={onNavigate}
+          />
         );
       })}
-    </div>
+    </ul>
   );
 }
 
@@ -255,6 +422,7 @@ export default function Navbar() {
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const debouncedQuery = useDebounce(searchQuery, 300);
+  const isHome = location.pathname === '/';
 
   useBodyScrollLock(drawerOpen);
 
@@ -402,9 +570,9 @@ export default function Navbar() {
       {/* ================================================================ */}
       <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 h-[64px] sm:h-[76px] flex items-center gap-3 sm:gap-6">
 
-        {/* Hamburger (mobile) */}
+        {/* Hamburger — visible on every breakpoint */}
         <button
-          className="lg:hidden p-2 -ml-1 text-gray-700 hover:text-primary transition-colors touch-target"
+          className="p-2 -ml-1 text-gray-700 hover:text-primary transition-colors touch-target"
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
         >
@@ -492,14 +660,16 @@ export default function Navbar() {
 
         {/* Right Icons — clean, spaced */}
         <div className="flex items-center gap-1 ml-auto">
-          {/* Mobile search toggle */}
-          <button
-            className="md:hidden p-2 text-gray-700 hover:text-primary transition-colors touch-target"
-            onClick={() => setSearchOpen(!searchOpen)}
-            aria-label="Search"
-          >
-            <Search size={22} />
-          </button>
+          {/* Mobile search toggle — hidden on home (home has persistent bar below) */}
+          {!isHome && (
+            <button
+              className="md:hidden p-2 text-gray-700 hover:text-primary transition-colors touch-target"
+              onClick={() => setSearchOpen(!searchOpen)}
+              aria-label="Search"
+            >
+              <Search size={22} />
+            </button>
+          )}
 
           {/* WhatsApp */}
           <a
@@ -572,15 +742,15 @@ export default function Navbar() {
             </button>
           )}
 
-          {/* Cart */}
+          {/* Cart — visible on all breakpoints */}
           <button
-            className="hidden md:flex items-center justify-center w-11 h-11 rounded-full relative text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
+            className="flex items-center justify-center w-10 h-10 md:w-11 md:h-11 rounded-full relative text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
             onClick={openDrawer}
             aria-label="Cart"
           >
             <ShoppingBag size={21} />
             {itemCount > 0 && (
-              <span className="absolute top-0.5 right-0.5 bg-accent text-white text-[9px] font-bold w-[17px] h-[17px] rounded-full flex items-center justify-center shadow-sm">
+              <span className="absolute top-0 right-0 md:top-0.5 md:right-0.5 bg-accent text-white text-[9px] font-bold w-[17px] h-[17px] rounded-full flex items-center justify-center shadow-sm">
                 {itemCount > 9 ? '9+' : itemCount}
               </span>
             )}
@@ -688,26 +858,28 @@ export default function Navbar() {
       </nav>
 
       {/* ================================================================ */}
-      {/* Mobile search bar (toggle)                                       */}
+      {/* Mobile search bar                                                */}
+      {/* Home: always visible | Other pages: toggle via icon              */}
       {/* ================================================================ */}
-      {/* Mobile Search Bar */}
-      {searchOpen && (
+      {(isHome || searchOpen) && (
         <div className="md:hidden px-4 pb-3 pt-1 bg-white border-t border-gray-100">
           <form onSubmit={handleSearch}>
             <div className="relative flex items-center">
+              <Search size={16} className="absolute left-4 text-gray-400 pointer-events-none" />
               <input
                 type="text"
-                autoFocus
-                placeholder="Search plants, seeds, pots..."
+                autoFocus={!isHome}
+                placeholder="Search for plants, seeds, pots..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-5 pr-12 py-2.5 border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-primary text-sm transition-all"
+                className="w-full pl-10 pr-12 py-3 border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-secondary text-sm transition-all placeholder:text-gray-400"
               />
               <button
                 type="submit"
-                className="absolute right-1.5 h-8 w-8 bg-primary text-white rounded-full flex items-center justify-center"
+                className="absolute right-1.5 h-9 w-9 rounded-full flex items-center justify-center text-white transition-colors"
+                style={{ backgroundColor: '#16A34A' }}
               >
-                <Search size={14} />
+                <Search size={15} />
               </button>
             </div>
           </form>
@@ -720,10 +892,10 @@ export default function Navbar() {
       {drawerOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/40 z-50 lg:hidden"
+            className="fixed inset-0 bg-black/40 z-50"
             onClick={closeDrawer}
           />
-          <div className="fixed top-0 left-0 w-[300px] h-full bg-white z-50 shadow-2xl flex flex-col lg:hidden overflow-hidden">
+          <div className="fixed top-0 left-0 w-[88vw] max-w-[400px] sm:max-w-[440px] lg:max-w-[480px] h-full bg-white z-50 shadow-2xl flex flex-col overflow-hidden">
             {/* Mobile Drawer Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <Link
@@ -770,16 +942,9 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* Nav links */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <Link
-                to="/"
-                onClick={closeDrawer}
-                className="block py-3 text-sm font-medium hover:text-primary"
-              >
-                Home
-              </Link>
-              <MobileNavAccordion items={NAV_ITEMS} onNavigate={closeDrawer} />
+            {/* Collection-style nav rows */}
+            <div className="flex-1 overflow-y-auto">
+              <MobileCollectionList onNavigate={closeDrawer} />
             </div>
 
             {/* Bottom actions */}

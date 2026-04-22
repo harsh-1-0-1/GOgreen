@@ -15,7 +15,7 @@ class BannerBase(BaseModel):
     position: int = 0
     placement: str = Field(
         default="hero",
-        pattern=r"^(hero|announcement|themed|strip)$",
+        pattern=r"^(hero|announcement|themed|strip|highlight|collection)$",
     )
     is_active: bool = True
     valid_from: Optional[datetime] = None
