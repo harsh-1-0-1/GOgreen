@@ -32,6 +32,8 @@ const PLACEMENTS = [
   { key: 'announcement', label: 'Announcement Bar' },
   { key: 'themed', label: 'Themed Sections' },
   { key: 'strip', label: 'Strip Tiles' },
+  { key: 'highlight', label: 'Highlight Cards' },
+  { key: 'collection', label: 'Collections Menu' },
 ] as const;
 
 const bannerSchema = z
@@ -41,7 +43,7 @@ const bannerSchema = z
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
-    placement: z.enum(['hero', 'announcement', 'themed', 'strip']),
+    placement: z.enum(['hero', 'announcement', 'themed', 'strip', 'highlight', 'collection']),
     bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex'),
     text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex'),
     is_active: z.boolean(),
@@ -443,6 +445,35 @@ function BannerDrawer({
           onSubmit={handleSubmit(onSubmit)}
           className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4"
         >
+          {watchedPlacement === 'highlight' && (
+            <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-[12px] text-emerald-900 leading-relaxed">
+              <strong className="font-semibold">Highlight card fields:</strong>{' '}
+              <span className="text-emerald-800">Title</span> = card label
+              (e.g. <em>Combos</em>),{' '}
+              <span className="text-emerald-800">Subtitle</span> = green offer
+              caption (e.g. <em>Get 4 at ₹699</em>),{' '}
+              <span className="text-emerald-800">CTA Link</span> = where the
+              card navigates,{' '}
+              <span className="text-emerald-800">Image</span> = card
+              background. Cards render in 4-column grid in display order.
+            </div>
+          )}
+
+          {watchedPlacement === 'collection' && (
+            <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-[12px] text-emerald-900 leading-relaxed">
+              <strong className="font-semibold">Collections menu fields:</strong>{' '}
+              <span className="text-emerald-800">Title</span> = row label
+              (e.g. <em>Plants</em>),{' '}
+              <span className="text-emerald-800">CTA Link</span> = where the
+              row navigates (e.g. <em>/products?category=plants</em>),{' '}
+              <span className="text-emerald-800">Image</span> = portrait photo
+              on the right side,{' '}
+              <span className="text-emerald-800">Background Color</span> =
+              accent blob color (use pastel, e.g. <em>#f9c8d4</em>).
+              Rows appear in the hamburger menu in display order.
+            </div>
+          )}
+
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1 block">
               Title *

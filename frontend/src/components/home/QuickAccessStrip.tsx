@@ -15,19 +15,19 @@ const TILES: Tile[] = [
     label: 'Next-Day\nDelivery',
     bg: '#1B4332',
     textColor: '#A3E635',
-    link: '/next-day-delivery',
+    link: '/products',
   },
   {
     type: 'category',
     label: 'XL Plants',
     image: 'https://images.unsplash.com/photo-1545241047-6083a3684587?w=400',
-    link: '/products?subcategory=xl-plants',
+    link: '/products?category=xl-plants',
   },
   {
     type: 'category',
     label: 'Plant Stands',
     image: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400',
-    link: '/products?subcategory=plant-stands',
+    link: '/products?category=plant-stands',
   },
   {
     type: 'category',
@@ -39,25 +39,25 @@ const TILES: Tile[] = [
     type: 'category',
     label: 'Ceramic Pots',
     image: 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=400',
-    link: '/products?subcategory=ceramic-pots',
+    link: '/products?category=ceramic-pots',
   },
   {
     type: 'category',
     label: 'Ready to use sprays',
     image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400',
-    link: '/products?tag=spray',
+    link: '/products?tags=spray',
   },
   {
     type: 'category',
     label: 'Watering Tools',
     image: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
-    link: '/products?subcategory=watering-tools',
+    link: '/products?category=watering-tools',
   },
   {
     type: 'category',
     label: 'Summer Seeds',
     image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400',
-    link: '/products?category=seeds&season=summer',
+    link: '/products?category=seeds',
   },
 ];
 

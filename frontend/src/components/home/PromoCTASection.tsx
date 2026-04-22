@@ -8,15 +8,15 @@ const CARDS = [
     subtext:
       'Receive a curated box of handpicked plants, packaged with care, every month.',
     cta: 'Start Saving',
-    link: '/subscriptions',
+    link: '/products?tags=combo',
   },
   {
     image:
       'https://images.unsplash.com/photo-1591958911259-bee2173bdccc?w=400&q=80',
-    heading: 'Join our Plant Parent Rewards Club',
-    subtext: 'Earn coins and redeem them for exclusive discounts.',
-    cta: 'Refer a Friend',
-    link: '/rewards',
+    heading: 'Corporate & Bulk Gifting',
+    subtext: 'Curated plant gift sets for your team, clients, and events.',
+    cta: 'Explore Gifts',
+    link: '/products?tags=corporate-gifts',
   },
 ] as const;
 
@@ -40,7 +40,7 @@ export default function PromoCTASection() {
               <div className="flex flex-col gap-2.5">
                 <h3
                   className="text-xl font-semibold"
-                  style={{ color: '#1B4332' }}
+                  style={{ color: '#16A34A' }}
                 >
                   {card.heading}
                 </h3>
@@ -50,7 +50,7 @@ export default function PromoCTASection() {
                 <Link
                   to={card.link}
                   className="mt-auto inline-block w-fit px-6 py-2.5 text-sm font-medium rounded-lg text-white transition hover:opacity-90"
-                  style={{ backgroundColor: '#1B4332' }}
+                  style={{ backgroundColor: '#16A34A' }}
                 >
                   {card.cta}
                 </Link>

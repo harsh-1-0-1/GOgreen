@@ -8,6 +8,13 @@ import ProductCard from '@/components/product/ProductCard';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 
+function formatTag(slug: string): string {
+  return slug
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 function MobileGallery({ images }: { images: string[] }) {
   const [active, setActive] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -180,6 +187,20 @@ export default function ProductDetailPage() {
             )}
             <h1 className="text-2xl sm:text-3xl font-bold">{product.name}</h1>
 
+            {product.tags?.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                {product.tags.map((tag) => (
+                  <Link
+                    key={tag}
+                    to={`/products?tags=${tag}`}
+                    className="text-xs sm:text-sm font-medium px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-[#dcfce7] text-[#16A34A] border border-[#bbf7d0] hover:bg-[#bbf7d0] transition-colors"
+                  >
+                    {formatTag(tag)}
+                  </Link>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-baseline gap-2 sm:gap-3">
               <span className="text-2xl sm:text-3xl font-bold text-primary">₹{product.price}</span>
               {product.original_price && product.original_price > product.price && (
@@ -216,20 +237,6 @@ export default function ProductDetailPage() {
                 </div>
               )}
             </div>
-
-            {product.tags?.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {product.tags.map((tag) => (
-                  <Link
-                    key={tag}
-                    to={`/products?tags=${tag}`}
-                    className="px-3 py-1 text-xs border rounded-full hover:border-primary-light hover:text-primary transition"
-                  >
-                    {tag}
-                  </Link>
-                ))}
-              </div>
-            )}
 
             {/* Desktop add to cart */}
             {product.stock_qty > 0 && (

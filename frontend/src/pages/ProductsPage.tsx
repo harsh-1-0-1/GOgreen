@@ -101,14 +101,14 @@ export default function ProductsPage() {
 
   useBodyScrollLock(mobileFiltersOpen);
 
-  const category = searchParams.get('category') || '';
+  const category = searchParams.get('category') || searchParams.get('subcategory') || '';
   const search = searchParams.get('search') || '';
   const sort = searchParams.get('sort_by') || '';
   const page = Number(searchParams.get('page')) || 1;
   const [minPrice, setMinPrice] = useState(searchParams.get('min_price') || '');
   const [maxPrice, setMaxPrice] = useState(searchParams.get('max_price') || '');
   const [selectedTags, setSelectedTags] = useState<string[]>(
-    searchParams.get('tags')?.split(',').filter(Boolean) || [],
+    (searchParams.get('tags') || searchParams.get('tag') || '').split(',').filter(Boolean),
   );
 
   function updateParams(updates: Record<string, string>) {

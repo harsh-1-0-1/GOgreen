@@ -4,6 +4,13 @@ import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import type { Product } from '@/types';
 
+function formatTag(slug: string): string {
+  return slug
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 export default function ProductCard({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
 
@@ -67,9 +74,16 @@ export default function ProductCard({ product }: { product: Product }) {
           {product.name}
         </h3>
         {product.tags?.length > 0 && (
-          <p className="text-[10px] sm:text-xs text-gray-400 mt-0.5 line-clamp-1 hidden sm:block">
-            {product.tags.slice(0, 3).join(' · ')}
-          </p>
+          <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-1 sm:mt-1.5">
+            {product.tags.slice(0, 2).map((tag) => (
+              <span
+                key={tag}
+                className="text-[10px] sm:text-xs font-medium px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-[#dcfce7] text-[#16A34A] border border-[#bbf7d0]"
+              >
+                {formatTag(tag)}
+              </span>
+            ))}
+          </div>
         )}
         <div className="flex items-baseline gap-1.5 sm:gap-2 mt-1 sm:mt-2">
           <span className="text-primary font-bold text-sm sm:text-base">₹{product.price}</span>
