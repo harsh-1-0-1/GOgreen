@@ -13,7 +13,10 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
 
-    DATABASE_URL: str = "sqlite+aiosqlite:///./plantoga.db"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./gogreen.db"
+    if "VERCEL" in os.environ:
+        DATABASE_URL = "sqlite+aiosqlite:////tmp/gogreen.db"
+    
     REDIS_URL: str = "redis://localhost:6379"
 
     SECRET_KEY: str = "change-me-to-a-random-secret-key"
