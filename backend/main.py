@@ -24,6 +24,15 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Starting up {}", settings.APP_NAME)
+    
+    if "VERCEL" in os.environ:
+        import shutil
+        src = os.path.join(os.path.dirname(__file__), "gogreen.db")
+        dst = "/tmp/gogreen.db"
+        if not os.path.exists(dst):
+            logger.info("Copying database to /tmp")
+            shutil.copy2(src, dst)
+            
     await init_redis()
     yield
     logger.info("Shutting down {}", settings.APP_NAME)
