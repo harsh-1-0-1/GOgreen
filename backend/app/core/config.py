@@ -1,3 +1,5 @@
+import os
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,9 +16,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./gogreen.db"
-    if "VERCEL" in os.environ:
-        DATABASE_URL = "sqlite+aiosqlite:////tmp/gogreen.db"
-    
+
     REDIS_URL: str = "redis://localhost:6379"
 
     SECRET_KEY: str = "change-me-to-a-random-secret-key"
@@ -44,8 +44,14 @@ class Settings(BaseSettings):
     @classmethod
     def parse_cors(cls, v: str | list[str]) -> list[str]:
         if isinstance(v, str):
-            return [origin.strip() for origin in v.strip("[]").split(",")]
+            return [origin.strip().rstrip("/") for origin in v.strip("[]").split(",")]
         return v
 
 
 settings = Settings()
+
+if os.getenv("RAILWAY_ENVIRONMENT"):
+    _vol = os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "/data")
+    os.makedirs(_vol, exist_ok=True)
+    if settings.DATABASE_URL.startswith("sqlite"):
+        settings.DATABASE_URL = f"sqlite+aiosqlite:///{_vol}/gogreen.db"
