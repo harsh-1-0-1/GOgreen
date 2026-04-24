@@ -33,7 +33,7 @@ export default function ProductCard({ product }: { product: Product }) {
   return (
     <Link
       to={`/products/${product.slug}`}
-      className="group bg-white rounded-xl sm:rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-shadow duration-300"
+      className="group bg-white rounded-xl sm:rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg transition-shadow duration-300 flex flex-col h-full"
     >
       <div className="relative aspect-[4/3] sm:aspect-square overflow-hidden bg-gray-50">
         <img
@@ -52,24 +52,8 @@ export default function ProductCard({ product }: { product: Product }) {
             {product.badge}
           </span>
         )}
-        {/* Desktop: cart icon on hover */}
-        <button
-          onClick={handleAdd}
-          className="absolute bottom-3 right-3 w-10 h-10 bg-white rounded-full shadow-md items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary hover:text-white hidden sm:flex"
-          aria-label="Add to cart"
-        >
-          <ShoppingCart size={16} />
-        </button>
-        {/* Mobile: always-visible + button */}
-        <button
-          onClick={handleAdd}
-          className="sm:hidden absolute bottom-2 right-2 w-8 h-8 bg-primary text-white rounded-full shadow-md flex items-center justify-center active:scale-95 transition-transform touch-target"
-          aria-label="Add to cart"
-        >
-          <Plus size={16} />
-        </button>
       </div>
-      <div className="p-2.5 sm:p-4">
+      <div className="p-2.5 sm:p-4 flex-1 flex flex-col">
         <h3 className="text-xs sm:text-sm font-medium line-clamp-1 group-hover:text-primary transition-colors">
           {product.name}
         </h3>
@@ -99,6 +83,14 @@ export default function ProductCard({ product }: { product: Product }) {
         {product.stock_qty === 0 && (
           <p className="text-[10px] sm:text-xs text-red-500 mt-0.5 sm:mt-1 font-medium">Out of Stock</p>
         )}
+        <div className="mt-auto pt-3">
+          <button
+            onClick={handleAdd}
+            className="w-full bg-primary text-white text-[13px] sm:text-sm font-medium py-2 rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            Add to cart
+          </button>
+        </div>
       </div>
     </Link>
   );
