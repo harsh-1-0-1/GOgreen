@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     LOG_JSON: bool = False
     SLOW_QUERY_MS: int = 100
 
-    CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+    CORS_ORIGINS: str = "http://localhost:5173"
+    CORS_ORIGIN_REGEX: str = ""
 
     @field_validator("DEBUG", mode="before")
     @classmethod
@@ -58,10 +59,21 @@ class Settings(BaseSettings):
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
-    def parse_cors(cls, v: str | list[str]) -> list[str]:
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.strip("[]").split(",")]
-        return v
+    def parse_cors(cls, v: str | list[str]) -> str:
+        if isinstance(v, list):
+            return ",".join(v)
+        return v or ""
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        raw_origins = self.CORS_ORIGINS.strip()
+        if raw_origins.startswith("[") and raw_origins.endswith("]"):
+            raw_origins = raw_origins[1:-1]
+        return [
+            origin.strip().strip('"').strip("'")
+            for origin in raw_origins.split(",")
+            if origin.strip().strip('"').strip("'")
+        ]
 
 
 settings = Settings()

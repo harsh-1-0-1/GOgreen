@@ -22,9 +22,10 @@ Backend service settings:
 - Root Directory: `/backend`
 - Config File Path: `/backend/railway.json`
 - Builder: Dockerfile, already configured by `backend/railway.json`
+- Start Command: leave blank, so Railway uses the Dockerfile `CMD`
 - Healthcheck Path: `/api/v1/health`
 
-The backend Dockerfile reads Railway's `PORT` variable automatically.
+The backend Dockerfile reads Railway's `PORT` variable automatically. Database migrations run from the `preDeployCommand` in `backend/railway.json`.
 
 Set these backend variables in Railway:
 
@@ -34,9 +35,26 @@ REDIS_URL=${{Redis.REDIS_URL}}
 SECRET_KEY=replace-with-a-long-random-secret
 BACKEND_PUBLIC_URL=https://your-railway-backend-domain
 CORS_ORIGINS=https://your-vercel-frontend-domain
+CORS_ORIGIN_REGEX=
 LOG_JSON=true
 DEBUG=false
 ```
+
+`CORS_ORIGINS` is the main control for which frontend sites can call the backend. It can be a single URL, comma-separated URLs, or a JSON array string. These are all valid:
+
+```env
+CORS_ORIGINS=https://your-vercel-frontend-domain
+CORS_ORIGINS=https://first.vercel.app,https://second.vercel.app
+CORS_ORIGINS=["https://your-vercel-frontend-domain"]
+```
+
+For Vercel preview deployments, you can either add each preview URL to `CORS_ORIGINS`, or use:
+
+```env
+CORS_ORIGIN_REGEX=https://.*\.vercel\.app
+```
+
+For the tightest production setup, keep `CORS_ORIGIN_REGEX` empty and list only your real production frontend URL in `CORS_ORIGINS`.
 
 Optional variables:
 
@@ -51,11 +69,7 @@ PAYU_KEY=
 PAYU_SALT=
 ```
 
-After the backend deploys, open the Railway backend service shell and run:
-
-```bash
-uv run alembic upgrade head
-```
+Do not put `uv run alembic upgrade head` in Railway's Start Command. It is a one-off migration command and exits immediately, which prevents the HTTP server from starting.
 
 Optional sample data:
 
@@ -87,6 +101,8 @@ Set this Vercel environment variable:
 VITE_API_BASE_URL=https://your-railway-backend-domain/api/v1
 ```
 
+This is the frontend's only required backend connection setting. If the backend moves to a different Railway domain later, update this variable in Vercel and redeploy the frontend.
+
 The file `frontend/vercel.json` is already included so React Router deep links work on Vercel.
 
 ## 4. Connect Both Domains
@@ -94,8 +110,9 @@ The file `frontend/vercel.json` is already included so React Router deep links w
 After Vercel gives you a production URL:
 
 1. Update Railway `CORS_ORIGINS` to the exact Vercel URL.
-2. Redeploy Railway.
-3. Confirm the frontend can call the backend.
+2. Leave Railway `CORS_ORIGIN_REGEX` empty unless you want Vercel preview deploys to call the backend.
+3. Redeploy Railway.
+4. Confirm the frontend can call the backend.
 
 After Railway gives you a backend URL:
 
