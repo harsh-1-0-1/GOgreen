@@ -5,6 +5,7 @@
   },
   "deploy": {
     "preDeployCommand": "uv run alembic upgrade head",
+    "startCommand": "uv run fastapi run",
     "healthcheckPath": "/api/v1/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
