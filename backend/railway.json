@@ -4,7 +4,7 @@
     "builder": "DOCKERFILE"
   },
   "deploy": {
-    "preDeployCommand": "uv run alembic upgrade head",
+    "preDeployCommand": "uv run alembic upgrade head && uv run python seed.py",
     "startCommand": "uv run fastapi run --port 8000",
     "healthcheckPath": "/api/v1/health",
     "healthcheckTimeout": 300,
