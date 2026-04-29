@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./plantoga.db"
     REDIS_URL: str = "redis://localhost:6379"
+    BACKEND_PUBLIC_URL: str = "http://localhost:8000"
 
     SECRET_KEY: str = "change-me-to-a-random-secret-key"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
@@ -36,6 +37,24 @@ class Settings(BaseSettings):
     SLOW_QUERY_MS: int = 100
 
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug(cls, v: bool | str) -> bool:
+        if isinstance(v, str):
+            value = v.strip().lower()
+            if value in {"release", "prod", "production", "false", "0", "no", "off"}:
+                return False
+            if value in {"debug", "dev", "development", "true", "1", "yes", "on"}:
+                return True
+        return v
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def parse_database_url(cls, v: str) -> str:
+        if isinstance(v, str) and v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+asyncpg://", 1)
+        return v
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

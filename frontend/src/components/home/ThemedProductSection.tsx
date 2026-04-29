@@ -33,7 +33,9 @@ function getCardImage(product: Product, index: number): string {
 }
 
 function getDiscount(product: Product): number {
-  if (product.discount_percent) return product.discount_percent;
+  if (product.original_price && product.original_price > product.price) {
+    return Math.round(((product.original_price - product.price) / product.original_price) * 100);
+  }
   return [20, 25, 30, 15, 22, 18][Math.abs(product.id) % 6];
 }
 

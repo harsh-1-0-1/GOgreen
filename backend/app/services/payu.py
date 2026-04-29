@@ -57,7 +57,7 @@ def get_payu_form_data(
         email=email, salt=salt,
     )
 
-    base_url = "http://localhost:8000"
+    base_url = settings.BACKEND_PUBLIC_URL.rstrip("/")
     form_data = {
         "action": PAYU_TEST_URL,
         "key": key,
