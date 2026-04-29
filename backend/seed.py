@@ -5,13 +5,30 @@ Usage:
 """
 
 import asyncio
+import os
 import random
 import re
 from datetime import datetime, timezone
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.security import hash_password
 from app.db.models import Banner, BlogCategory, BlogPost, Category, Product, User
-from app.db.session import async_session_factory
+
+
+def _resolve_database_url() -> str:
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise RuntimeError("DATABASE_URL environment variable is not set")
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
+engine = create_async_engine(_resolve_database_url(), future=True)
+async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 UNSPLASH = "https://images.unsplash.com/photo-{id}?w=600&q=80"
 
