@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import AnnouncementBar from './AnnouncementBar';
 import Navbar from './Navbar';
+import PageBanner from './PageBanner';
 import Footer from './Footer';
 import BottomNav from './BottomNav';
 import CartDrawer from '@/components/cart/CartDrawer';
@@ -11,6 +12,7 @@ export default function Layout() {
     <div className="flex flex-col min-h-screen overflow-x-clip">
       <AnnouncementBar />
       <Navbar />
+      <PageBanner />
       <main className="flex-1 pb-16 md:pb-0">
         <Outlet />
       </main>

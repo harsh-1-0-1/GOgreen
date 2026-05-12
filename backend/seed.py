@@ -519,6 +519,15 @@ async def seed() -> None:
                 bg_color="#1B4332",
                 text_color="#FFFFFF",
             ),
+            Banner(
+                title="Gardening ka full range. Sirf idhar milega!",
+                cta_link="/products",
+                placement="page",
+                position=0,
+                bg_color="#F4EFE5",
+                text_color="#1B4332",
+                image_url="/page-banner-default.jpeg",
+            ),
         ]
         db.add_all(banners_seed)
 
