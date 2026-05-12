@@ -306,7 +306,7 @@ export default function Navbar() {
             )}
             aria-label="WhatsApp"
           >
-            <WhatsAppIcon size={22} />
+            <WhatsAppIcon size={32} />
           </a>
 
           {/* Account */}
@@ -620,4 +620,3 @@ export default function Navbar() {
     </header>
   );
 }
-
