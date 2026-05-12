@@ -30,7 +30,6 @@ import type { Banner } from '@/types';
 const PLACEMENTS = [
   { key: 'hero', label: 'Hero Carousel' },
   { key: 'announcement', label: 'Announcement Bar' },
-  { key: 'page', label: 'Page Banner' },
   { key: 'themed', label: 'Themed Sections' },
   { key: 'strip', label: 'Strip Tiles' },
   { key: 'highlight', label: 'Highlight Cards' },
@@ -44,7 +43,7 @@ const bannerSchema = z
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
-    placement: z.enum(['hero', 'announcement', 'page', 'themed', 'strip', 'highlight', 'collection']),
+    placement: z.enum(['hero', 'announcement', 'themed', 'strip', 'highlight', 'collection']),
     bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex'),
     text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex'),
     is_active: z.boolean(),
@@ -296,6 +295,7 @@ function BannerDrawer({
   onSaved: () => void;
 }) {
   const isEdit = !!banner;
+  const isAnnouncement = (banner?.placement || placement) === 'announcement';
 
   const {
     register,
@@ -471,19 +471,6 @@ function BannerDrawer({
               <span className="text-emerald-800">Background Color</span> =
               accent blob color (use pastel, e.g. <em>#f9c8d4</em>).
               Rows appear in the hamburger menu in display order.
-            </div>
-          )}
-
-          {watchedPlacement === 'page' && (
-            <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-[12px] text-emerald-900 leading-relaxed">
-              <strong className="font-semibold">Page banner fields:</strong>{' '}
-              <span className="text-emerald-800">Title</span> is used for
-              accessibility and fallback text,{' '}
-              <span className="text-emerald-800">CTA Link</span> makes the
-              strip clickable, and{' '}
-              <span className="text-emerald-800">Image</span> is the narrow
-              banner shown below the header on customer pages. The first active
-              banner in display order is shown.
             </div>
           )}
 
@@ -822,38 +809,6 @@ function BannerDrawer({
                 style={{ backgroundColor: '#1B4332' }}
               >
                 {watchedTitle}
-              </div>
-            </div>
-          )}
-
-          {watchedPlacement === 'page' && (
-            <div className="mt-4">
-              <p className="text-[11px] text-gray-400 mb-2">
-                Preview (approximate)
-              </p>
-              <div
-                className="h-[72px] w-full overflow-hidden rounded-lg border border-gray-200"
-                style={{ backgroundColor: watchedBgColor }}
-              >
-                {previewImageSrc ? (
-                  <img
-                    src={previewImageSrc}
-                    alt=""
-                    className="h-full w-full object-cover object-center"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center px-4 text-center">
-                    <span
-                      className="text-sm font-semibold"
-                      style={{ color: watchedTextColor }}
-                    >
-                      {watchedTitle || 'Page banner'}
-                    </span>
-                  </div>
-                )}
               </div>
             </div>
           )}
