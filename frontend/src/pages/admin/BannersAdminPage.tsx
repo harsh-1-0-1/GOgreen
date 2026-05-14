@@ -31,7 +31,6 @@ const PLACEMENTS = [
   { key: 'hero', label: 'Hero Carousel' },
   { key: 'announcement', label: 'Announcement Bar' },
   { key: 'page', label: 'Page Banner' },
-  { key: 'trending', label: 'Trending Carousel' },
   { key: 'themed', label: 'Themed Sections' },
   { key: 'strip', label: 'Strip Tiles' },
   { key: 'highlight', label: 'Highlight Cards' },
@@ -45,7 +44,7 @@ const bannerSchema = z
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
-    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'collection']),
+    placement: z.enum(['hero', 'announcement', 'page', 'themed', 'strip', 'highlight', 'collection']),
     bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex'),
     text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex'),
     is_active: z.boolean(),
@@ -275,107 +274,6 @@ function BannerPreview({
               }}
             />
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HighlightCardPreview({
-  title,
-  subtitle,
-  bgColor,
-  textColor,
-  imageSrc,
-}: {
-  title: string;
-  subtitle: string;
-  bgColor: string;
-  textColor: string;
-  imageSrc: string | null;
-}) {
-  return (
-    <div className="mt-4">
-      <p className="text-[11px] text-gray-400 mb-2">Preview (approximate)</p>
-      <div className="mx-auto w-full max-w-[260px]">
-        <div
-          className="relative aspect-[3/4] overflow-hidden rounded-xl border border-gray-200 shadow-sm"
-          style={{ backgroundColor: bgColor || '#F5F0E8' }}
-        >
-          {imageSrc ? (
-            <img
-              src={imageSrc}
-              alt=""
-              className="absolute inset-0 h-full w-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          ) : null}
-          <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-black/35 via-black/10 to-transparent" />
-          <h3 className="absolute inset-x-2 top-4 text-center text-2xl font-medium leading-tight text-white drop-shadow-sm">
-            {title || 'Combos'}
-          </h3>
-        </div>
-        <p
-          className="mt-2.5 text-center text-xl font-semibold leading-tight"
-          style={{ color: textColor || '#16A34A' }}
-        >
-          {subtitle || 'Get 4 at ₹699'}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function TrendingBannerPreview({
-  title,
-  subtitle,
-  bgColor,
-  textColor,
-  ctaText,
-  imageSrc,
-}: {
-  title: string;
-  subtitle: string;
-  bgColor: string;
-  textColor: string;
-  ctaText: string;
-  imageSrc: string | null;
-}) {
-  return (
-    <div className="mt-4">
-      <p className="text-[11px] text-gray-400 mb-2">Preview (approximate)</p>
-      <div
-        className="relative aspect-square w-full overflow-hidden rounded-xl border border-gray-200"
-        style={{ backgroundColor: bgColor || '#e9dfc9' }}
-      >
-        {imageSrc ? (
-          <img
-            src={imageSrc}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
-          />
-        ) : null}
-        <div className="absolute inset-0 bg-gradient-to-br from-black/45 via-black/10 to-transparent" />
-        <h3
-          className="absolute left-5 top-6 max-w-[62%] text-3xl font-extrabold leading-[0.98] drop-shadow"
-          style={{ color: textColor || '#ffeb3b' }}
-        >
-          {title || 'Perfect plants for effortless indoor garden'}
-        </h3>
-        {subtitle && (
-          <div className="absolute right-5 top-6 grid h-20 w-20 rotate-[-10deg] place-items-center rounded-full bg-[#ffeb3b] text-center text-primary shadow [clip-path:polygon(50%_0%,59%_12%,73%_6%,78%_21%,94%_22%,88%_38%,100%_50%,88%_62%,94%_78%,78%_79%,73%_94%,59%_88%,50%_100%,41%_88%,27%_94%,22%_79%,6%_78%,12%_62%,0%_50%,12%_38%,6%_22%,22%_21%,27%_6%,41%_12%)]">
-            <span className="rotate-[10deg] px-2 text-sm font-bold leading-tight">
-              {subtitle}
-            </span>
-          </div>
-        )}
-        <div className="absolute bottom-7 left-1/2 -translate-x-1/2 rounded-md bg-[#ffeb3b] px-5 py-1.5 text-xs font-extrabold text-primary shadow">
-          {ctaText || 'SHOP NOW'}
         </div>
       </div>
     </div>
@@ -913,17 +811,6 @@ function BannerDrawer({
             />
           )}
 
-          {watchedPlacement === 'trending' && (
-            <TrendingBannerPreview
-              title={watchedTitle || ''}
-              subtitle={watchedSubtitle || ''}
-              bgColor={watchedBgColor}
-              textColor={watchedTextColor}
-              ctaText={watchedCtaText || ''}
-              imageSrc={previewImageSrc}
-            />
-          )}
-
           {/* Announcement preview */}
           {watchedPlacement === 'announcement' && watchedTitle && (
             <div className="mt-4">
@@ -937,16 +824,6 @@ function BannerDrawer({
                 {watchedTitle}
               </div>
             </div>
-          )}
-
-          {watchedPlacement === 'highlight' && (
-            <HighlightCardPreview
-              title={watchedTitle || ''}
-              subtitle={watchedSubtitle || ''}
-              bgColor={watchedBgColor}
-              textColor={watchedTextColor}
-              imageSrc={previewImageSrc}
-            />
           )}
 
           {watchedPlacement === 'page' && (
