@@ -112,13 +112,13 @@ export const NAV_ITEMS: NavItemDef[] = [
     ],
   },
   { label: 'GIFTING', href: '/products?tags=gifting' },
-  { label: 'CORPORATE GIFTS', href: '/products?tags=corporate-gifts' },
+  { label: 'CORPORATE GIFTS', href: '/corporate-gifting' },
   { label: 'GARDEN SERVICES', href: '/products?tags=garden-services' },
   { label: 'BLOG', href: '/blog' },
   { label: 'OFFERS', href: '/products?tags=offers', highlight: true },
 ];
 
-export const WHATSAPP_NUMBER = '919999999999';
+export const WHATSAPP_NUMBER = '917083883105';
 
 export interface MobileCollection {
   label: string;
@@ -164,6 +164,13 @@ export const MOBILE_COLLECTIONS: MobileCollection[] = [
     accent: '#f9c8d4',
   },
   {
+    label: 'Corporate Gifts',
+    href: '/corporate-gifting',
+    image:
+      'https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=280&q=80',
+    accent: '#cdebd7',
+  },
+  {
     label: 'Blog',
     href: '/blog',
     image:
@@ -194,3 +201,4 @@ for (const item of NAV_ITEMS) {
   LABEL_TO_NAV[key] = item;
 }
 LABEL_TO_NAV['Planters'] = NAV_ITEMS.find((n) => n.label === 'POTS & PLANTERS');
+LABEL_TO_NAV['Corporate Gifts'] = NAV_ITEMS.find((n) => n.label === 'CORPORATE GIFTS');
