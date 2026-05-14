@@ -1,14 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
-import { useBanners } from '@/hooks/useBanners';
 import ProductCard from '@/components/product/ProductCard';
 import SkeletonCard from '@/components/ui/SkeletonCard';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import type { Banner } from '@/types';
 
 const SORT_OPTIONS = [
   { value: '', label: 'Relevance' },
@@ -17,166 +15,6 @@ const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest First' },
   { value: 'discount', label: 'Best Discount' },
 ];
-
-function TrendingPromoBanner({
-  banners,
-  images,
-  isLoading,
-}: {
-  banners: Banner[];
-  images: string[];
-  isLoading: boolean;
-}) {
-  const fallbackSlides: Banner[] = [
-    {
-      id: -101,
-      title: 'Perfect plants for effortless indoor garden',
-      subtitle: 'starting ₹699',
-      cta_text: 'SHOP NOW',
-      cta_link: '/products?sort_by=popular',
-      image_url: images[0] || '/page-banner-default.jpeg',
-      bg_color: '#e9dfc9',
-      text_color: '#ffeb3b',
-      placement: 'trending',
-      position: 0,
-      is_active: true,
-    },
-    {
-      id: -102,
-      title: 'Fresh greens for every bright corner',
-      subtitle: 'price drop',
-      cta_text: 'SHOP NOW',
-      cta_link: '/products?sort_by=popular',
-      image_url: images[1] || images[0] || '/page-banner-default.jpeg',
-      bg_color: '#164d3b',
-      text_color: '#ffeb3b',
-      placement: 'trending',
-      position: 1,
-      is_active: true,
-    },
-    {
-      id: -103,
-      title: 'Easy care picks for your home',
-      subtitle: 'trending now',
-      cta_text: 'SHOP NOW',
-      cta_link: '/products?sort_by=popular',
-      image_url: images[2] || images[0] || '/page-banner-default.jpeg',
-      bg_color: '#f1dfbd',
-      text_color: '#ffeb3b',
-      placement: 'trending',
-      position: 2,
-      is_active: true,
-    },
-  ];
-  const slides = banners.length > 0 ? banners : fallbackSlides;
-  const [current, setCurrent] = useState(0);
-
-  useEffect(() => {
-    setCurrent(0);
-  }, [banners.length, images.length]);
-
-  useEffect(() => {
-    if (slides.length <= 1) return;
-    const id = window.setTimeout(
-      () => setCurrent((index) => (index + 1) % slides.length),
-      3500,
-    );
-    return () => window.clearTimeout(id);
-  }, [current, slides.length]);
-
-  if (isLoading) {
-    return (
-      <div className="mb-6 aspect-square w-full animate-pulse rounded-none bg-gray-100 sm:mb-8 sm:rounded-2xl lg:aspect-[16/7]" />
-    );
-  }
-
-  return (
-    <section className="relative -mx-3 mb-6 aspect-square overflow-hidden bg-[#e9dfc9] sm:mx-0 sm:mb-8 sm:rounded-2xl lg:aspect-[16/7]">
-      <div
-        className="flex h-full transition-transform duration-700 ease-in-out"
-        style={{ transform: `translateX(-${current * 100}%)` }}
-      >
-        {slides.map((slide, slideIndex) => {
-          const sideImages = images
-            .filter((src) => src && src !== slide.image_url)
-            .slice(0, 3);
-
-          return (
-            <div
-              key={slide.id || slideIndex}
-              className="relative h-full w-full shrink-0 overflow-hidden"
-              style={{ backgroundColor: slide.bg_color || '#e9dfc9' }}
-            >
-              <img
-                src={slide.image_url || images[0] || '/page-banner-default.jpeg'}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                loading={slideIndex === 0 ? 'eager' : 'lazy'}
-              />
-              <div className="absolute inset-0 bg-gradient-to-br from-black/45 via-black/10 to-transparent" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
-
-              {sideImages.map((src, index) => (
-                <img
-                  key={`${src}-${index}`}
-                  src={src}
-                  alt=""
-                  className={[
-                    'absolute hidden rounded-xl border-4 border-white/85 object-cover shadow-xl sm:block',
-                    index === 0 && 'right-[9%] top-[14%] h-[34%] w-[22%] rotate-3',
-                    index === 1 && 'right-[23%] bottom-[12%] h-[30%] w-[18%] -rotate-2',
-                    index === 2 && 'right-[4%] bottom-[18%] h-[25%] w-[16%] rotate-6',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  loading="lazy"
-                />
-              ))}
-
-              <div className="absolute left-6 top-8 max-w-[62%] sm:left-10 sm:top-10 lg:left-12 lg:top-12">
-                <p
-                  className="text-[clamp(2rem,10vw,4.75rem)] font-extrabold leading-[0.98] drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]"
-                  style={{ color: slide.text_color || '#ffeb3b' }}
-                >
-                  {slide.title}
-                </p>
-              </div>
-
-              {slide.subtitle && (
-                <div className="absolute right-7 top-10 grid h-24 w-24 rotate-[-10deg] place-items-center rounded-full bg-[#ffeb3b] text-center text-primary shadow-lg [clip-path:polygon(50%_0%,59%_12%,73%_6%,78%_21%,94%_22%,88%_38%,100%_50%,88%_62%,94%_78%,78%_79%,73%_94%,59%_88%,50%_100%,41%_88%,27%_94%,22%_79%,6%_78%,12%_62%,0%_50%,12%_38%,6%_22%,22%_21%,27%_6%,41%_12%)] sm:right-12 sm:top-12 sm:h-32 sm:w-32">
-                  <span className="rotate-[10deg] px-3 text-lg font-bold leading-tight sm:text-2xl">
-                    {slide.subtitle}
-                  </span>
-                </div>
-              )}
-
-              <Link
-                to={slide.cta_link || '/products?sort_by=popular'}
-                className="absolute bottom-7 left-1/2 -translate-x-1/2 rounded-md bg-[#ffeb3b] px-6 py-2 text-sm font-extrabold text-primary shadow-md sm:bottom-8 sm:text-base"
-              >
-                {slide.cta_text || 'SHOP NOW'}
-              </Link>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="absolute bottom-2.5 left-1/2 flex -translate-x-1/2 gap-1.5 sm:bottom-3">
-        {slides.map((slide, index) => (
-          <button
-            key={slide.id || index}
-            type="button"
-            onClick={() => setCurrent(index)}
-            className={`h-1.5 rounded-full transition-all ${
-              index === current ? 'w-6 bg-white' : 'w-1.5 bg-white/55'
-            }`}
-            aria-label={`Show trending banner ${index + 1}`}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
 
 function FiltersSidebar({
   selectedCategory,
@@ -311,19 +149,6 @@ export default function ProductsPage() {
     page,
     limit: 20,
   });
-  const { data: trendingBanners = [], isLoading: trendingBannersLoading } =
-    useBanners('trending');
-
-  const isTrendingPage =
-    sort === 'popular' &&
-    !search &&
-    !category &&
-    !minPrice &&
-    !maxPrice &&
-    selectedTags.length === 0;
-  const trendingBannerImages =
-    data?.items.flatMap((product) => product.images ?? []).filter(Boolean) ??
-    [];
 
   const sidebar = (
     <FiltersSidebar
@@ -341,26 +166,10 @@ export default function ProductsPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
-      {isTrendingPage && (
-        <TrendingPromoBanner
-          banners={trendingBanners}
-          images={trendingBannerImages}
-          isLoading={isLoading || trendingBannersLoading}
-        />
-      )}
-
       {/* Header */}
       <div className="mb-4 sm:mb-6">
         <h1 className="text-lg sm:text-2xl font-bold">
-          {search
-            ? `Results for "${search}"`
-            : isTrendingPage
-              ? 'Price Drop!'
-              : category
-                ? category
-                    .replace(/-/g, ' ')
-                    .replace(/\b\w/g, (c) => c.toUpperCase())
-                : 'All Products'}
+          {search ? `Results for "${search}"` : category ? category.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'All Products'}
         </h1>
         {data && <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{data.total} products</p>}
       </div>

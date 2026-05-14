@@ -1,7 +1,7 @@
 export function WhatsAppIcon({ size = 20 }: { size?: number }) {
   return (
     <img
-      src="/whatsapp-logo.png"
+      src="/whatsapp-logo.jpeg"
       alt=""
       width={size}
       height={size}
