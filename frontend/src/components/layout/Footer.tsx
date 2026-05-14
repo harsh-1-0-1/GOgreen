@@ -32,7 +32,7 @@ const LINK_COLUMNS = [
       { label: 'About Us', to: '/' },
       { label: 'Blog', to: '/blog' },
       { label: 'Garden Services', to: '/products?tags=garden-services' },
-      { label: 'Corporate Gifts', to: '/products?tags=corporate-gifts' },
+      { label: 'Corporate Gifts', to: '/corporate-gifting' },
     ],
   },
   {

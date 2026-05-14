@@ -301,12 +301,12 @@ export default function Navbar() {
             target="_blank"
             rel="noopener noreferrer"
             className={clsx(
-              "items-center justify-center w-10 h-10 rounded-full text-green-600 hover:text-green-700 hover:bg-green-50 transition-all",
+              "items-center justify-center w-12 h-12 rounded-full text-green-600 hover:text-green-700 hover:bg-green-50 transition-all",
               isHome ? "flex" : "hidden sm:flex"
             )}
             aria-label="WhatsApp"
           >
-            <WhatsAppIcon size={32} />
+            <WhatsAppIcon size={40} />
           </a>
 
           {/* Account */}
@@ -580,9 +580,9 @@ export default function Navbar() {
                 href={`https://wa.me/${WHATSAPP_NUMBER}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 py-2.5 text-sm text-gray-600 hover:text-green-600"
+                className="flex items-center gap-3 py-3 text-sm font-semibold text-gray-700 hover:text-green-600"
               >
-                <WhatsAppIcon size={18} /> WhatsApp Us
+                <WhatsAppIcon size={30} /> WhatsApp Us
               </a>
               {user && (
                 <Link

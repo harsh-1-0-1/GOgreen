@@ -19,6 +19,7 @@ import OrderDetailPage from '@/pages/OrderDetailPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import BlogListPage from '@/pages/BlogListPage';
 import BlogDetailPage from '@/pages/BlogDetailPage';
+import CorporateGiftingPage from '@/pages/CorporateGiftingPage';
 
 import AdminLayout from '@/components/admin/AdminLayout';
 import DashboardPage from '@/pages/admin/DashboardPage';
@@ -65,6 +66,7 @@ export default function App() {
               <Route path="/orders/:id" element={<OrderDetailPage />} />
               <Route path="/blog" element={<BlogListPage />} />
               <Route path="/blog/:slug" element={<BlogDetailPage />} />
+              <Route path="/corporate-gifting" element={<CorporateGiftingPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route element={<Layout />}>
