@@ -60,9 +60,9 @@ const FALLBACK_CARDS: Banner[] = [
 
 function HighlightCardSkeleton() {
   return (
-    <div className="flex flex-col gap-2 sm:gap-2.5">
-      <div className="aspect-square rounded-2xl bg-gray-100 animate-pulse" />
-      <div className="h-4 w-2/3 mx-auto rounded bg-gray-100 animate-pulse" />
+    <div className="flex flex-col gap-2.5 sm:gap-3">
+      <div className="aspect-[3/4] rounded-xl bg-gray-100 animate-pulse" />
+      <div className="h-5 w-3/4 mx-auto rounded bg-gray-100 animate-pulse" />
     </div>
   );
 }
@@ -72,9 +72,9 @@ export default function CategoryHighlightGrid() {
   const cards = banners.length > 0 ? banners : FALLBACK_CARDS;
 
   return (
-    <section className="w-full py-6 sm:py-8 bg-white">
-      <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 max-w-7xl">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+    <section className="w-full py-7 sm:py-9 bg-white">
+      <div className="mx-auto max-w-[760px] px-3.5 sm:px-6">
+        <div className="grid grid-cols-2 gap-x-3.5 gap-y-5 sm:gap-x-5 sm:gap-y-7">
           {isLoading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <HighlightCardSkeleton key={i} />
@@ -85,10 +85,10 @@ export default function CategoryHighlightGrid() {
                   <Link
                     key={card.id}
                     to={link}
-                    className="group flex flex-col gap-2 sm:gap-2.5"
+                    className="group flex flex-col gap-2.5 sm:gap-3"
                   >
                     <div
-                      className="relative aspect-square rounded-2xl overflow-hidden shadow-sm group-hover:shadow-md transition-all"
+                      className="relative aspect-[3/4] overflow-hidden rounded-xl shadow-sm transition-all group-hover:shadow-md"
                       style={{ backgroundColor: card.bg_color || '#F5F0E8' }}
                     >
                       {card.image_url && (
@@ -102,14 +102,14 @@ export default function CategoryHighlightGrid() {
                           }}
                         />
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-transparent" />
-                      <h3 className="absolute top-3 left-3 sm:top-4 sm:left-4 text-white text-lg sm:text-2xl font-semibold drop-shadow-sm">
+                      <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-black/35 via-black/10 to-transparent" />
+                      <h3 className="absolute inset-x-2 top-4 text-center text-[clamp(1.1rem,5vw,2rem)] font-medium leading-tight text-white drop-shadow-sm sm:top-5">
                         {card.title}
                       </h3>
                     </div>
                     {card.subtitle && (
                       <span
-                        className="text-center text-sm sm:text-base font-semibold"
+                        className="text-center text-[clamp(1rem,4vw,1.65rem)] font-semibold leading-tight"
                         style={{ color: card.text_color || '#16A34A' }}
                       >
                         {card.subtitle}
