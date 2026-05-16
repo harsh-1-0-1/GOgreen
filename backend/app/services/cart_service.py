@@ -82,6 +82,7 @@ async def add_item(
             return await _load_cart(db, cart)
 
     item = CartItem(cart_id=cart.id, product_id=product_id, quantity=quantity)
+    cart.items.append(item)
     db.add(item)
     await db.flush()
     return await _load_cart(db, cart)
@@ -93,6 +94,7 @@ async def update_item(db: AsyncSession, cart: Cart, item_id: int, quantity: int)
         raise ValueError("Cart item not found")
 
     if quantity == 0:
+        cart.items.remove(item)
         await db.delete(item)
     else:
         product = await db.get(Product, item.product_id)
@@ -108,6 +110,7 @@ async def remove_item(db: AsyncSession, cart: Cart, item_id: int) -> Cart:
     item = next((i for i in cart.items if i.id == item_id), None)
     if not item:
         raise ValueError("Cart item not found")
+    cart.items.remove(item)
     await db.delete(item)
     await db.flush()
     return await _load_cart(db, cart)

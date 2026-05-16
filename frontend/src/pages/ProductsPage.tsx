@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, SlidersHorizontal, X } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useBanners } from '@/hooks/useBanners';
 import ProductCard from '@/components/product/ProductCard';
+import { getTagStyle } from '@/components/product/ProductTagBadges';
 import SkeletonCard from '@/components/ui/SkeletonCard';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -242,15 +243,25 @@ function FiltersSidebar({
       <div>
         <h4 className="font-semibold text-sm mb-3">Tags</h4>
         <div className="flex flex-wrap gap-2">
-          {popularTags.map((tag) => (
-            <button
-              key={tag}
-              onClick={() => onTagToggle(tag)}
-              className={`px-3 py-1.5 text-xs rounded-full border transition touch-target ${selectedTags.includes(tag) ? 'bg-primary text-white border-primary' : 'bg-white hover:border-primary-light'}`}
-            >
-              {tag}
-            </button>
-          ))}
+          {popularTags.map((tag) => {
+            const isSelected = selectedTags.includes(tag);
+            const style = getTagStyle(tag);
+            const label = tag.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            return (
+              <button
+                key={tag}
+                onClick={() => onTagToggle(tag)}
+                className="px-3 py-1.5 text-xs rounded-full border transition-all touch-target font-medium"
+                style={isSelected ? {
+                  backgroundColor: style.bg,
+                  color: style.text,
+                  borderColor: style.border,
+                } : undefined}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -365,17 +376,32 @@ export default function ProductsPage() {
         {data && <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{data.total} products</p>}
       </div>
 
-      {/* Mobile sort chips */}
-      <div className="lg:hidden flex gap-2 overflow-x-auto scrollbar-hide pb-3 -mx-3 px-3">
-        {SORT_OPTIONS.map((o) => (
-          <button
-            key={o.value}
-            onClick={() => updateParams({ sort_by: o.value })}
-            className={`shrink-0 px-3 py-1.5 text-xs rounded-full border whitespace-nowrap transition touch-target ${sort === o.value ? 'bg-primary text-white border-primary' : 'bg-white hover:border-primary-light'}`}
+      {/* Mobile Control Bar */}
+      <div className="lg:hidden flex items-center gap-3 mb-4 -mx-1 sm:mx-0">
+        <button
+          onClick={() => setMobileFiltersOpen(true)}
+          className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-xl py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 transition-colors"
+        >
+          <SlidersHorizontal size={18} className="text-primary" /> 
+          Filters
+          {(selectedTags.length > 0 || category || minPrice || maxPrice) && (
+            <span className="w-2 h-2 rounded-full bg-accent ml-1" />
+          )}
+        </button>
+        
+        <div className="flex-1 relative">
+          <select
+            value={sort}
+            onChange={(e) => updateParams({ sort_by: e.target.value })}
+            className="w-full appearance-none bg-white border border-gray-200 rounded-xl py-2.5 pl-4 pr-10 text-sm font-semibold text-gray-700 shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary truncate"
           >
-            {o.label}
-          </button>
-        ))}
+            <option value="" disabled>Sort By</option>
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        </div>
       </div>
 
       {/* Desktop sort */}
@@ -465,13 +491,6 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Mobile filter FAB */}
-      <button
-        className="lg:hidden fixed bottom-20 left-4 z-30 flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-full shadow-lg text-sm font-medium active:scale-95 transition-transform safe-bottom"
-        onClick={() => setMobileFiltersOpen(true)}
-      >
-        <SlidersHorizontal size={16} /> Filters
-      </button>
     </div>
   );
 }

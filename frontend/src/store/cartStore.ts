@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import api from '@/lib/api';
-import type { Cart, CartItem } from '@/types';
+import type { Cart, CartItem, Product } from '@/types';
 
 interface CartState {
   items: CartItem[];
@@ -8,10 +8,11 @@ interface CartState {
   itemCount: number;
   cartId: number | null;
   isDrawerOpen: boolean;
+  lastAddedProduct: Product | null;
   openDrawer: () => void;
   closeDrawer: () => void;
   fetchCart: () => Promise<void>;
-  addItem: (productId: number, quantity?: number) => Promise<void>;
+  addItem: (productId: number, quantity?: number, product?: Product) => Promise<void>;
   updateItem: (itemId: number, quantity: number) => Promise<void>;
   removeItem: (itemId: number) => Promise<void>;
   mergeCart: (sessionId: string) => Promise<void>;
@@ -27,15 +28,16 @@ function applyCart(data: Cart) {
   };
 }
 
-export const useCartStore = create<CartState>((set) => ({
+export const useCartStore = create<CartState>((set, get) => ({
   items: [],
   total: 0,
   itemCount: 0,
   cartId: null,
   isDrawerOpen: false,
+  lastAddedProduct: null,
 
   openDrawer: () => set({ isDrawerOpen: true }),
-  closeDrawer: () => set({ isDrawerOpen: false }),
+  closeDrawer: () => set({ isDrawerOpen: false, lastAddedProduct: null }),
 
   fetchCart: async () => {
     try {
@@ -46,22 +48,60 @@ export const useCartStore = create<CartState>((set) => ({
     }
   },
 
-  addItem: async (productId, quantity = 1) => {
+  addItem: async (productId, quantity = 1, product) => {
     const { data } = await api.post<Cart>('/cart/items', {
       product_id: productId,
       quantity,
     });
-    set({ ...applyCart(data), isDrawerOpen: true });
+    set({
+      ...applyCart(data),
+      isDrawerOpen: true,
+      lastAddedProduct: product ?? null,
+    });
   },
 
   updateItem: async (itemId, quantity) => {
-    const { data } = await api.put<Cart>(`/cart/items/${itemId}`, { quantity });
-    set(applyCart(data));
+    const previousState = { items: get().items, total: get().total, itemCount: get().itemCount };
+
+    // Optimistic update
+    const newItems = previousState.items.map((i) =>
+      i.id === itemId
+        ? { ...i, quantity, line_total: i.product.price * quantity }
+        : i
+    );
+    set({
+      items: newItems,
+      total: newItems.reduce((sum, i) => sum + i.line_total, 0),
+      itemCount: newItems.reduce((sum, i) => sum + i.quantity, 0),
+    });
+
+    try {
+      const { data } = await api.put<Cart>(`/cart/items/${itemId}`, { quantity });
+      set(applyCart(data));
+    } catch (err) {
+      set(previousState);
+      throw err;
+    }
   },
 
   removeItem: async (itemId) => {
-    const { data } = await api.delete<Cart>(`/cart/items/${itemId}`);
-    set(applyCart(data));
+    const previousState = { items: get().items, total: get().total, itemCount: get().itemCount };
+
+    // Optimistic update
+    const newItems = previousState.items.filter((i) => i.id !== itemId);
+    set({
+      items: newItems,
+      total: newItems.reduce((sum, i) => sum + i.line_total, 0),
+      itemCount: newItems.reduce((sum, i) => sum + i.quantity, 0),
+    });
+
+    try {
+      const { data } = await api.delete<Cart>(`/cart/items/${itemId}`);
+      set(applyCart(data));
+    } catch (err) {
+      set(previousState);
+      throw err;
+    }
   },
 
   mergeCart: async (sessionId) => {

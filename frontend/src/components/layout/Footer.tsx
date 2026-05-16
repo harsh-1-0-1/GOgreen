@@ -87,7 +87,7 @@ const SOCIALS = [
 
 export default function Footer() {
   return (
-    <footer className="bg-[#1B4332] text-white mt-10 sm:mt-20 mb-14 md:mb-0">
+    <footer className="bg-[#1B4332] text-white mt-10 sm:mt-20 pb-20 md:pb-0">
       <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 py-10 sm:py-14">
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-6">
           {/* Logo column */}

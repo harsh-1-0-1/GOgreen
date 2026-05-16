@@ -3,9 +3,10 @@ import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import RecommendationBar from './RecommendationBar';
 
 export default function CartDrawer() {
-  const { isDrawerOpen, closeDrawer, items, total, itemCount, updateItem, removeItem } =
+  const { isDrawerOpen, closeDrawer, items, total, itemCount, updateItem, removeItem, lastAddedProduct } =
     useCartStore();
 
   useBodyScrollLock(isDrawerOpen);
@@ -92,6 +93,11 @@ export default function CartDrawer() {
                 <p className="text-sm font-semibold shrink-0">₹{item.line_total}</p>
               </div>
             ))
+          )}
+
+          {/* Smart recommendations — show after add */}
+          {lastAddedProduct && items.length > 0 && (
+            <RecommendationBar lastAddedProduct={lastAddedProduct} cartItems={items} />
           )}
         </div>
 

@@ -3,16 +3,10 @@ import toast from 'react-hot-toast';
 
 import { useProducts } from '@/hooks/useProducts';
 import { useCartStore } from '@/store/cartStore';
+import ProductTagBadges from '@/components/product/ProductTagBadges';
 import type { Product } from '@/types';
 
 const SECONDARY = '#16A34A';
-
-function formatTag(slug: string): string {
-  return slug
-    .split('-')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-}
 
 function ProductTile({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
@@ -29,7 +23,7 @@ function ProductTile({ product }: { product: Product }) {
     e.preventDefault();
     e.stopPropagation();
     try {
-      await addItem(product.id);
+      await addItem(product.id, 1, product);
       toast.success(`${product.name} added to cart`);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to add');
@@ -66,18 +60,7 @@ function ProductTile({ product }: { product: Product }) {
           {product.name}
         </h3>
 
-        {product.tags?.length > 0 && (
-          <div className="flex flex-wrap gap-1 sm:gap-1.5">
-            {product.tags.slice(0, 2).map((tag) => (
-              <span
-                key={tag}
-                className="text-[10px] sm:text-xs font-medium px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-[#dcfce7] text-[#16A34A] border border-[#bbf7d0]"
-              >
-                {formatTag(tag)}
-              </span>
-            ))}
-          </div>
-        )}
+        <ProductTagBadges tags={product.tags} maxTags={2} size="sm" />
 
         <div className="flex items-baseline gap-2 mt-0.5">
           <span
