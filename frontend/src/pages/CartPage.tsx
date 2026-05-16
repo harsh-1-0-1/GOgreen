@@ -3,9 +3,10 @@ import { ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import { useAuthStore } from '@/store/authStore';
+import RecommendationBar from '@/components/cart/RecommendationBar';
 
 export default function CartPage() {
-  const { items, total, itemCount, updateItem, removeItem } = useCartStore();
+  const { items, total, itemCount, updateItem, removeItem, lastAddedProduct } = useCartStore();
   const { user, openAuthModal } = useAuthStore();
 
   async function handleUpdate(itemId: number, qty: number) {
@@ -86,6 +87,13 @@ export default function CartPage() {
             </div>
           ))}
         </div>
+
+        {/* Smart cross-sell recommendations */}
+        {lastAddedProduct && (
+          <div className="lg:col-span-2">
+            <RecommendationBar lastAddedProduct={lastAddedProduct} cartItems={items} />
+          </div>
+        )}
 
         {/* Order summary — desktop: sticky sidebar, mobile: stacked below */}
         <div className="lg:col-span-1 hidden lg:block">

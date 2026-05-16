@@ -1,15 +1,8 @@
 import { Link } from 'react-router-dom';
-import { Plus, ShoppingCart } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
+import ProductTagBadges from '@/components/product/ProductTagBadges';
 import type { Product } from '@/types';
-
-function formatTag(slug: string): string {
-  return slug
-    .split('-')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-}
 
 export default function ProductCard({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
@@ -23,7 +16,7 @@ export default function ProductCard({ product }: { product: Product }) {
     e.preventDefault();
     e.stopPropagation();
     try {
-      await addItem(product.id);
+      await addItem(product.id, 1, product);
       toast.success(`${product.name} added to cart`);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to add');
@@ -53,23 +46,15 @@ export default function ProductCard({ product }: { product: Product }) {
           </span>
         )}
       </div>
+
       <div className="p-2.5 sm:p-4 flex-1 flex flex-col">
         <h3 className="text-xs sm:text-sm font-medium line-clamp-1 group-hover:text-primary transition-colors">
           {product.name}
         </h3>
-        {product.tags?.length > 0 && (
-          <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-1 sm:mt-1.5">
-            {product.tags.slice(0, 2).map((tag) => (
-              <span
-                key={tag}
-                className="text-[10px] sm:text-xs font-medium px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-[#dcfce7] text-[#16A34A] border border-[#bbf7d0]"
-              >
-                {formatTag(tag)}
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="flex items-baseline gap-1.5 sm:gap-2 mt-1 sm:mt-2">
+
+        <ProductTagBadges tags={product.tags} maxTags={2} size="sm" className="mt-1.5 sm:mt-2" />
+
+        <div className="flex items-baseline gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
           <span className="text-primary font-bold text-sm sm:text-base">₹{product.price}</span>
           {product.original_price && product.original_price > product.price && (
             <span className="text-[10px] sm:text-xs text-gray-400 line-through">
@@ -77,16 +62,18 @@ export default function ProductCard({ product }: { product: Product }) {
             </span>
           )}
         </div>
+
         {product.stock_qty <= 5 && product.stock_qty > 0 && (
           <p className="text-[10px] sm:text-xs text-red-500 mt-0.5 sm:mt-1">Only {product.stock_qty} left!</p>
         )}
         {product.stock_qty === 0 && (
           <p className="text-[10px] sm:text-xs text-red-500 mt-0.5 sm:mt-1 font-medium">Out of Stock</p>
         )}
+
         <div className="mt-auto pt-3">
           <button
             onClick={handleAdd}
-            className="mt-auto w-full py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90"
+            className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90"
             style={{ backgroundColor: '#16A34A' }}
           >
             Add to cart

@@ -554,6 +554,26 @@ export default function Navbar() {
 
             {/* Collection-style nav rows */}
             <div className="flex-1 overflow-y-auto">
+              {/* Promo Banner */}
+              <div className="px-4 pt-4 pb-2">
+                <Link
+                  to="/products?sort_by=popular"
+                  onClick={closeDrawer}
+                  className="block w-full bg-[#4A2F1D] rounded-2xl p-3 sm:p-4 shadow-md flex items-center justify-between group"
+                >
+                  <div className="flex -space-x-3 sm:-space-x-4">
+                    <img src="https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=100&h=100&fit=crop" className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-[#4A2F1D] object-cover group-hover:-translate-y-1 transition-transform" alt="" />
+                    <img src="https://images.unsplash.com/photo-1501004318641-b39e6451bec6?w=100&h=100&fit=crop" className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-[#4A2F1D] object-cover group-hover:-translate-y-1 transition-transform delay-75" alt="" />
+                    <img src="https://images.unsplash.com/photo-1545241047-6083a3684587?w=100&h=100&fit=crop" className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-[#4A2F1D] object-cover group-hover:-translate-y-1 transition-transform delay-100" alt="" />
+                    <img src="https://images.unsplash.com/photo-1477554193778-9562c28588c0?w=100&h=100&fit=crop" className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-[#4A2F1D] object-cover group-hover:-translate-y-1 transition-transform delay-150" alt="" />
+                  </div>
+                  <div className="text-right ml-2 flex-1">
+                    <p className="text-white text-[11px] sm:text-xs font-medium leading-tight">Buy any 4 Plants for just</p>
+                    <p className="text-[#F4A261] text-lg sm:text-xl font-extrabold mt-0.5 tracking-wide">₹699/-</p>
+                  </div>
+                </Link>
+              </div>
+
               <MobileCollectionList onNavigate={closeDrawer} />
             </div>
 
