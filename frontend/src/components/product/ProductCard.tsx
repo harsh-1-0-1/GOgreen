@@ -86,7 +86,8 @@ export default function ProductCard({ product }: { product: Product }) {
         <div className="mt-auto pt-3">
           <button
             onClick={handleAdd}
-            className="w-full bg-primary text-white text-[13px] sm:text-sm font-medium py-2 rounded-lg hover:bg-primary/90 transition-colors"
+            className="mt-auto w-full py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90"
+            style={{ backgroundColor: '#16A34A' }}
           >
             Add to cart
           </button>

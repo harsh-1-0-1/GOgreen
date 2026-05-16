@@ -252,7 +252,8 @@ export default function ProductDetailPage() {
                 </div>
                 <button
                   onClick={handleAddToCart}
-                  className="flex-1 py-3.5 bg-primary text-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-primary/90 transition"
+                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90 flex items-center justify-center gap-2"
+                  style={{ backgroundColor: '#16A34A' }}
                 >
                   <ShoppingCart size={18} />
                   Add to Cart
@@ -302,7 +303,8 @@ export default function ProductDetailPage() {
             </div>
             <button
               onClick={handleAddToCart}
-              className="flex-1 py-3 bg-primary text-white rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+              className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90 flex items-center justify-center gap-2"
+              style={{ backgroundColor: '#16A34A' }}
             >
               <ShoppingCart size={16} />
               Add to Cart

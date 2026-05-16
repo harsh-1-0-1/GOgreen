@@ -21,6 +21,7 @@ export default function PageBanner() {
   const banner = banners[0] || FALLBACK_PAGE_BANNER;
 
   if (location.pathname.startsWith('/admin')) return null;
+  if (location.pathname === '/') return null;
 
   const isDefaultScreenshot = banner.image_url?.includes(
     'page-banner-default',

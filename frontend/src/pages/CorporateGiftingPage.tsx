@@ -27,6 +27,7 @@ const PROCESS = [
 export default function CorporateGiftingPage() {
   return (
     <div className="overflow-hidden bg-[#F8FAF4]">
+      <CorporateGiftInquiryForm />
       <section className="relative isolate">
         <div className="absolute inset-0 -z-10 bg-[linear-gradient(115deg,#edf5e8_0%,#fffaf1_48%,#eff8f1_100%)]" />
         <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[1.02fr_0.98fr] lg:px-10 lg:py-20 xl:px-16">
@@ -168,7 +169,6 @@ export default function CorporateGiftingPage() {
             Premium plant gifting, made effortless for your team.
           </h2>
         </div>
-        <CorporateGiftInquiryForm />
       </section>
 
       <FloatingWhatsAppButton />
