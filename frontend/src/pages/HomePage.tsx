@@ -1,6 +1,7 @@
 import { Leaf, RotateCcw, Truck, HeartHandshake } from 'lucide-react';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import HeroBanner from '@/components/home/HeroBanner';
+import MobileCategoryNav from '@/components/home/MobileCategoryNav';
 import QuickAccessStrip from '@/components/home/QuickAccessStrip';
 import CategoryHighlightGrid from '@/components/home/CategoryHighlightGrid';
 import TrendingProductsGrid from '@/components/home/TrendingProductsGrid';
@@ -37,6 +38,7 @@ function FeatureStrip() {
 export default function HomePage() {
   return (
     <div>
+      <MobileCategoryNav />
       <ErrorBoundary><HeroBanner /></ErrorBoundary>
       <QuickAccessStrip />
       <ErrorBoundary><CategoryHighlightGrid /></ErrorBoundary>

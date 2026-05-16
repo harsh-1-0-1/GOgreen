@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ChevronDown,
@@ -284,16 +284,7 @@ export default function Navbar() {
 
         {/* Right Icons â€” clean, spaced */}
         <div className="flex items-center gap-1 ml-auto">
-          {/* Mobile search toggle â€” hidden on home (home has persistent bar below) */}
-          {!isHome && (
-            <button
-              className="md:hidden p-2 text-gray-700 hover:text-primary transition-colors touch-target"
-              onClick={() => setSearchOpen(!searchOpen)}
-              aria-label="Search"
-            >
-              <Search size={22} />
-            </button>
-          )}
+
 
           {/* WhatsApp */}
           <a
@@ -486,10 +477,9 @@ export default function Navbar() {
 
       {/* ================================================================ */}
       {/* Mobile search bar                                                */}
-      {/* Home: always visible | Other pages: toggle via icon              */}
+      {/* Always visible on all pages                                      */}
       {/* ================================================================ */}
-      {(isHome || searchOpen) && (
-        <div className="md:hidden px-4 pb-3 pt-1 bg-white border-t border-gray-100">
+      <div className="md:hidden px-4 pb-3 pt-1 bg-white border-t border-gray-100">
           <form onSubmit={handleSearch}>
             <div className="relative flex items-center">
               <Search size={16} className="absolute left-4 text-gray-400 pointer-events-none" />
@@ -499,19 +489,12 @@ export default function Navbar() {
                 placeholder="Search for plants, seeds, pots..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-12 py-3 border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-secondary text-sm transition-all placeholder:text-gray-400"
+                className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-secondary text-sm transition-all placeholder:text-gray-400"
               />
-              <button
-                type="submit"
-                className="absolute right-1.5 h-9 w-9 rounded-full flex items-center justify-center text-white transition-colors"
-                style={{ backgroundColor: '#16A34A' }}
-              >
-                <Search size={15} />
-              </button>
+              <button type="submit" className="sr-only">Search</button>
             </div>
           </form>
         </div>
-      )}
 
       {/* ================================================================ */}
       {/* Mobile drawer                                                    */}

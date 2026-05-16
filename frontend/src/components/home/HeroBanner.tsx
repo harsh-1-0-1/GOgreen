@@ -36,10 +36,7 @@ function isDarkBg(hex: string): boolean {
 function SlidesSkeleton() {
   return (
     <section className="w-full overflow-hidden">
-      <div
-        className="animate-pulse bg-[#f0ebe3]"
-        style={{ height: 'clamp(420px, 58vh, 680px)' }}
-      >
+      <div className="animate-pulse bg-[#f0ebe3] h-[240px] sm:h-[280px] md:h-[58vh] lg:h-[58vh]">
         <div className="flex items-center h-full px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28">
           <div className="space-y-5 w-full max-w-md">
             <div className="h-10 w-3/4 bg-gray-300/40 rounded-lg" />
@@ -102,10 +99,9 @@ export default function HeroBanner() {
       onTouchEnd={handleTouchEnd}
     >
       <div
-        className="flex transition-transform duration-700 ease-in-out"
+        className="flex transition-transform duration-700 ease-in-out h-[240px] sm:h-[280px] md:h-[58vh] lg:h-[58vh]"
         style={{
           transform: `translateX(-${current * 100}%)`,
-          height: 'clamp(420px, 58vh, 680px)',
         }}
       >
         {slides.map((slide, i) => {
