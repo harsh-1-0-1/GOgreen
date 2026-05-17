@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Leaf,
   LogOut,
@@ -29,6 +30,7 @@ import { WhatsAppIcon } from './WhatsAppIcon';
 import { MobileCollectionList } from './MobileCollectionList';
 export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -146,6 +148,54 @@ export default function Navbar() {
 
   function closeDrawer() {
     setDrawerOpen(false);
+    setActiveSubmenu(null);
+  }
+
+  // Dynamic submenu resolver
+  function getSubcategories(label: string) {
+    const cleanLabel = label.toLowerCase().trim();
+    
+    // Find matching nav item in desktop NAV_ITEMS
+    const navItem = NAV_ITEMS.find(
+      (item) => {
+        const itemLabel = item.label.toLowerCase().trim();
+        return itemLabel === cleanLabel || 
+               (cleanLabel === 'plants' && itemLabel === 'plants') ||
+               (cleanLabel === 'seeds' && itemLabel === 'seeds') ||
+               (cleanLabel === 'pots & planters' && itemLabel === 'pots & planters') ||
+               (cleanLabel === 'plant care' && itemLabel === 'plant care');
+      }
+    );
+
+    if (navItem && navItem.groups) {
+      const flatLinks: { label: string; href: string }[] = [];
+      
+      // Prepend an "All [Label]" link
+      flatLinks.push({ label: `All ${label}`, href: navItem.href });
+      
+      navItem.groups.forEach((column) => {
+        column.forEach((group) => {
+          group.links.forEach((link) => {
+            if (!flatLinks.some((l) => l.label.toLowerCase() === link.label.toLowerCase())) {
+              flatLinks.push(link);
+            }
+          });
+        });
+      });
+      return flatLinks;
+    }
+
+    // Fallback/Custom list for Gifting
+    if (cleanLabel === 'gifting') {
+      return [
+        { label: 'All Gifts', href: '/products?tags=gifting' },
+        { label: 'Plant Gifting', href: '/products?tags=gifting' },
+        { label: 'Corporate Gifting', href: '/corporate-gifting' },
+        { label: 'Vastu Gifting', href: '/products?tags=vastu-friendly' },
+      ];
+    }
+
+    return null;
   }
 
   function isNavActive(item: NavItemDef): boolean {
@@ -499,171 +549,279 @@ export default function Navbar() {
         </div>
 
       {/* ================================================================ */}
-      {/* Mobile drawer                                                    */}
+      {/* Mobile drawer (Sidebar)                                          */}
       {/* ================================================================ */}
-      {drawerOpen && (
-        <>
+      <div
+        className={clsx(
+          "fixed inset-0 z-50 transition-all duration-500",
+          drawerOpen ? "visible" : "invisible pointer-events-none"
+        )}
+      >
+        {/* Backdrop overlay */}
+        <div
+          className={clsx(
+            "absolute inset-0 bg-black/60 backdrop-blur-[3px] transition-opacity duration-500 ease-in-out",
+            drawerOpen ? "opacity-100" : "opacity-0"
+          )}
+          onClick={closeDrawer}
+        />
+        {/* Drawer Panel */}
+        <div
+          className={clsx(
+            "fixed top-0 left-0 w-[82vw] max-w-[360px] sm:max-w-[380px] h-full bg-[#FAFBF9] shadow-[20px_0_40px_rgba(0,0,0,0.12)] flex flex-col overflow-hidden transition-transform duration-500",
+            drawerOpen ? "translate-x-0" : "-translate-x-full"
+          )}
+          style={{ transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)' }}
+        >
+          {/* Sliding panels track */}
           <div
-            className="fixed inset-0 bg-black/40 z-50 animate-fade-in"
-            onClick={closeDrawer}
-          />
-          <div className="fixed top-0 left-0 w-[88vw] max-w-[400px] sm:max-w-[440px] lg:max-w-[480px] h-full bg-white z-50 shadow-2xl flex flex-col overflow-hidden animate-slide-right">
-            {/* Mobile Drawer Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
-              <Link
-                to="/"
-                onClick={closeDrawer}
-                className="flex items-center gap-2"
-              >
-                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-sm">
-                  <Leaf size={16} className="text-white" />
-                </div>
-                <span className="text-lg font-bold text-primary tracking-tight">Plantoga</span>
-              </Link>
-              <button onClick={closeDrawer} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Promotional Banner (between Logo and Login button) */}
-            <div className="px-4 py-3 shrink-0">
-              <Link
-                to="/products?tags=vastu-friendly"
-                onClick={closeDrawer}
-                className="flex items-center gap-3 p-3 bg-emerald-50/80 border border-emerald-100/50 rounded-2xl shadow-sm hover:bg-emerald-50 transition active:scale-[0.99] group"
-              >
-                <img 
-                  src="https://images.unsplash.com/photo-1545241047-6083a3684587?w=100&h=100&fit=crop" 
-                  className="w-12 h-12 rounded-xl object-cover border border-white/50 shrink-0 group-hover:scale-105 transition-transform" 
-                  alt="Vastu Plants" 
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-emerald-950 uppercase tracking-wider">Vastu Plants</p>
-                  <p className="text-[11px] font-semibold text-emerald-700 mt-0.5">at just ₹299</p>
-                </div>
-                <div className="w-7 h-7 rounded-full bg-emerald-600/10 flex items-center justify-center shrink-0">
-                  <ChevronRight size={14} className="text-emerald-700" />
-                </div>
-              </Link>
-            </div>
-
-            {/* Login / Register Button */}
-            <div className="px-4 pb-4 border-b border-gray-100 shrink-0">
-              {user ? (
-                <div className="flex items-center justify-between p-3.5 bg-gray-50/80 rounded-2xl border border-gray-100/80">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <User size={18} className="text-primary" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-gray-800 truncate">
-                        {user.full_name || 'Account'}
-                      </p>
-                      <p className="text-[10px] text-gray-500 truncate mt-0.5">
-                        {user.email}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      logout();
-                      closeDrawer();
-                    }}
-                    className="text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100/70 px-2.5 py-1.5 rounded-full transition-colors shrink-0"
-                  >
-                    Logout
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => {
-                    closeDrawer();
-                    openAuthModal();
-                  }}
-                  className="w-full py-3 bg-primary hover:bg-primary/95 text-white rounded-full text-sm font-semibold tracking-wide shadow-sm active:scale-[0.98] transition-all"
+            className="w-[200%] h-full flex transition-transform duration-500"
+            style={{
+              transform: activeSubmenu ? 'translateX(-50%)' : 'translateX(0)',
+              transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+          >
+            {/* SCREEN 1: Main Menu Panel */}
+            <div className="w-1/2 h-full flex flex-col shrink-0 overflow-hidden">
+              {/* Mobile Drawer Header */}
+              <div className="flex items-center justify-between px-5 py-4 shrink-0">
+                <Link
+                  to="/"
+                  onClick={closeDrawer}
+                  className="flex items-center gap-2.5 group"
                 >
-                  Login / Register
+                  <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300">
+                    <Leaf size={18} className="text-white" />
+                  </div>
+                  <span className="text-xl font-extrabold text-primary tracking-tight">Plantoga</span>
+                </Link>
+                <button
+                  onClick={closeDrawer}
+                  className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 active:scale-90 transition-all duration-200"
+                  aria-label="Close menu"
+                >
+                  <X size={20} />
                 </button>
-              )}
-            </div>
-
-            {/* Scrollable Area: Menu Items + CONTACT NOW */}
-            <div className="flex-1 overflow-y-auto animate-fade-in-up">
-              {/* Strictly ordered 10 Menu Items */}
-              <div className="px-4 py-3 space-y-1">
-                {[
-                  { label: 'Plants', href: '/products?category=plants' },
-                  { label: 'Seeds', href: '/products?category=seeds' },
-                  { label: 'Pots & Planters', href: '/products?category=pots-planters' },
-                  { label: 'Plant Care', href: '/products?category=plant-care' },
-                  { label: 'Gifting', href: '/products?tags=gifting' },
-                  { label: 'Corporate / Bulk Gifting', href: '/corporate-gifting' },
-                  { label: 'Vastu Plants', href: '/products?tags=vastu-friendly' },
-                  { label: 'Air Purifying Plants', href: '/products?category=air-purifying-plants' },
-                  { label: 'Offers', href: '/products?tags=offers' },
-                  { label: 'Blog', href: '/blog' },
-                ].map((item) => (
-                  <Link
-                    key={item.label}
-                    to={item.href}
-                    onClick={closeDrawer}
-                    className="flex items-center justify-between px-3 py-3 text-sm font-semibold text-gray-700 hover:text-primary rounded-xl hover:bg-gray-50/50 transition-colors border-b border-gray-50/50 last:border-0"
-                  >
-                    <span>{item.label}</span>
-                    <ChevronRight size={15} className="text-gray-400" />
-                  </Link>
-                ))}
               </div>
 
-              {/* Bottom section: CONTACT NOW */}
-              <div className="mt-4 border-t border-gray-100 pt-5 px-6 pb-8 space-y-3.5">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">
-                  CONTACT NOW
-                </p>
-                <div className="space-y-2.5">
+              {/* Promotional Banner Card */}
+              <div className="px-5 pb-3 shrink-0">
+                <Link
+                  to="/products?tags=vastu-friendly"
+                  onClick={closeDrawer}
+                  className="relative flex items-center gap-3.5 p-3.5 rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-50/90 to-teal-50/30 border border-emerald-100/50 shadow-[0_4px_12px_rgba(45,106,79,0.04)] group transition active:scale-[0.98]"
+                >
+                  <div className="absolute -right-6 -bottom-6 w-16 h-16 rounded-full bg-emerald-100/30 blur-md pointer-events-none" />
+                  
+                  <img 
+                    src="https://images.unsplash.com/photo-1545241047-6083a3684587?w=100&h=100&fit=crop" 
+                    className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm shrink-0 group-hover:scale-105 transition-transform duration-300" 
+                    alt="Vastu Plants" 
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="inline-block px-1.5 py-0.5 rounded-md bg-emerald-600/10 text-[9px] font-bold text-emerald-800 uppercase tracking-wider leading-none">
+                      Vastu Collection
+                    </span>
+                    <p className="text-xs font-bold text-emerald-950 truncate mt-1 leading-snug">Bring Home Positivity</p>
+                    <p className="text-[11px] font-semibold text-emerald-700 mt-0.5">Live plants from just ₹299</p>
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0 group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+                    <ChevronRight size={14} className="text-emerald-800 group-hover:text-inherit transition-colors" />
+                  </div>
+                </Link>
+              </div>
+
+              {/* Login / Register Button or User Profile Card */}
+              <div className="px-5 pb-4 border-b border-gray-100/80 shrink-0">
+                {user ? (
+                  <div className="flex items-center justify-between p-3.5 bg-gray-50/70 rounded-2xl border border-gray-100">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-extrabold shadow-sm shrink-0 text-sm">
+                        {(user.full_name || 'U').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-gray-800 truncate leading-none">
+                          {user.full_name || 'Account'}
+                        </p>
+                        <p className="text-[10px] text-gray-400 truncate mt-1 leading-none">
+                          {user.email}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        logout();
+                        closeDrawer();
+                      }}
+                      className="text-[11px] font-bold text-red-600 bg-red-50 hover:bg-red-100 active:scale-95 px-3 py-1.5 rounded-full transition-all shrink-0"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      closeDrawer();
+                      openAuthModal();
+                    }}
+                    className="w-full py-3.5 bg-primary hover:bg-primary/95 text-white rounded-full text-xs font-bold tracking-wider uppercase shadow-sm active:scale-[0.97] transition-all duration-200"
+                  >
+                    Login / Register
+                  </button>
+                )}
+              </div>
+
+              {/* Scrollable Area: Menu Items & Bottom Section */}
+              <div className="flex-1 overflow-y-auto scrollbar-none scroll-smooth flex flex-col justify-between" style={{ WebkitOverflowScrolling: 'touch' }}>
+                {/* Strictly ordered 10 Menu Items with Circular Previews */}
+                <div className="px-3 py-3 space-y-1">
                   {[
-                    { label: 'About Us', href: '/#about-us' },
-                    { label: 'Track Your Order', href: '/orders' },
-                    { label: 'Support', href: `https://wa.me/${WHATSAPP_NUMBER}` },
-                    { label: 'Damage Replacement Form', href: '/damage-replacement' },
-                  ].map((link) => {
-                    const isExternal = link.href.startsWith('http');
-                    const Component = isExternal ? 'a' : Link;
-                    const props = isExternal 
-                      ? { href: link.href, target: '_blank', rel: 'noopener noreferrer' } 
-                      : { to: link.href };
+                    { label: 'Plants', href: '/products?category=plants', img: 'https://images.unsplash.com/photo-1545241047-6083a3684587?w=80&h=80&fit=crop&q=80' },
+                    { label: 'Seeds', href: '/products?category=seeds', img: 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?w=80&h=80&fit=crop&q=80' },
+                    { label: 'Pots & Planters', href: '/products?category=pots-planters', img: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=80&h=80&fit=crop&q=80' },
+                    { label: 'Plant Care', href: '/products?category=plant-care', img: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=80&h=80&fit=crop&q=80' },
+                    { label: 'Gifting', href: '/products?tags=gifting', img: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=80&h=80&fit=crop&q=80' },
+                    { label: 'Corporate / Bulk Gifting', href: '/corporate-gifting', img: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=80&h=80&fit=crop&q=80' },
+                    { label: 'Vastu Plants', href: '/products?tags=vastu-friendly', img: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=80&h=80&fit=crop&q=80' },
+                    { label: 'Air Purifying Plants', href: '/products?category=air-purifying-plants', img: 'https://images.unsplash.com/photo-1596547609652-9cf5d8d76921?w=80&h=80&fit=crop&q=80' },
+                    { label: 'Offers', href: '/products?tags=offers', img: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=80&h=80&fit=crop&q=80' },
+                    { label: 'Blog', href: '/blog', img: 'https://images.unsplash.com/photo-1506880018603-83d5b814b5a6?w=80&h=80&fit=crop&q=80' },
+                  ].map((item) => {
+                    const subcategories = getSubcategories(item.label);
+                    const hasSubmenu = subcategories !== null;
                     
                     return (
-                      <Component
-                        key={link.label}
-                        {...(props as any)}
-                        onClick={closeDrawer}
-                        className="flex items-center justify-between text-xs font-semibold text-gray-500 hover:text-primary transition-colors py-1.5"
+                      <Link
+                        key={item.label}
+                        to={item.href}
+                        onClick={(e) => {
+                          if (hasSubmenu) {
+                            e.preventDefault();
+                            setActiveSubmenu(item.label);
+                          } else {
+                            closeDrawer();
+                          }
+                        }}
+                        className="flex items-center justify-between px-3.5 py-2.5 rounded-xl hover:bg-emerald-50/40 active:bg-emerald-50/60 transition-all duration-200 group"
                       >
-                        <span>{link.label}</span>
-                        <ArrowUpRight size={14} className="text-gray-400" />
-                      </Component>
+                        <div className="flex items-center gap-3.5">
+                          <img
+                            src={item.img}
+                            alt={item.label}
+                            className="w-9 h-9 rounded-full object-cover border border-gray-100/60 shadow-xs group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                          <span className="text-[13.5px] font-semibold text-gray-800 group-hover:text-primary transition-colors duration-200">
+                            {item.label}
+                          </span>
+                        </div>
+                        {hasSubmenu ? (
+                          <ChevronRight size={14} className="text-gray-400 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-200" />
+                        ) : (
+                          <ChevronRight size={14} className="text-gray-300 opacity-60 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-200" />
+                        )}
+                      </Link>
                     );
                   })}
                 </div>
 
-                {/* Extra admin navigation link if needed */}
-                {user?.is_admin && (
-                  <div className="pt-2">
-                    <Link
-                      to="/admin"
-                      onClick={closeDrawer}
-                      className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-primary/5 hover:bg-primary/10 text-primary rounded-xl text-xs font-bold transition-colors"
-                    >
-                      <Settings size={14} /> Admin Panel
-                    </Link>
+                {/* Bottom Info & Contact Section */}
+                <div className="px-6 py-5 bg-gray-50/50 space-y-4 border-t border-gray-100/80">
+                  <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest leading-none">
+                    Customer Support & Info
+                  </p>
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {[
+                      { label: 'About Us', href: '/#about-us' },
+                      { label: 'Track Your Order', href: '/orders' },
+                      { label: 'Support', href: `https://wa.me/${WHATSAPP_NUMBER}` },
+                      { label: 'Damage Replacement Form', href: '/damage-replacement' },
+                    ].map((link) => {
+                      const isExternal = link.href.startsWith('http');
+                      const Component = isExternal ? 'a' : Link;
+                      const props = isExternal 
+                        ? { href: link.href, target: '_blank', rel: 'noopener noreferrer' } 
+                        : { to: link.href };
+                      
+                      return (
+                        <Component
+                          key={link.label}
+                          {...(props as any)}
+                          onClick={closeDrawer}
+                          className="flex items-center justify-between text-xs font-semibold text-gray-500 hover:text-primary hover:translate-x-0.5 transition-all duration-200 py-1"
+                        >
+                          <span>{link.label}</span>
+                          {isExternal ? (
+                            <ArrowUpRight size={14} className="text-gray-400" />
+                          ) : (
+                            <ChevronRight size={13} className="text-gray-400" />
+                          )}
+                        </Component>
+                      );
+                    })}
                   </div>
-                )}
+
+                  {/* Extra admin navigation link if needed */}
+                  {user?.is_admin && (
+                    <div className="pt-1.5">
+                      <Link
+                        to="/admin"
+                        onClick={closeDrawer}
+                        className="w-full flex items-center justify-center gap-1.5 py-3 bg-primary/5 hover:bg-primary/10 text-primary rounded-xl text-xs font-bold transition-all duration-200"
+                      >
+                        <Settings size={14} /> Admin Panel
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SCREEN 2: Submenu Panel */}
+            <div className="w-1/2 h-full flex flex-col shrink-0 bg-[#FAFBF9] overflow-hidden">
+              {/* Submenu Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => setActiveSubmenu(null)}
+                    className="flex items-center gap-1 text-gray-500 hover:text-primary active:scale-95 transition-all duration-150 -ml-1"
+                  >
+                    <ChevronLeft size={18} className="text-gray-600" />
+                    <span className="text-xs font-extrabold uppercase tracking-widest text-gray-500">Back</span>
+                  </button>
+                  <h2 className="text-base font-extrabold text-primary tracking-tight mt-1 uppercase">
+                    {activeSubmenu}
+                  </h2>
+                </div>
+                <button
+                  onClick={closeDrawer}
+                  className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 active:scale-90 transition-all duration-200"
+                  aria-label="Close menu"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Submenu category list body */}
+              <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+                {activeSubmenu && getSubcategories(activeSubmenu)?.map((sub) => (
+                  <Link
+                    key={sub.label}
+                    to={sub.href}
+                    onClick={closeDrawer}
+                    className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-emerald-50/40 active:bg-emerald-50/60 transition-all duration-200 group border-b border-gray-100/30 last:border-0"
+                  >
+                    <span className="text-[13.5px] font-semibold text-gray-700 group-hover:text-primary transition-colors duration-150">
+                      {sub.label}
+                    </span>
+                    <ChevronRight size={14} className="text-gray-400 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-150" />
+                  </Link>
+                ))}
               </div>
             </div>
           </div>
-        </>
-      )}
+        </div>
+      </div>
     </header>
   );
 }
