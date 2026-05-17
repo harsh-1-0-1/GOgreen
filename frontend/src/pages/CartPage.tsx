@@ -29,13 +29,104 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-16 sm:py-20 flex flex-col items-center gap-4 text-gray-400">
-        <ShoppingBag size={48} strokeWidth={1} />
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-600">Your cart is empty</h2>
-        <p className="text-sm">Add some plants to make your home greener!</p>
-        <Link to="/products" className="mt-2 px-6 py-3 bg-primary text-white rounded-full font-medium hover:bg-primary/90 transition">
-          Browse Plants
-        </Link>
+      <div className="max-w-4xl mx-auto px-4 py-12 sm:py-16 flex flex-col items-center">
+        {/* Empty State Header */}
+        <div className="flex flex-col items-center text-center max-w-md mx-auto mb-10 sm:mb-12">
+          <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center text-primary mb-4 shadow-inner">
+            <ShoppingBag size={28} className="text-emerald-700" />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Your cart is currently empty</h2>
+          <p className="text-sm text-gray-500 mt-2">
+            Before you head to check out, take a look at some of our favorite collections to kickstart your green space!
+          </p>
+        </div>
+
+        {/* Suggestion Section */}
+        <div className="w-full">
+          <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-6 text-center sm:text-left">
+            Shop Popular Collections
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
+            {[
+              {
+                title: 'Price Drop',
+                subtitle: 'Up to 50% OFF',
+                image: 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?w=500&q=80',
+                link: '/products?tags=offers',
+                color: 'text-amber-600',
+              },
+              {
+                title: 'XL Plants',
+                subtitle: 'Grow Big & Bold',
+                image: 'https://images.unsplash.com/photo-1614594975525-e45190c55d0b?w=500&q=80',
+                link: '/products?category=xl-plants',
+                color: 'text-emerald-700',
+              },
+              {
+                title: 'Plant Care',
+                subtitle: 'Thrive Guarantee',
+                image: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=500&q=80',
+                link: '/products?category=plant-care',
+                color: 'text-emerald-700',
+              },
+              {
+                title: 'Fertilizers',
+                subtitle: '100% Organic Nutrition',
+                image: 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?w=500&q=80',
+                link: '/products?category=potting-mix-fertilizers',
+                color: 'text-emerald-700',
+              },
+              {
+                title: 'Pots & Planters',
+                subtitle: 'Premium Ceramic Pots',
+                image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=500&q=80',
+                link: '/products?category=pots-planters',
+                color: 'text-emerald-700',
+              },
+              {
+                title: 'Plant Stands',
+                subtitle: 'Elevate Your Plants',
+                image: 'https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=500&q=80',
+                link: '/products?category=plant-stands',
+                color: 'text-emerald-700',
+              },
+            ].map((col) => (
+              <Link
+                key={col.title}
+                to={col.link}
+                className="group flex flex-col bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition active:scale-[0.99]"
+              >
+                <div className="relative aspect-[4/3] overflow-hidden bg-gray-50 shrink-0">
+                  <img
+                    src={col.image}
+                    alt={col.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors" />
+                </div>
+                <div className="p-3.5 flex flex-col flex-1">
+                  <h4 className="text-sm sm:text-base font-bold text-gray-800 line-clamp-1 leading-snug">
+                    {col.title}
+                  </h4>
+                  <p className={`text-[10px] sm:text-xs font-semibold mt-1 leading-none ${col.color}`}>
+                    {col.subtitle}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Return to Shop Button */}
+        <div className="mt-12 sm:mt-16 w-full flex justify-center">
+          <Link
+            to="/products"
+            className="px-8 py-3.5 bg-primary hover:bg-primary/95 text-white font-bold rounded-full shadow-md hover:shadow-lg transition active:scale-[0.98] text-sm tracking-wide"
+          >
+            Return to Shop
+          </Link>
+        </div>
       </div>
     );
   }

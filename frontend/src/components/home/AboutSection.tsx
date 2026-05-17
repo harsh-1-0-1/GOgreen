@@ -33,6 +33,7 @@ const PILLS = [
 export default function AboutSection() {
   return (
     <section
+      id="about-us"
       className="w-full border-t-4"
       style={{
         backgroundColor: '#F7F5F0',

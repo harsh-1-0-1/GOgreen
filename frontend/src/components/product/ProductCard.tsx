@@ -36,7 +36,7 @@ export default function ProductCard({ product }: { product: Product }) {
           loading="lazy"
         />
         {discount && (
-          <span className="absolute top-2 left-2 sm:top-3 sm:left-3 bg-accent text-white text-[10px] sm:text-xs font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full">
+          <span className="absolute top-0 left-0 bg-[#1B4332] text-white text-[9px] sm:text-[10px] font-bold px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-br-xl shadow-sm whitespace-nowrap leading-none flex items-center justify-center z-10">
             {discount}% OFF
           </span>
         )}

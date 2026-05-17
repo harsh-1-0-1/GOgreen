@@ -46,10 +46,7 @@ function ProductTile({ product }: { product: Product }) {
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
         {discount !== null && discount > 0 && (
-          <span
-            className="absolute top-2 right-2 sm:top-3 sm:right-3 text-white text-[11px] sm:text-xs font-semibold px-2.5 py-1 rounded-md shadow-sm"
-            style={{ backgroundColor: SECONDARY }}
-          >
+          <span className="absolute top-0 left-0 bg-[#1B4332] text-white text-[9px] sm:text-[10px] font-bold px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-br-xl shadow-sm whitespace-nowrap leading-none flex items-center justify-center z-10">
             {discount}% OFF
           </span>
         )}

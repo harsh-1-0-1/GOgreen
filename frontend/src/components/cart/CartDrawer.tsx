@@ -50,12 +50,87 @@ export default function CartDrawer() {
         {/* Items */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 sm:space-y-4">
           {items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
-              <ShoppingBag size={48} strokeWidth={1} />
-              <p className="text-sm">Your cart is empty</p>
-              <button onClick={closeDrawer} className="text-sm text-primary font-medium hover:underline">
-                Continue Shopping
-              </button>
+            <div className="flex flex-col items-center py-6 animate-fade-in h-full">
+              {/* Empty Header */}
+              <div className="flex flex-col items-center text-center max-w-[280px] mb-8">
+                <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center text-primary mb-3 shadow-inner">
+                  <ShoppingBag size={24} className="text-emerald-700" />
+                </div>
+                <h3 className="text-base font-bold text-gray-800">Your cart is empty</h3>
+                <p className="text-xs text-gray-400 mt-1">
+                  Add some live greens to kickstart your green space!
+                </p>
+                <button
+                  onClick={closeDrawer}
+                  className="mt-4 px-6 py-2 bg-primary hover:bg-primary/95 text-white font-bold rounded-full text-xs shadow-sm hover:shadow transition active:scale-[0.98]"
+                >
+                  Continue Shopping
+                </button>
+              </div>
+
+              {/* Suggestions Grid */}
+              <div className="w-full mt-2 border-t pt-6">
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
+                  Shop Popular Collections
+                </h4>
+                <div className="grid grid-cols-2 gap-3.5">
+                  {[
+                    {
+                      title: 'Price Drop',
+                      subtitle: 'Up to 50% OFF',
+                      image: 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?w=150&q=80',
+                      link: '/products?tags=offers',
+                      color: 'text-amber-600',
+                    },
+                    {
+                      title: 'XL Plants',
+                      subtitle: 'Grow Big & Bold',
+                      image: 'https://images.unsplash.com/photo-1614594975525-e45190c55d0b?w=150&q=80',
+                      link: '/products?category=xl-plants',
+                      color: 'text-emerald-700',
+                    },
+                    {
+                      title: 'Pots & Planters',
+                      subtitle: 'Ceramic Pots',
+                      image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=150&q=80',
+                      link: '/products?category=pots-planters',
+                      color: 'text-emerald-700',
+                    },
+                    {
+                      title: 'Plant Care',
+                      subtitle: 'Thrive Guides',
+                      image: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=150&q=80',
+                      link: '/products?category=plant-care',
+                      color: 'text-emerald-700',
+                    },
+                  ].map((col) => (
+                    <Link
+                      key={col.title}
+                      to={col.link}
+                      onClick={closeDrawer}
+                      className="group flex flex-col bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm hover:shadow transition active:scale-[0.99]"
+                    >
+                      <div className="relative aspect-[4/3] overflow-hidden bg-gray-50 shrink-0">
+                        <img
+                          src={col.image}
+                          alt={col.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors" />
+                      </div>
+                      <div className="p-2.5 flex flex-col flex-1">
+                        <h5 className="text-xs font-bold text-gray-800 line-clamp-1 leading-snug">
+                          {col.title}
+                        </h5>
+                        <p className={`text-[9px] font-semibold mt-0.5 leading-none ${col.color}`}>
+                          {col.subtitle}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             items.map((item) => (

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
@@ -20,6 +20,7 @@ import NotFoundPage from '@/pages/NotFoundPage';
 import BlogListPage from '@/pages/BlogListPage';
 import BlogDetailPage from '@/pages/BlogDetailPage';
 import CorporateGiftingPage from '@/pages/CorporateGiftingPage';
+import DamageReplacementPage from '@/pages/DamageReplacementPage';
 
 import AdminLayout from '@/components/admin/AdminLayout';
 import DashboardPage from '@/pages/admin/DashboardPage';
@@ -28,6 +29,23 @@ import CategoriesAdminPage from '@/pages/admin/CategoriesAdminPage';
 import OrdersAdminPage from '@/pages/admin/OrdersAdminPage';
 import UsersAdminPage from '@/pages/admin/UsersAdminPage';
 import BannersAdminPage from '@/pages/admin/BannersAdminPage';
+
+function ScrollToHashElement() {
+  const { hash } = useLocation();
+
+  useEffect(() => {
+    if (hash) {
+      const element = document.getElementById(hash.replace('#', ''));
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }, 150);
+      }
+    }
+  }, [hash]);
+
+  return null;
+}
 
 function AppInit() {
   const hydrateFromStorage = useAuthStore((s) => s.hydrateFromStorage);
@@ -46,6 +64,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AppInit />
+        <ScrollToHashElement />
         <Toaster
           position="top-right"
           toastOptions={{
@@ -67,6 +86,7 @@ export default function App() {
               <Route path="/blog" element={<BlogListPage />} />
               <Route path="/blog/:slug" element={<BlogDetailPage />} />
               <Route path="/corporate-gifting" element={<CorporateGiftingPage />} />
+              <Route path="/damage-replacement" element={<DamageReplacementPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route element={<Layout />}>
