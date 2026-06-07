@@ -5,6 +5,15 @@ import { useCartStore } from '@/store/cartStore';
 import { useAuthStore } from '@/store/authStore';
 import RecommendationBar from '@/components/cart/RecommendationBar';
 
+function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
+  if (!item.selected_options) return null;
+  const color = item.product.variants?.colors?.find((c) => c.slug === item.selected_options?.color)?.name
+    || item.selected_options.color;
+  const pot = item.product.variants?.pot_types?.find((p) => p.slug === item.selected_options?.pot_type)?.name
+    || item.selected_options.pot_type;
+  return [color && `Color: ${color}`, pot && `Pot: ${pot}`].filter(Boolean).join(' · ');
+}
+
 export default function CartPage() {
   const { items, total, itemCount, updateItem, removeItem, lastAddedProduct } = useCartStore();
   const { user, openAuthModal } = useAuthStore();
@@ -145,7 +154,7 @@ export default function CartPage() {
             <div key={item.id} className="flex gap-3 sm:gap-4 p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-100">
               <Link to={`/products/${item.product.slug}`} className="shrink-0">
                 <img
-                  src={item.product.images?.[0] || 'https://placehold.co/120x120?text=Plant'}
+                  src={item.resolved_image_url || item.product.images?.[0] || 'https://placehold.co/120x120?text=Plant'}
                   alt={item.product.name}
                   className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-lg sm:rounded-xl object-cover"
                   loading="lazy"
@@ -155,9 +164,17 @@ export default function CartPage() {
                 <Link to={`/products/${item.product.slug}`} className="text-sm sm:text-base font-medium hover:text-primary transition line-clamp-1">
                   {item.product.name}
                 </Link>
-                <p className="text-primary font-bold text-sm sm:text-base mt-0.5 sm:mt-1">₹{item.product.price}</p>
+                {optionSummary(item) && (
+                  <p className="text-xs text-gray-500 mt-0.5">{optionSummary(item)}</p>
+                )}
+                <p className="text-primary font-bold text-sm sm:text-base mt-0.5 sm:mt-1">₹{item.unit_price}</p>
                 {item.product.original_price && item.product.original_price > item.product.price && (
                   <p className="text-xs text-gray-400 line-through">₹{item.product.original_price}</p>
+                )}
+                {item.stock_warning && (
+                  <p className="text-xs text-red-500 mt-1">
+                    Only {item.available_stock} units available in stock. Please adjust quantity.
+                  </p>
                 )}
                 <div className="flex items-center gap-2 sm:gap-3 mt-2 sm:mt-3">
                   <div className="flex items-center border rounded-lg">

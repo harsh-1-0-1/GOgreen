@@ -5,6 +5,10 @@ import Spinner from '@/components/ui/Spinner';
 
 const STATUS_STEPS = ['pending', 'confirmed', 'shipped', 'delivered'];
 
+function labelize(slug?: string) {
+  return slug ? slug.split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' ') : '';
+}
+
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: order, isLoading, isError } = useOrder(Number(id));
@@ -87,9 +91,24 @@ export default function OrderDetailPage() {
         <div className="divide-y">
           {order.items.map((item) => (
             <div key={item.id} className="flex items-center justify-between py-3">
-              <div>
+              <div className="flex items-center gap-3 min-w-0">
+                {item.resolved_image_url && (
+                  <img
+                    src={item.resolved_image_url}
+                    alt=""
+                    className="w-14 h-14 rounded-lg object-cover shrink-0"
+                    loading="lazy"
+                  />
+                )}
+                <div className="min-w-0">
                 <p className="font-medium text-sm">Product #{item.product_id}</p>
+                {item.selected_options && (
+                  <p className="text-xs text-gray-500">
+                    {[item.selected_options.color && `Color: ${labelize(item.selected_options.color)}`, item.selected_options.pot_type && `Pot: ${labelize(item.selected_options.pot_type)}`].filter(Boolean).join(' · ')}
+                  </p>
+                )}
                 <p className="text-xs text-gray-500">Qty: {item.quantity} × ₹{item.unit_price}</p>
+                </div>
               </div>
               <p className="font-bold text-sm sm:text-base">₹{(item.quantity * item.unit_price).toFixed(0)}</p>
             </div>

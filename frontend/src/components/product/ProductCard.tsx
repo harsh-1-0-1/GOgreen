@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
@@ -6,6 +6,8 @@ import type { Product } from '@/types';
 
 export default function ProductCard({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
+  const navigate = useNavigate();
+  const hasVariants = Boolean(product.variants?.colors?.length && product.variants?.pot_types?.length);
 
   const discount =
     product.original_price && product.original_price > product.price
@@ -15,6 +17,10 @@ export default function ProductCard({ product }: { product: Product }) {
   async function handleAdd(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    if (hasVariants) {
+      navigate(`/products/${product.slug}`);
+      return;
+    }
     try {
       await addItem(product.id, 1, product);
       toast.success(`${product.name} added to cart`);
@@ -76,7 +82,7 @@ export default function ProductCard({ product }: { product: Product }) {
             className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90"
             style={{ backgroundColor: '#16A34A' }}
           >
-            Add to cart
+            {hasVariants ? 'Choose options' : 'Add to cart'}
           </button>
         </div>
       </div>

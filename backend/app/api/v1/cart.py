@@ -60,7 +60,9 @@ async def add_cart_item(
         cart = await cart_service.get_or_create_cart(db, session_id=session_id)
 
     try:
-        cart = await cart_service.add_item(db, cart, body.product_id, body.quantity)
+        cart = await cart_service.add_item(
+            db, cart, body.product_id, body.quantity, body.selected_options,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return cart_service.build_cart_response(cart)

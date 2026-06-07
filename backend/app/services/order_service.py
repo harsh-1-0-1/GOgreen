@@ -2,6 +2,7 @@
 from loguru import logger
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm import selectinload
 
 from app.db.models import (
@@ -15,6 +16,7 @@ from app.db.models import (
     Product,
 )
 from app.services.payu import get_payu_form_data
+from app.services.cart_service import resolve_variant_details
 
 
 async def checkout(
@@ -55,18 +57,33 @@ async def checkout(
         product = product_result.scalar_one_or_none()
         if not product or not product.is_active:
             raise ValueError(f"Product '{ci.product_id}' is unavailable")
-        if product.stock_qty < ci.quantity:
-            raise ValueError(
-                f"Insufficient stock for '{product.name}': "
-                f"requested {ci.quantity}, available {product.stock_qty}"
-            )
-        product.stock_qty -= ci.quantity
-        line = round(product.price * ci.quantity, 2)
+        details = resolve_variant_details(
+            product, ci.selected_options, ci.quantity, validate_stock=True,
+        )
+        combo_key = details["combo_key"]
+        if combo_key:
+            variants = product.variants or {}
+            variants["stock"][combo_key] = int(variants["stock"].get(combo_key, 0)) - ci.quantity
+            product.variants = variants
+            product.stock_qty = sum(int(v or 0) for v in variants.get("stock", {}).values())
+            flag_modified(product, "variants")
+        else:
+            if product.stock_qty < ci.quantity:
+                raise ValueError(
+                    f"Insufficient stock for '{product.name}': "
+                    f"requested {ci.quantity}, available {product.stock_qty}"
+                )
+            product.stock_qty -= ci.quantity
+
+        unit_price = details["unit_price"]
+        line = round(unit_price * ci.quantity, 2)
         total_amount += line
         order_items_data.append({
             "product_id": product.id,
             "quantity": ci.quantity,
-            "unit_price": product.price,
+            "unit_price": unit_price,
+            "selected_options": details["selected_options"],
+            "resolved_image_url": details["resolved_image_url"],
         })
 
     total_amount = round(total_amount, 2)

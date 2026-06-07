@@ -5,10 +5,50 @@ from tests.conftest import (
     _register_and_make_admin,
     _register_user,
     _seed_address,
+    _seed_category,
     _seed_product_and_category,
+    test_session_factory,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+ORDER_VARIANTS = {
+    "colors": [
+        {"name": "Terracotta", "hex": "#C4622D", "slug": "terracotta"},
+        {"name": "Sage Green", "hex": "#7A9E7E", "slug": "sage-green"},
+    ],
+    "pot_types": [
+        {"name": "Plastic", "slug": "plastic", "price_modifier": 0},
+        {"name": "Ceramic", "slug": "ceramic", "price_modifier": 150},
+    ],
+    "image_map": {
+        "sage-green__ceramic": "https://example.com/sage-ceramic.jpg",
+    },
+    "default_image": "https://example.com/default.jpg",
+    "stock": {
+        "terracotta__plastic": 4,
+        "terracotta__ceramic": 0,
+        "sage-green__plastic": 2,
+        "sage-green__ceramic": 3,
+    },
+}
+
+
+async def _seed_variant_product(client: AsyncClient, admin_token: str) -> dict:
+    cat = await _seed_category(client, admin_token, "Order Variant Plants")
+    from app.db.models import Product
+    async with test_session_factory() as db:
+        p = Product(
+            name="Order Variant Pothos", slug="order-variant-pothos", description="Configurable",
+            price=200.0, original_price=None, stock_qty=sum(ORDER_VARIANTS["stock"].values()),
+            category_id=cat["id"], images=["https://example.com/base.jpg"],
+            tags=["indoor"], variants=ORDER_VARIANTS, is_active=True,
+        )
+        db.add(p)
+        await db.commit()
+        await db.refresh(p)
+        return {"id": p.id, "stock_qty": p.stock_qty}
 
 
 async def _setup_cart(client: AsyncClient, token: str, product_id: int, quantity: int = 2) -> int:
@@ -129,3 +169,44 @@ async def test_order_list_and_detail(client: AsyncClient):
 async def test_checkout_requires_auth(client: AsyncClient):
     resp = await client.post("/api/v1/orders/checkout", json={"address_id": 1, "cart_id": 1})
     assert resp.status_code == 401
+
+
+async def test_variant_checkout_decrements_combo_stock_and_snapshots_options(client: AsyncClient):
+    admin = await _register_and_make_admin(client)
+    product = await _seed_variant_product(client, admin)
+    token = await _register_user(client)
+    address = await _seed_address(client, token)
+    add_resp = await client.post(
+        "/api/v1/cart/items",
+        json={
+            "product_id": product["id"],
+            "quantity": 2,
+            "selected_options": {"color": "sage-green", "pot_type": "ceramic"},
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert add_resp.status_code == 201, add_resp.text
+    cart_id = add_resp.json()["id"]
+
+    checkout_resp = await client.post(
+        "/api/v1/orders/checkout",
+        json={"address_id": address["id"], "cart_id": cart_id},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert checkout_resp.status_code == 201, checkout_resp.text
+    order_id = checkout_resp.json()["order_id"]
+
+    detail_resp = await client.get(
+        f"/api/v1/orders/{order_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    item = detail_resp.json()["items"][0]
+    assert item["unit_price"] == 350
+    assert item["selected_options"] == {"color": "sage-green", "pot_type": "ceramic"}
+    assert item["resolved_image_url"] == "https://example.com/sage-ceramic.jpg"
+
+    from app.db.models import Product
+    async with test_session_factory() as db:
+        db_product = await db.get(Product, product["id"])
+        assert db_product.variants["stock"]["sage-green__ceramic"] == 1
+        assert db_product.stock_qty == sum(db_product.variants["stock"].values())

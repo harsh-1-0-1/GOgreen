@@ -75,6 +75,7 @@ class Product(Base):
     badge: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    variants: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     category: Mapped["Category"] = relationship(back_populates="products")
 
@@ -97,6 +98,7 @@ class CartItem(Base):
     cart_id: Mapped[int] = mapped_column(Integer, ForeignKey("carts.id"), nullable=False)
     product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
+    selected_options: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     cart: Mapped["Cart"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship()
@@ -144,6 +146,8 @@ class OrderItem(Base):
     product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price: Mapped[float] = mapped_column(Float, nullable=False)
+    selected_options: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    resolved_image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     order: Mapped["Order"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship()

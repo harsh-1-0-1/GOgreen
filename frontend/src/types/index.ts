@@ -34,6 +34,27 @@ export interface Product {
   badge: string | null;
   is_active: boolean;
   created_at: string;
+  variants: ProductVariants | null;
+}
+
+export interface ProductVariantColor {
+  name: string;
+  hex: string;
+  slug: string;
+}
+
+export interface ProductVariantPotType {
+  name: string;
+  slug: string;
+  price_modifier: number;
+}
+
+export interface ProductVariants {
+  colors: ProductVariantColor[];
+  pot_types: ProductVariantPotType[];
+  image_map: Record<string, string>;
+  default_image: string;
+  stock: Record<string, number>;
 }
 
 export interface ProductListResponse {
@@ -51,14 +72,20 @@ export interface CartItemProduct {
   price: number;
   original_price: number | null;
   images: string[];
+  variants: ProductVariants | null;
 }
 
 export interface CartItem {
   id: number;
   product_id: number;
   quantity: number;
+  selected_options: Record<string, string> | null;
   product: CartItemProduct;
   line_total: number;
+  resolved_image_url: string;
+  unit_price: number;
+  available_stock: number;
+  stock_warning: boolean;
 }
 
 export interface Cart {
@@ -88,6 +115,8 @@ export interface OrderItem {
   product_id: number;
   quantity: number;
   unit_price: number;
+  selected_options: Record<string, string> | null;
+  resolved_image_url: string | null;
 }
 
 export interface Order {
