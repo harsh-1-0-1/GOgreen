@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Droplets, Minus, Plus, ShoppingCart, Sun } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -113,8 +113,18 @@ export default function ProductDetailPage() {
   const addItem = useCartStore((s) => s.addItem);
   const navigate = useNavigate();
   const [qty, setQty] = useState(1);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [selectedPot, setSelectedPot] = useState<string | null>(null);
 
   const { data: similar } = useProducts({ limit: 5 });
+
+  useEffect(() => {
+    if (!product?.variants) return;
+    const colors = product.variants.colors || [];
+    const pots = product.variants.pot_types || [];
+    if (!selectedColor && colors.length) setSelectedColor(colors[0].slug);
+    if (!selectedPot && pots.length) setSelectedPot(pots[0].slug);
+  }, [product, selectedColor, selectedPot]);
 
   if (isLoading) return <Spinner className="py-32" />;
   if (isError || !product) {
@@ -131,9 +141,27 @@ export default function ProductDetailPage() {
       ? Math.round(((product.original_price - product.price) / product.original_price) * 100)
       : null;
 
+  const variants = product.variants;
+  const hasVariants = Boolean(variants?.colors?.length && variants?.pot_types?.length);
+  const comboKey = selectedColor && selectedPot ? `${selectedColor}__${selectedPot}` : '';
+  const selectedPotType = variants?.pot_types?.find((p) => p.slug === selectedPot);
+  const selectedStock = hasVariants ? Number(variants?.stock?.[comboKey] ?? 0) : product.stock_qty;
+  const displayPrice = product.price + (selectedPotType?.price_modifier || 0);
+  const displayImage = hasVariants
+    ? variants?.image_map?.[comboKey] || variants?.default_image || product.images?.[0]
+    : product.images?.[0];
+  const galleryImages = displayImage
+    ? [displayImage, ...(product.images || []).filter((img) => img !== displayImage)]
+    : product.images || [];
+  const selectedOptions = hasVariants && selectedColor && selectedPot
+    ? { color: selectedColor, pot_type: selectedPot }
+    : null;
+  const selectionIncomplete = hasVariants && (!selectedColor || !selectedPot);
+  const isUnavailable = selectionIncomplete || selectedStock <= 0;
+
   async function handleAddToCart() {
     try {
-      await addItem(product!.id, qty, product!);
+      await addItem(product!.id, qty, product!, selectedOptions);
       toast.success(`${product!.name} added to cart`);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to add');
@@ -142,7 +170,7 @@ export default function ProductDetailPage() {
 
   async function handleBuyNow() {
     try {
-      await addItem(product!.id, qty, product!);
+      await addItem(product!.id, qty, product!, selectedOptions);
       navigate('/checkout');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to process');
@@ -155,7 +183,7 @@ export default function ProductDetailPage() {
     <div className="pb-20 md:pb-0">
       {/* Mobile image gallery */}
       <div className="md:hidden">
-        <MobileGallery images={product.images || []} />
+        <MobileGallery images={galleryImages} />
       </div>
 
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
@@ -171,7 +199,7 @@ export default function ProductDetailPage() {
         <div className="grid md:grid-cols-2 gap-6 lg:gap-10">
           {/* Desktop gallery */}
           <div className="hidden md:block">
-            <DesktopGallery images={product.images || []} />
+            <DesktopGallery images={galleryImages} />
           </div>
 
           <div className="space-y-4 sm:space-y-6">
@@ -190,7 +218,7 @@ export default function ProductDetailPage() {
             />
 
             <div className="flex items-baseline gap-2 sm:gap-3">
-              <span className="text-2xl sm:text-3xl font-bold text-primary">₹{product.price}</span>
+              <span className="text-2xl sm:text-3xl font-bold text-primary">₹{displayPrice}</span>
               {product.original_price && product.original_price > product.price && (
                 <>
                   <span className="text-base sm:text-lg text-gray-400 line-through">₹{product.original_price}</span>
@@ -201,12 +229,61 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {product.stock_qty > 0 ? (
+            {selectedStock > 0 ? (
               <p className="text-sm text-green-600 font-medium">
-                ✓ In Stock {product.stock_qty <= 5 && `(Only ${product.stock_qty} left)`}
+                In Stock {selectedStock <= 5 && `(Only ${selectedStock} left)`}
               </p>
             ) : (
               <p className="text-sm text-red-500 font-medium">Out of Stock</p>
+            )}
+
+            {hasVariants && variants && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Color</p>
+                  <div className="flex flex-wrap gap-2">
+                    {variants.colors.map((color) => {
+                      const disabled = selectedPot ? Number(variants.stock?.[`${color.slug}__${selectedPot}`] ?? 0) <= 0 : false;
+                      return (
+                        <button
+                          key={color.slug}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => setSelectedColor(color.slug)}
+                          className={`w-9 h-9 rounded-full border-2 transition disabled:opacity-30 disabled:cursor-not-allowed ${
+                            selectedColor === color.slug ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200'
+                          }`}
+                          title={color.name}
+                          aria-label={color.name}
+                          style={{ backgroundColor: color.hex }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pot Type</p>
+                  <div className="flex flex-wrap gap-2">
+                    {variants.pot_types.map((pot) => {
+                      const disabled = selectedColor ? Number(variants.stock?.[`${selectedColor}__${pot.slug}`] ?? 0) <= 0 : false;
+                      return (
+                        <button
+                          key={pot.slug}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => setSelectedPot(pot.slug)}
+                          className={`px-4 py-2 rounded-full border text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                            selectedPot === pot.slug ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 hover:border-primary/40'
+                          }`}
+                        >
+                          {pot.name}{pot.price_modifier > 0 ? ` (+₹${pot.price_modifier})` : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             )}
 
             {product.description && (
@@ -227,14 +304,14 @@ export default function ProductDetailPage() {
             </div>
 
             {/* Desktop add to cart */}
-            {product.stock_qty > 0 && (
+            {!isUnavailable && (
               <div className="hidden md:flex items-center gap-4">
                 <div className="flex items-center border rounded-xl">
                   <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-3 hover:bg-gray-50 transition touch-target">
                     <Minus size={16} />
                   </button>
                   <span className="px-4 font-medium">{qty}</span>
-                  <button onClick={() => setQty(Math.min(product.stock_qty, qty + 1))} className="p-3 hover:bg-gray-50 transition touch-target">
+                  <button onClick={() => setQty(Math.min(selectedStock, qty + 1))} className="p-3 hover:bg-gray-50 transition touch-target">
                     <Plus size={16} />
                   </button>
                 </div>
@@ -277,7 +354,7 @@ export default function ProductDetailPage() {
       </div>
 
       {/* Mobile fixed bottom add-to-cart bar */}
-      {product.stock_qty > 0 && (
+      {!isUnavailable && (
         <div className="md:hidden fixed bottom-14 left-0 right-0 z-30 bg-white border-t shadow-[0_-4px_12px_rgba(0,0,0,0.08)] px-3 py-3 safe-bottom">
           <div className="flex items-center gap-3">
             <div className="flex items-center border rounded-lg">
@@ -285,7 +362,7 @@ export default function ProductDetailPage() {
                 <Minus size={14} />
               </button>
               <span className="px-3 text-sm font-medium">{qty}</span>
-              <button onClick={() => setQty(Math.min(product.stock_qty, qty + 1))} className="p-2.5 touch-target">
+              <button onClick={() => setQty(Math.min(selectedStock, qty + 1))} className="p-2.5 touch-target">
                 <Plus size={14} />
               </button>
             </div>

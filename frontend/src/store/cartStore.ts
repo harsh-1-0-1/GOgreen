@@ -12,7 +12,12 @@ interface CartState {
   openDrawer: () => void;
   closeDrawer: () => void;
   fetchCart: () => Promise<void>;
-  addItem: (productId: number, quantity?: number, product?: Product) => Promise<void>;
+  addItem: (
+    productId: number,
+    quantity?: number,
+    product?: Product,
+    selectedOptions?: Record<string, string> | null,
+  ) => Promise<void>;
   updateItem: (itemId: number, quantity: number) => Promise<void>;
   removeItem: (itemId: number) => Promise<void>;
   mergeCart: (sessionId: string) => Promise<void>;
@@ -48,10 +53,11 @@ export const useCartStore = create<CartState>((set, get) => ({
     }
   },
 
-  addItem: async (productId, quantity = 1, product) => {
+  addItem: async (productId, quantity = 1, product, selectedOptions = null) => {
     const { data } = await api.post<Cart>('/cart/items', {
       product_id: productId,
       quantity,
+      selected_options: selectedOptions,
     });
     set({
       ...applyCart(data),
@@ -66,7 +72,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     // Optimistic update
     const newItems = previousState.items.map((i) =>
       i.id === itemId
-        ? { ...i, quantity, line_total: i.product.price * quantity }
+        ? { ...i, quantity, line_total: i.unit_price * quantity }
         : i
     );
     set({

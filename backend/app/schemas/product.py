@@ -16,6 +16,7 @@ class ProductCreate(BaseModel):
     watering: str | None = None
     badge: str | None = None
     is_active: bool = True
+    variants: dict | None = None
 
 
 class ProductUpdate(BaseModel):
@@ -32,6 +33,7 @@ class ProductUpdate(BaseModel):
     watering: str | None = None
     badge: str | None = None
     is_active: bool | None = None
+    variants: dict | None = None
 
 
 class ProductResponse(BaseModel):
@@ -51,6 +53,7 @@ class ProductResponse(BaseModel):
     badge: str | None
     is_active: bool
     created_at: datetime
+    variants: dict | None = None
 
     model_config = {"from_attributes": True}
 

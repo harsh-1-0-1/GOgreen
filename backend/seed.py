@@ -80,19 +80,121 @@ CATEGORIES = [
     {"name": "Watering Tools", "slug": "watering-tools", "parent_slug": "plant-care"},
     {"name": "Pest Control", "slug": "pest-control", "parent_slug": "plant-care"},
 ]
+def _make_variants(stock_overrides: dict = {}) -> dict:
+    """Generate a standard variants block for indoor plants."""
+    colors = [
+        {"name": "Terracotta",  "hex": "#C4622D", "slug": "terracotta"},
+        {"name": "Sage Green",  "hex": "#7A9E7E", "slug": "sage-green"},
+        {"name": "White",       "hex": "#F5F5F0", "slug": "white"},
+        {"name": "Charcoal",    "hex": "#4A4A4A", "slug": "charcoal"},
+        {"name": "Dusty Pink",  "hex": "#D4908A", "slug": "dusty-pink"},
+    ]
+    pot_types = [
+        {"name": "Plastic",       "slug": "plastic",       "price_modifier": 0},
+        {"name": "Ceramic",       "slug": "ceramic",       "price_modifier": 150},
+        {"name": "Terracotta Pot","slug": "terracotta-pot","price_modifier": 100},
+        {"name": "Metal",         "slug": "metal",         "price_modifier": 200},
+        {"name": "Hanging",       "slug": "hanging",       "price_modifier": 120},
+    ]
+
+    # Unsplash images mapped by colour slug (same image across pot types per colour)
+    color_images = {
+        "terracotta":  "https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=600&q=80",
+        "sage-green":  "https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80",
+        "white":       "https://images.unsplash.com/photo-1485955900006-d5666c72437d?w=600&q=80",
+        "charcoal":    "https://images.unsplash.com/photo-1520412099551-62b6bafeb5bb?w=600&q=80",
+        "dusty-pink":  "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=600&q=80",
+    }
+
+    image_map = {}
+    stock = {}
+    for c in colors:
+        for p in pot_types:
+            key = f"{c['slug']}__{p['slug']}"
+            image_map[key] = color_images[c["slug"]]
+            stock[key] = stock_overrides.get(key, 10)  # default 10 units
+
+    return {
+        "colors": colors,
+        "pot_types": pot_types,
+        "image_map": image_map,
+        "default_image": color_images["sage-green"],
+        "stock": stock,
+    }
+
 
 PRODUCTS = [
     # Indoor Plants (cat: indoor-plants)
-    {"name": "Money Plant Golden", "cat": "indoor-plants", "price": 249, "desc": "Air-purifying trailing vine perfect for shelves and hanging baskets.", "sunlight": "Low to Bright Indirect", "watering": "Once a week", "tags": ["air-purifying", "low-maintenance", "indoor", "beginner-friendly", "workspace", "living-room"], "care_tips": ["Water when topsoil feels dry", "Prune to encourage bushier growth"], "badge": "Bestseller"},
-    {"name": "Snake Plant Sansevieria", "cat": "indoor-plants", "price": 399, "desc": "Hardy succulent that thrives on neglect and purifies air at night.", "sunlight": "Low to Bright Indirect", "watering": "Every 2 weeks", "tags": ["air-purifying", "low-maintenance", "bedroom", "beginner-friendly", "workspace"], "care_tips": ["Avoid overwatering", "Tolerates low light well"], "badge": "Trending"},
-    {"name": "Peace Lily", "cat": "indoor-plants", "price": 549, "desc": "Elegant white-flowering plant that removes toxins from indoor air.", "sunlight": "Low to Medium Indirect", "watering": "Twice a week", "tags": ["air-purifying", "flowering", "indoor", "beginner-friendly", "living-room"], "care_tips": ["Keep soil moist but not soggy", "Mist leaves in dry weather"]},
-    {"name": "Pothos Marble Queen", "cat": "indoor-plants", "price": 199, "desc": "Variegated trailing plant with stunning white and green leaves.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["trailing", "variegated", "indoor", "low-maintenance", "beginner-friendly"], "care_tips": ["More light means more variegation", "Trim yellow leaves"]},
-    {"name": "Areca Palm", "cat": "indoor-plants", "price": 699, "desc": "Tropical palm that adds lush greenery and humidifies your room.", "sunlight": "Bright Indirect", "watering": "Twice a week", "tags": ["air-purifying", "tropical", "large", "living-room"], "care_tips": ["Mist regularly", "Avoid direct sunlight to prevent leaf burn"], "badge": "Popular"},
-    {"name": "ZZ Plant", "cat": "indoor-plants", "price": 449, "desc": "Glossy-leaved virtually indestructible houseplant.", "sunlight": "Low to Bright Indirect", "watering": "Every 2-3 weeks", "tags": ["low-maintenance", "modern", "indoor", "beginner-friendly", "workspace", "living-room"], "care_tips": ["Drought tolerant – do not overwater", "Wipe leaves for shine"]},
-    {"name": "Rubber Plant", "cat": "indoor-plants", "price": 499, "desc": "Bold burgundy leaves that make a dramatic statement in any room.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["statement", "air-purifying", "indoor", "living-room"], "care_tips": ["Clean leaves monthly", "Rotate for even growth"]},
-    {"name": "Jade Plant", "cat": "indoor-plants", "price": 349, "desc": "Lucky succulent symbolising prosperity and good fortune.", "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks", "tags": ["succulent", "lucky", "desktop", "low-maintenance", "beginner-friendly", "workspace"], "care_tips": ["Let soil dry completely between waterings", "Avoid cold drafts"]},
-    {"name": "Spider Plant", "cat": "indoor-plants", "price": 199, "desc": "Cheerful cascading foliage with baby plantlets on arching stems.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["pet-safe", "hanging", "beginner", "low-maintenance", "beginner-friendly", "bedroom"], "care_tips": ["Safe for cats and dogs", "Propagate babies in water"]},
-    {"name": "Philodendron Brasil", "cat": "indoor-plants", "price": 299, "desc": "Heart-shaped variegated leaves in lime green and dark green.", "sunlight": "Medium to Bright Indirect", "watering": "Once a week", "tags": ["trailing", "variegated", "tropical"], "care_tips": ["Grows fast in bright light", "Trim leggy vines"]},
+        {"name": "Money Plant Golden", "cat": "indoor-plants", "price": 249,
+         "desc": "Air-purifying trailing vine perfect for shelves and hanging baskets.",
+         "sunlight": "Low to Bright Indirect", "watering": "Once a week",
+         "tags": ["air-purifying", "low-maintenance", "indoor", "beginner-friendly", "workspace", "living-room"],
+         "care_tips": ["Water when topsoil feels dry", "Prune to encourage bushier growth"],
+         "badge": "Bestseller",
+         "variants": _make_variants({"terracotta__plastic": 30, "sage-green__ceramic": 0, "charcoal__metal": 15})},
+
+        {"name": "Snake Plant Sansevieria", "cat": "indoor-plants", "price": 399,
+         "desc": "Hardy succulent that thrives on neglect and purifies air at night.",
+         "sunlight": "Low to Bright Indirect", "watering": "Every 2 weeks",
+         "tags": ["air-purifying", "low-maintenance", "bedroom", "beginner-friendly", "workspace"],
+         "care_tips": ["Avoid overwatering", "Tolerates low light well"], "badge": "Trending",
+         "variants": _make_variants({"white__ceramic": 20, "charcoal__metal": 8, "dusty-pink__plastic": 0})},
+
+        {"name": "Peace Lily", "cat": "indoor-plants", "price": 549,
+         "desc": "Elegant white-flowering plant that removes toxins from indoor air.",
+         "sunlight": "Low to Medium Indirect", "watering": "Twice a week",
+         "tags": ["air-purifying", "flowering", "indoor", "beginner-friendly", "living-room"],
+         "care_tips": ["Keep soil moist but not soggy", "Mist leaves in dry weather"],
+         "variants": _make_variants({"white__ceramic": 25, "white__terracotta-pot": 12, "dusty-pink__hanging": 0})},
+
+        {"name": "Pothos Marble Queen", "cat": "indoor-plants", "price": 199,
+         "desc": "Variegated trailing plant with stunning white and green leaves.",
+         "sunlight": "Bright Indirect", "watering": "Once a week",
+         "tags": ["trailing", "variegated", "indoor", "low-maintenance", "beginner-friendly"],
+         "care_tips": ["More light means more variegation", "Trim yellow leaves"],
+         "variants": _make_variants()},
+
+        {"name": "Areca Palm", "cat": "indoor-plants", "price": 699,
+         "desc": "Tropical palm that adds lush greenery and humidifies your room.",
+         "sunlight": "Bright Indirect", "watering": "Twice a week",
+         "tags": ["air-purifying", "tropical", "large", "living-room"],
+         "care_tips": ["Mist regularly", "Avoid direct sunlight to prevent leaf burn"], "badge": "Popular",
+         "variants": _make_variants({"sage-green__metal": 6, "terracotta__terracotta-pot": 18, "charcoal__plastic": 0})},
+
+        {"name": "ZZ Plant", "cat": "indoor-plants", "price": 449,
+         "desc": "Glossy-leaved virtually indestructible houseplant.",
+         "sunlight": "Low to Bright Indirect", "watering": "Every 2-3 weeks",
+         "tags": ["low-maintenance", "modern", "indoor", "beginner-friendly", "workspace", "living-room"],
+         "care_tips": ["Drought tolerant – do not overwater", "Wipe leaves for shine"],
+         "variants": _make_variants({"charcoal__metal": 22, "charcoal__ceramic": 14, "white__ceramic": 9})},
+
+        {"name": "Rubber Plant", "cat": "indoor-plants", "price": 499,
+         "desc": "Bold burgundy leaves that make a dramatic statement in any room.",
+         "sunlight": "Bright Indirect", "watering": "Once a week",
+         "tags": ["statement", "air-purifying", "indoor", "living-room"],
+         "care_tips": ["Clean leaves monthly", "Rotate for even growth"],
+         "variants": _make_variants({"charcoal__metal": 11, "terracotta__terracotta-pot": 20, "dusty-pink__ceramic": 0})},
+
+        {"name": "Jade Plant", "cat": "indoor-plants", "price": 349,
+         "desc": "Lucky succulent symbolising prosperity and good fortune.",
+         "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks",
+         "tags": ["succulent", "lucky", "desktop", "low-maintenance", "beginner-friendly", "workspace"],
+         "care_tips": ["Let soil dry completely between waterings", "Avoid cold drafts"],
+         "variants": _make_variants({"white__ceramic": 16, "sage-green__terracotta-pot": 8, "dusty-pink__plastic": 5})},
+
+        {"name": "Spider Plant", "cat": "indoor-plants", "price": 199,
+         "desc": "Cheerful cascading foliage with baby plantlets on arching stems.",
+         "sunlight": "Bright Indirect", "watering": "Once a week",
+         "tags": ["pet-safe", "hanging", "beginner", "low-maintenance", "beginner-friendly", "bedroom"],
+         "care_tips": ["Safe for cats and dogs", "Propagate babies in water"],
+         "variants": _make_variants({"sage-green__hanging": 20, "white__hanging": 15, "dusty-pink__hanging": 8, "terracotta__plastic": 0})},
+
+        {"name": "Philodendron Brasil", "cat": "indoor-plants", "price": 299,
+         "desc": "Heart-shaped variegated leaves in lime green and dark green.",
+         "sunlight": "Medium to Bright Indirect", "watering": "Once a week",
+         "tags": ["trailing", "variegated", "tropical"],
+         "care_tips": ["Grows fast in bright light", "Trim leggy vines"],
+         "variants": _make_variants({"sage-green__ceramic": 12, "terracotta__plastic": 18, "charcoal__metal": 0})},
     # Outdoor Plants
     {"name": "Bougainvillea", "cat": "outdoor-plants", "price": 349, "desc": "Vibrant paper-like flowers in magenta that bloom year round.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["flowering", "drought-tolerant", "climber", "balcony"], "care_tips": ["Needs 6+ hours of sun", "Prune after each flowering cycle"], "badge": "Bestseller"},
     {"name": "Hibiscus Red", "cat": "outdoor-plants", "price": 299, "desc": "Classic tropical shrub with large scarlet blooms.", "sunlight": "Full Sun", "watering": "Daily in summer", "tags": ["flowering", "tropical", "outdoor", "balcony"], "care_tips": ["Feed monthly during growing season", "Protect from frost"]},
@@ -423,13 +525,16 @@ async def seed() -> None:
             slug = re.sub(r"[\s_]+", "-", slug)
             slug = re.sub(r"-+", "-", slug).strip("-")
 
+            variants = p.get("variants")
+            stock_qty = sum(variants["stock"].values()) if variants else random.randint(5, 200)
+
             product = Product(
                 name=p["name"],
                 slug=slug,
                 description=p.get("desc", ""),
                 price=p["price"],
                 original_price=p["op"] if "op" in p else _original_price(p["price"]),
-                stock_qty=random.randint(5, 200),
+                stock_qty=stock_qty,
                 category_id=cat_id,
                 images=_pick_images(),
                 tags=p.get("tags", []),
@@ -437,6 +542,7 @@ async def seed() -> None:
                 sunlight=p.get("sunlight"),
                 watering=p.get("watering"),
                 badge=p.get("badge"),
+                variants=variants,
                 is_active=True,
             )
             db.add(product)

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProducts } from '@/hooks/useProducts';
@@ -14,6 +14,7 @@ interface RecommendationBarProps {
 
 export default function RecommendationBar({ lastAddedProduct, cartItems }: RecommendationBarProps) {
   const addItem = useCartStore((s) => s.addItem);
+  const navigate = useNavigate();
   const [addingId, setAddingId] = useState<number | null>(null);
 
   // Fetch a broad pool — same category, limit 20
@@ -31,6 +32,10 @@ export default function RecommendationBar({ lastAddedProduct, cartItems }: Recom
   async function handleQuickAdd(e: React.MouseEvent, product: Product) {
     e.preventDefault();
     e.stopPropagation();
+    if (product.variants?.colors?.length && product.variants?.pot_types?.length) {
+      navigate(`/products/${product.slug}`);
+      return;
+    }
     setAddingId(product.id);
     try {
       await addItem(product.id, 1, product);
@@ -95,7 +100,7 @@ export default function RecommendationBar({ lastAddedProduct, cartItems }: Recom
                 ) : (
                   <>
                     <Plus size={11} strokeWidth={2.5} />
-                    Add
+                    {product.variants?.colors?.length && product.variants?.pot_types?.length ? 'Options' : 'Add'}
                   </>
                 )}
               </button>

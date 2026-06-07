@@ -13,6 +13,8 @@ class OrderItemResponse(BaseModel):
     product_id: int
     quantity: int
     unit_price: float
+    selected_options: dict[str, str] | None = None
+    resolved_image_url: str | None = None
 
     model_config = {"from_attributes": True}
 

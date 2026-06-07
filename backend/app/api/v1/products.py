@@ -92,6 +92,7 @@ async def create_product(
     sunlight: Annotated[str | None, Form()] = None,
     watering: Annotated[str | None, Form()] = None,
     badge: Annotated[str | None, Form()] = None,
+    variants: Annotated[str | None, Form()] = None,
     images: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
@@ -114,6 +115,7 @@ async def create_product(
         sunlight=sunlight,
         watering=watering,
         badge=badge,
+        variants=json.loads(variants) if variants else None,
     )
     product = await product_service.create_product(db, payload, image_urls=image_urls)
     return product

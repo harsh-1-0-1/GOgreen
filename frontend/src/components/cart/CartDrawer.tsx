@@ -5,6 +5,15 @@ import { useCartStore } from '@/store/cartStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import RecommendationBar from './RecommendationBar';
 
+function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
+  if (!item.selected_options) return null;
+  const color = item.product.variants?.colors?.find((c) => c.slug === item.selected_options?.color)?.name
+    || item.selected_options.color;
+  const pot = item.product.variants?.pot_types?.find((p) => p.slug === item.selected_options?.pot_type)?.name
+    || item.selected_options.pot_type;
+  return [color && `Color: ${color}`, pot && `Pot: ${pot}`].filter(Boolean).join(' · ');
+}
+
 export default function CartDrawer() {
   const { isDrawerOpen, closeDrawer, items, total, itemCount, updateItem, removeItem, lastAddedProduct } =
     useCartStore();
@@ -136,7 +145,7 @@ export default function CartDrawer() {
             items.map((item) => (
               <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
                 <img
-                  src={item.product.images?.[0] || 'https://placehold.co/80x80?text=Plant'}
+                  src={item.resolved_image_url || item.product.images?.[0] || 'https://placehold.co/80x80?text=Plant'}
                   alt={item.product.name}
                   className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover shrink-0"
                   loading="lazy"
@@ -149,7 +158,15 @@ export default function CartDrawer() {
                   >
                     {item.product.name}
                   </Link>
-                  <p className="text-primary font-semibold text-sm mt-0.5">₹{item.product.price}</p>
+                  {optionSummary(item) && (
+                    <p className="text-[11px] text-gray-500 mt-0.5">{optionSummary(item)}</p>
+                  )}
+                  <p className="text-primary font-semibold text-sm mt-0.5">₹{item.unit_price}</p>
+                  {item.stock_warning && (
+                    <p className="text-[11px] text-red-500 mt-1">
+                      Only {item.available_stock} units available. Please adjust quantity.
+                    </p>
+                  )}
                   <div className="flex items-center gap-2 mt-2">
                     <div className="flex items-center border rounded-lg">
                       <button onClick={() => handleUpdate(item.id, item.quantity - 1)} className="p-1.5 hover:bg-gray-100 touch-target">

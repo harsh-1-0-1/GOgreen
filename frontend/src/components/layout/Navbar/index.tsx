@@ -715,10 +715,8 @@ export default function Navbar() {
                             {item.label}
                           </span>
                         </div>
-                        {hasSubmenu ? (
+                        {hasSubmenu && (
                           <ChevronRight size={14} className="text-gray-400 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-200" />
-                        ) : (
-                          <ChevronRight size={14} className="text-gray-300 opacity-60 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-200" />
                         )}
                       </Link>
                     );
@@ -814,7 +812,9 @@ export default function Navbar() {
                     <span className="text-[13.5px] font-semibold text-gray-700 group-hover:text-primary transition-colors duration-150">
                       {sub.label}
                     </span>
-                    <ChevronRight size={14} className="text-gray-400 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-150" />
+                    {getSubcategories(sub.label) !== null && (
+                      <ChevronRight size={14} className="text-gray-400 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-150" />
+                    )}
                   </Link>
                 ))}
               </div>

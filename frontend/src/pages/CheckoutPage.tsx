@@ -9,6 +9,15 @@ import api from '@/lib/api';
 import type { CheckoutResponse } from '@/types';
 import Spinner from '@/components/ui/Spinner';
 
+function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
+  if (!item.selected_options) return null;
+  const color = item.product.variants?.colors?.find((c) => c.slug === item.selected_options?.color)?.name
+    || item.selected_options.color;
+  const pot = item.product.variants?.pot_types?.find((p) => p.slug === item.selected_options?.pot_type)?.name
+    || item.selected_options.pot_type;
+  return [color && `Color: ${color}`, pot && `Pot: ${pot}`].filter(Boolean).join(' · ');
+}
+
 function AddressForm({ onDone }: { onDone: () => void }) {
   const mutation = useCreateAddress();
   const [form, setForm] = useState({
@@ -178,10 +187,19 @@ export default function CheckoutPage() {
   );
 
   const orderReviewSection = (
-    <div className="space-y-2 max-h-60 overflow-y-auto">
+    <div className="space-y-3 max-h-72 overflow-y-auto">
       {items.map((item) => (
-        <div key={item.id} className="flex justify-between text-sm gap-2">
-          <span className="text-gray-600 line-clamp-1 flex-1">{item.product.name} × {item.quantity}</span>
+        <div key={item.id} className="flex items-center justify-between text-sm gap-3">
+          <img
+            src={item.resolved_image_url || item.product.images?.[0] || 'https://placehold.co/48x48?text=Plant'}
+            alt={item.product.name}
+            className="w-12 h-12 rounded-lg object-cover shrink-0"
+            loading="lazy"
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-gray-700 line-clamp-1">{item.product.name} × {item.quantity}</p>
+            {optionSummary(item) && <p className="text-xs text-gray-400 line-clamp-1">{optionSummary(item)}</p>}
+          </div>
           <span className="font-medium shrink-0">₹{item.line_total.toFixed(0)}</span>
         </div>
       ))}
