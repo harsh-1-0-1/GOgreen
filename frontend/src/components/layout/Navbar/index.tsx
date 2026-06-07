@@ -256,13 +256,12 @@ export default function Navbar() {
         </button>
 
         {/* Logo â€” left-aligned, prominent */}
-        <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-primary flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
-            <Leaf size={22} className="text-white" />
-          </div>
-          <span className="text-2xl sm:text-[28px] font-bold text-primary tracking-tight leading-none">
-            Plantoga
-          </span>
+        <Link to="/" className="flex items-center gap-3 shrink-0 group">
+          <img
+            src="/plantoga-logo.png"
+            alt="Plantoga"
+            className="h-12 sm:h-14 object-contain"
+          />
         </Link>
 
         {/* Desktop Search â€” centered, wide pill with embedded button */}
@@ -585,15 +584,8 @@ export default function Navbar() {
             <div className="w-1/2 h-full flex flex-col shrink-0 overflow-hidden">
               {/* Mobile Drawer Header */}
               <div className="flex items-center justify-between px-5 py-4 shrink-0">
-                <Link
-                  to="/"
-                  onClick={closeDrawer}
-                  className="flex items-center gap-2.5 group"
-                >
-                  <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300">
-                    <Leaf size={18} className="text-white" />
-                  </div>
-                  <span className="text-xl font-extrabold text-primary tracking-tight">Plantoga</span>
+                <Link to="/" onClick={closeDrawer} className="flex items-center gap-3 group">
+                  <img src="/plantoga-logo.png" alt="Plantoga" className="h-9 object-contain" />
                 </Link>
                 <button
                   onClick={closeDrawer}
