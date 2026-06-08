@@ -8,6 +8,7 @@ import asyncio
 import os
 import random
 import re
+import sys
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -16,10 +17,10 @@ from app.core.security import hash_password
 from app.db.models import Banner, BlogCategory, BlogPost, Category, Product, User
 
 
-def _resolve_database_url() -> str:
+def _resolve_database_url() -> str | None:
     url = os.environ.get("DATABASE_URL")
     if not url:
-        raise RuntimeError("DATABASE_URL environment variable is not set")
+        return None
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://"):
@@ -27,8 +28,13 @@ def _resolve_database_url() -> str:
     return url
 
 
-engine = create_async_engine(_resolve_database_url(), future=True)
-async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+_db_url = _resolve_database_url()
+if _db_url:
+    engine = create_async_engine(_db_url, future=True)
+    async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+else:
+    engine = None
+    async_session_factory = None
 
 UNSPLASH = "https://images.unsplash.com/photo-{id}?w=600&q=80"
 
@@ -476,6 +482,9 @@ def _original_price(price: float) -> float:
 
 
 async def seed() -> None:
+    if not async_session_factory or not engine:
+        print("DATABASE_URL not set – skipping seed.")
+        return
     async with async_session_factory() as db:
         # Clear existing seed data so the script is re-runnable
         await db.execute(Banner.__table__.delete())
