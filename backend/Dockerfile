@@ -14,4 +14,7 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+CMD ["sh", "/app/start.sh"]
