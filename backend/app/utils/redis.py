@@ -11,11 +11,15 @@ redis_client: aioredis.Redis | None = None
 
 async def init_redis() -> None:
     global redis_client
-    redis_client = aioredis.from_url(
-        settings.REDIS_URL,
-        decode_responses=True,
-    )
-    logger.info("Redis connection pool initialised")
+    try:
+        redis_client = aioredis.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+        )
+        logger.info("Redis connection pool initialised")
+    except Exception as e:
+        logger.warning("Failed to connect to Redis (caching disabled): {}", e)
+        redis_client = None
 
 
 async def close_redis() -> None:
