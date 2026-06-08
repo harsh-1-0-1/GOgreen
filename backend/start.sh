@@ -16,6 +16,8 @@ if not url:
 	sys.exit(1)
 if url.startswith('postgres://'):
 	url = url.replace('postgres://', 'postgresql+asyncpg://', 1)
+elif url.startswith('postgresql://'):
+	url = url.replace('postgresql://', 'postgresql+asyncpg://', 1)
 
 async def check(url):
 	engine = create_async_engine(url, future=True)
