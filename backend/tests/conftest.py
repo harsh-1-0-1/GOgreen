@@ -71,14 +71,12 @@ class FakeRedis:
 
 @pytest.fixture(autouse=True)
 def _patch_redis(monkeypatch):
-    import app.services.auth_service as auth_mod
     import app.services.category_service as cat_mod
     import app.services.product_service as prod_mod
     import app.utils.redis as redis_mod
 
     fake = FakeRedis()
     monkeypatch.setattr(redis_mod, "redis_client", fake)
-    monkeypatch.setattr(auth_mod, "redis_client", fake)
     if hasattr(cat_mod, "redis_client"):
         monkeypatch.setattr(cat_mod, "redis_client", fake)
     if hasattr(prod_mod, "redis_client"):
