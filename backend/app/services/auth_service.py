@@ -18,7 +18,7 @@ from app.core.security import (
 )
 from app.db.models import User
 from app.schemas.auth import TokenResponse
-from app.utils.redis import redis_client
+from app.utils import redis as redis_mod
 
 REFRESH_KEY_PREFIX = "refresh:"
 RATE_LIMIT_PREFIX = "ratelimit:login:"
@@ -37,27 +37,27 @@ GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 # ---------------------------------------------------------------------------
 
 async def _store_refresh_token(user_id: int, token: str) -> None:
-    if not redis_client:
+    if not redis_mod.redis_client:
         return
     key = f"{REFRESH_KEY_PREFIX}{user_id}"
     ttl = settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400
-    await redis_client.set(key, hash_token(token), ex=ttl)
+    await redis_mod.redis_client.set(key, hash_token(token), ex=ttl)
 
 
 async def _verify_refresh_token(user_id: int, token: str) -> bool:
-    if not redis_client:
+    if not redis_mod.redis_client:
         return False
     key = f"{REFRESH_KEY_PREFIX}{user_id}"
-    stored = await redis_client.get(key)
+    stored = await redis_mod.redis_client.get(key)
     if stored is None:
         return False
     return stored == hash_token(token)
 
 
 async def _delete_refresh_token(user_id: int) -> None:
-    if not redis_client:
+    if not redis_mod.redis_client:
         return
-    await redis_client.delete(f"{REFRESH_KEY_PREFIX}{user_id}")
+    await redis_mod.redis_client.delete(f"{REFRESH_KEY_PREFIX}{user_id}")
 
 
 async def issue_tokens(user: User) -> TokenResponse:
@@ -73,12 +73,12 @@ async def issue_tokens(user: User) -> TokenResponse:
 
 async def check_rate_limit(ip: str) -> bool:
     """Return True if request is allowed, False if rate limited."""
-    if not redis_client:
+    if not redis_mod.redis_client:
         return True
     key = f"{RATE_LIMIT_PREFIX}{ip}"
-    current = await redis_client.incr(key)
+    current = await redis_mod.redis_client.incr(key)
     if current == 1:
-        await redis_client.expire(key, RATE_LIMIT_WINDOW)
+        await redis_mod.redis_client.expire(key, RATE_LIMIT_WINDOW)
     return current <= RATE_LIMIT_MAX
 
 
@@ -173,8 +173,8 @@ async def logout(token: str) -> None:
 
 async def generate_google_auth_url() -> str:
     state = secrets.token_urlsafe(32)
-    if redis_client:
-        await redis_client.set(f"{OAUTH_STATE_PREFIX}{state}", "1", ex=600)
+    if redis_mod.redis_client:
+        await redis_mod.redis_client.set(f"{OAUTH_STATE_PREFIX}{state}", "1", ex=600)
 
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
@@ -188,13 +188,13 @@ async def generate_google_auth_url() -> str:
 
 
 async def validate_oauth_state(state: str) -> bool:
-    if not redis_client:
+    if not redis_mod.redis_client:
         return False
     key = f"{OAUTH_STATE_PREFIX}{state}"
-    val = await redis_client.get(key)
+    val = await redis_mod.redis_client.get(key)
     if val is None:
         return False
-    await redis_client.delete(key)
+    await redis_mod.redis_client.delete(key)
     return True
 
 
