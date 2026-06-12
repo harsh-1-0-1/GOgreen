@@ -332,6 +332,33 @@ export default function ProductDetailPage() {
               </div>
             )}
 
+            {!isUnavailable && (
+              <div className="md:hidden space-y-3 pt-1">
+                <div className="inline-flex items-center border border-gray-200 rounded-none bg-white">
+                  <button onClick={() => setQty(Math.max(1, qty - 1))} className="px-4 py-3 touch-target">
+                    <Minus size={14} />
+                  </button>
+                  <span className="min-w-10 px-3 text-center text-sm font-medium">{qty}</span>
+                  <button onClick={() => setQty(Math.min(selectedStock, qty + 1))} className="px-4 py-3 touch-target">
+                    <Plus size={14} />
+                  </button>
+                </div>
+                <button
+                  onClick={handleAddToCart}
+                  className="w-full py-3 rounded text-sm font-semibold uppercase tracking-wide text-white transition active:scale-[0.99] hover:opacity-90 flex items-center justify-center gap-2"
+                  style={{ backgroundColor: '#16A34A' }}
+                >
+                  Add to Cart
+                </button>
+                <button
+                  onClick={handleBuyNow}
+                  className="w-full py-3 border border-primary text-primary bg-white rounded text-sm font-semibold uppercase tracking-wide flex items-center justify-center gap-2 active:scale-[0.99] transition hover:bg-primary/5"
+                >
+                  Buy It Now
+                </button>
+              </div>
+            )}
+
             <CareTips tips={product.care_tips || []} />
           </div>
         </div>
@@ -353,36 +380,6 @@ export default function ProductDetailPage() {
         )}
       </div>
 
-      {/* Mobile fixed bottom add-to-cart bar */}
-      {!isUnavailable && (
-        <div className="md:hidden fixed bottom-14 left-0 right-0 z-30 bg-white border-t shadow-[0_-4px_12px_rgba(0,0,0,0.08)] px-3 py-3 safe-bottom">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center border rounded-lg">
-              <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-2.5 touch-target">
-                <Minus size={14} />
-              </button>
-              <span className="px-3 text-sm font-medium">{qty}</span>
-              <button onClick={() => setQty(Math.min(selectedStock, qty + 1))} className="p-2.5 touch-target">
-                <Plus size={14} />
-              </button>
-            </div>
-            <button
-              onClick={handleAddToCart}
-              className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90 flex items-center justify-center gap-2"
-              style={{ backgroundColor: '#16A34A' }}
-            >
-              <ShoppingCart size={16} />
-              Add to Cart
-            </button>
-            <button
-              onClick={handleBuyNow}
-              className="flex-1 py-3 border-2 border-primary text-primary bg-white rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-            >
-              Buy It Now
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ChevronDown, SlidersHorizontal, X } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
@@ -18,6 +18,12 @@ const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest First' },
   { value: 'discount', label: 'Best Discount' },
 ];
+
+function formatSlugTitle(value: string) {
+  return value
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 function TrendingPromoBanner({
   banners,
@@ -202,7 +208,16 @@ function FiltersSidebar({
 }) {
   const { data: categories } = useCategories();
   const allCategories = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
-  const popularTags = ['indoor', 'outdoor', 'flowering', 'low-maintenance', 'air-purifying', 'pet-friendly', 'beginner-friendly'];
+  const popularTags = [
+    'indoor',
+    'outdoor',
+    'flowering',
+    'low-maintenance',
+    'air-purifying',
+    'pet-friendly',
+    'beginner-friendly',
+    'vastu-friendly',
+  ];
 
   return (
     <div className="space-y-6">
@@ -280,9 +295,8 @@ export default function ProductsPage() {
   const page = Number(searchParams.get('page')) || 1;
   const [minPrice, setMinPrice] = useState(searchParams.get('min_price') || '');
   const [maxPrice, setMaxPrice] = useState(searchParams.get('max_price') || '');
-  const [selectedTags, setSelectedTags] = useState<string[]>(
-    (searchParams.get('tags') || searchParams.get('tag') || '').split(',').filter(Boolean),
-  );
+  const tagParam = searchParams.get('tags') || searchParams.get('tag') || '';
+  const selectedTags = useMemo(() => tagParam.split(',').filter(Boolean), [tagParam]);
 
   function updateParams(updates: Record<string, string>) {
     const params = new URLSearchParams(searchParams);
@@ -303,12 +317,11 @@ export default function ProductsPage() {
 
   function handleTagToggle(tag: string) {
     const next = selectedTags.includes(tag) ? selectedTags.filter((t) => t !== tag) : [...selectedTags, tag];
-    setSelectedTags(next);
     updateParams({ tags: next.join(',') });
   }
 
   function resetFilters() {
-    setMinPrice(''); setMaxPrice(''); setSelectedTags([]);
+    setMinPrice(''); setMaxPrice('');
     setSearchParams({});
   }
 
@@ -335,6 +348,17 @@ export default function ProductsPage() {
   const trendingBannerImages =
     data?.items.flatMap((product) => product.images ?? []).filter(Boolean) ??
     [];
+  const pageTitle = search
+    ? `Results for "${search}"`
+    : isTrendingPage
+      ? 'Price Drop!'
+      : category
+        ? formatSlugTitle(category)
+        : selectedTags.length === 1
+          ? formatSlugTitle(selectedTags[0])
+          : selectedTags.length > 1
+            ? selectedTags.map(formatSlugTitle).join(' + ')
+            : 'All Products';
 
   const sidebar = (
     <FiltersSidebar
@@ -363,15 +387,7 @@ export default function ProductsPage() {
       {/* Header */}
       <div className="mb-4 sm:mb-6">
         <h1 className="text-lg sm:text-2xl font-bold">
-          {search
-            ? `Results for "${search}"`
-            : isTrendingPage
-              ? 'Price Drop!'
-              : category
-                ? category
-                    .replace(/-/g, ' ')
-                    .replace(/\b\w/g, (c) => c.toUpperCase())
-                : 'All Products'}
+          {pageTitle}
         </h1>
         {data && <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{data.total} products</p>}
       </div>

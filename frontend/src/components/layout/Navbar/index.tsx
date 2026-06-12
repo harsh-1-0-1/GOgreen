@@ -63,17 +63,16 @@ export default function Navbar() {
       const currentScrollY = window.scrollY;
       setScrolled(currentScrollY > 60);
 
-      // Handle hide/show logic based on scroll direction
+      // On mobile, keep the search bar available while browsing down the list,
+      // and give the bottom nav priority when the user scrolls back up.
       if (currentScrollY < 100) {
         setHidden(false);
       } else {
         const diff = currentScrollY - lastScrollY.current;
         if (diff > 10) {
-          // Scrolling down deliberately
-          setHidden(true);
-        } else if (diff < -10) {
-          // Scrolling up deliberately
           setHidden(false);
+        } else if (diff < -10) {
+          setHidden(true);
         }
       }
       
@@ -201,14 +200,14 @@ export default function Navbar() {
   function isNavActive(item: NavItemDef): boolean {
     const params = new URLSearchParams(location.search);
     const currentCategory = params.get('category') || '';
-    const currentTag = params.get('tag') || '';
+    const currentTag = params.get('tags') || params.get('tag') || '';
 
     const [itemPath, itemSearch] = item.href.split('?');
     const itemParams = new URLSearchParams(itemSearch || '');
 
     if (itemParams.get('category') === currentCategory && currentCategory)
       return true;
-    if (itemParams.get('tag') === currentTag && currentTag) return true;
+    if ((itemParams.get('tags') || itemParams.get('tag')) === currentTag && currentTag) return true;
 
     if (
       !item.href.startsWith('/products') &&

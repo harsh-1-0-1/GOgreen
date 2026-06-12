@@ -13,6 +13,7 @@ const FALLBACK_CARDS = [
     cta_text: 'Start Saving',
     cta_link: '/products?tags=combo',
     text_color: '#16A34A',
+    bg_color: '#D1FAE5',
   },
   {
     id: -2,
@@ -23,6 +24,7 @@ const FALLBACK_CARDS = [
     cta_text: 'Explore Gifts',
     cta_link: '/products?tags=corporate-gifts',
     text_color: '#16A34A',
+    bg_color: '#D1FAE5',
   },
 ];
 

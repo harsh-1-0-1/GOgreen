@@ -2,7 +2,8 @@ import hashlib
 import math
 import re
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, cast, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Category, Product
@@ -30,6 +31,12 @@ def make_list_cache_key(
     raw = f"{category_slug}:{search}:{min_price}:{max_price}:{tags}:{sort_by}:{page}:{limit}"
     h = hashlib.md5(raw.encode()).hexdigest()[:12]
     return f"products:{h}"
+
+
+def _tag_filter(db: AsyncSession, tag: str):
+    if db.bind and db.bind.dialect.name == "postgresql":
+        return cast(Product.tags, JSONB).contains([tag])
+    return Product.tags.contains(tag)
 
 
 async def list_products(
@@ -77,8 +84,11 @@ async def list_products(
     if tags:
         for tag in tags.split(","):
             tag = tag.strip()
-            query = query.where(Product.tags.contains(tag))
-            count_q = count_q.where(Product.tags.contains(tag))
+            if not tag:
+                continue
+            filt = _tag_filter(db, tag)
+            query = query.where(filt)
+            count_q = count_q.where(filt)
 
     match sort_by:
         case "price_asc":
