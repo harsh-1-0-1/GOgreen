@@ -97,3 +97,39 @@ export function useCreateCategory() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
   });
 }
+
+export function useCreateBlogPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (formData: FormData) => {
+      const { data } = await api.post('/blog', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['blog'] }),
+  });
+}
+
+export function useUpdateBlogPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ slug, body }: { slug: string; body: any }) => {
+      const { data } = await api.put(`/blog/${slug}`, body);
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: ['blog'] });
+    },
+  });
+}
+
+export function useDeleteBlogPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (slug: string) => {
+      await api.delete(`/blog/${slug}`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['blog'] }),
+  });
+}
