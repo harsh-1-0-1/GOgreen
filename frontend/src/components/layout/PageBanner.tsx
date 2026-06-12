@@ -65,13 +65,7 @@ export default function PageBanner() {
 
   return (
     <section className="border-b border-gray-100 bg-white py-2 sm:py-3 md:hidden">
-      {banner.cta_link ? (
-        <Link to={banner.cta_link} className="block">
-          {content}
-        </Link>
-      ) : (
-        content
-      )}
+      {content}
     </section>
   );
 }

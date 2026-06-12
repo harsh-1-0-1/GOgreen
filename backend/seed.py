@@ -163,7 +163,7 @@ PRODUCTS = [
         {"name": "Areca Palm", "cat": "indoor-plants", "price": 699,
          "desc": "Tropical palm that adds lush greenery and humidifies your room.",
          "sunlight": "Bright Indirect", "watering": "Twice a week",
-         "tags": ["air-purifying", "tropical", "large", "living-room"],
+         "tags": ["air-purifying", "tropical", "large", "living-room", "vastu-friendly"],
          "care_tips": ["Mist regularly", "Avoid direct sunlight to prevent leaf burn"], "badge": "Popular",
          "variants": _make_variants({"sage-green__metal": 6, "terracotta__terracotta-pot": 18, "charcoal__plastic": 0})},
 
@@ -184,14 +184,14 @@ PRODUCTS = [
         {"name": "Jade Plant", "cat": "indoor-plants", "price": 349,
          "desc": "Lucky succulent symbolising prosperity and good fortune.",
          "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks",
-         "tags": ["succulent", "lucky", "desktop", "low-maintenance", "beginner-friendly", "workspace"],
+         "tags": ["succulent", "lucky", "desktop", "low-maintenance", "beginner-friendly", "workspace", "vastu-friendly"],
          "care_tips": ["Let soil dry completely between waterings", "Avoid cold drafts"],
          "variants": _make_variants({"white__ceramic": 16, "sage-green__terracotta-pot": 8, "dusty-pink__plastic": 5})},
 
         {"name": "Spider Plant", "cat": "indoor-plants", "price": 199,
          "desc": "Cheerful cascading foliage with baby plantlets on arching stems.",
          "sunlight": "Bright Indirect", "watering": "Once a week",
-         "tags": ["pet-safe", "hanging", "beginner", "low-maintenance", "beginner-friendly", "bedroom"],
+         "tags": ["pet-safe", "hanging", "beginner", "low-maintenance", "beginner-friendly", "bedroom", "vastu-friendly"],
          "care_tips": ["Safe for cats and dogs", "Propagate babies in water"],
          "variants": _make_variants({"sage-green__hanging": 20, "white__hanging": 15, "dusty-pink__hanging": 8, "terracotta__plastic": 0})},
 
@@ -206,7 +206,7 @@ PRODUCTS = [
     {"name": "Hibiscus Red", "cat": "outdoor-plants", "price": 299, "desc": "Classic tropical shrub with large scarlet blooms.", "sunlight": "Full Sun", "watering": "Daily in summer", "tags": ["flowering", "tropical", "outdoor", "balcony"], "care_tips": ["Feed monthly during growing season", "Protect from frost"]},
     {"name": "Mogra Jasmine", "cat": "outdoor-plants", "price": 399, "desc": "Intensely fragrant white flowers, a beloved Indian garden classic.", "sunlight": "Full Sun to Part Shade", "watering": "Every 2 days", "tags": ["fragrant", "flowering", "traditional"], "care_tips": ["Prune in early spring", "Apply organic compost monthly"]},
     {"name": "Curry Leaf Plant", "cat": "outdoor-plants", "price": 249, "desc": "Essential kitchen garden herb with aromatic leaves.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["herb", "edible", "kitchen-garden", "balcony"], "care_tips": ["Full sun is essential", "Pick leaves regularly to encourage growth"]},
-    {"name": "Tulsi Holy Basil", "cat": "outdoor-plants", "price": 149, "desc": "Sacred Indian herb with medicinal and culinary uses.", "sunlight": "Full Sun", "watering": "Daily", "tags": ["herb", "medicinal", "sacred"], "care_tips": ["Pinch flower buds for bushy growth", "Keep well-watered in summer"]},
+    {"name": "Tulsi Holy Basil", "cat": "outdoor-plants", "price": 149, "desc": "Sacred Indian herb with medicinal and culinary uses.", "sunlight": "Full Sun", "watering": "Daily", "tags": ["herb", "medicinal", "sacred", "vastu-friendly"], "care_tips": ["Pinch flower buds for bushy growth", "Keep well-watered in summer"]},
     # Flowering Plants
     {"name": "Anthurium Red", "cat": "flowering-plants", "price": 599, "desc": "Glossy heart-shaped red spathes that bloom for weeks.", "sunlight": "Bright Indirect", "watering": "Twice a week", "tags": ["flowering", "indoor", "gift", "gifting"], "care_tips": ["High humidity preferred", "Avoid direct sun"], "badge": "Gift Pick"},
     {"name": "Orchid Phalaenopsis White", "cat": "flowering-plants", "price": 799, "desc": "Elegant butterfly orchid with long-lasting cascading blooms.", "sunlight": "Bright Indirect", "watering": "Once a week (ice cube method)", "tags": ["flowering", "elegant", "gift", "gifting"], "care_tips": ["Water with 3 ice cubes weekly", "Repot every 2 years"]},

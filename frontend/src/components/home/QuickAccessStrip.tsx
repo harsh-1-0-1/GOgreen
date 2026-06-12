@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
 
+import { useBanners } from '@/hooks/useBanners';
+
 interface Tile {
+  id: number;
   type: 'promo' | 'category';
   label: string;
   link: string;
@@ -9,8 +12,9 @@ interface Tile {
   textColor?: string;
 }
 
-const TILES: Tile[] = [
+const FALLBACK_TILES: Tile[] = [
   {
+    id: -1,
     type: 'promo',
     label: 'Next-Day\nDelivery',
     bg: '#1B4332',
@@ -18,42 +22,49 @@ const TILES: Tile[] = [
     link: '/products',
   },
   {
+    id: -2,
     type: 'category',
     label: 'XL Plants',
     image: 'https://images.unsplash.com/photo-1545241047-6083a3684587?w=400',
     link: '/products?category=xl-plants',
   },
   {
+    id: -3,
     type: 'category',
     label: 'Plant Stands',
     image: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400',
     link: '/products?category=plant-stands',
   },
   {
+    id: -4,
     type: 'category',
     label: 'Plant Care',
     image: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
     link: '/products?category=plant-care',
   },
   {
+    id: -5,
     type: 'category',
     label: 'Ceramic Pots',
     image: 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=400',
     link: '/products?category=ceramic-pots',
   },
   {
+    id: -6,
     type: 'category',
     label: 'Ready to use sprays',
     image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400',
     link: '/products?tags=spray',
   },
   {
+    id: -7,
     type: 'category',
     label: 'Watering Tools',
     image: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
     link: '/products?category=watering-tools',
   },
   {
+    id: -8,
     type: 'category',
     label: 'Summer Seeds',
     image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400',
@@ -100,14 +111,28 @@ function CategoryTile({ tile }: { tile: Tile }) {
 }
 
 export default function QuickAccessStrip() {
+  const { data: banners = [] } = useBanners('strip');
+  
+  const tiles: Tile[] = banners.length > 0 
+    ? banners.map(b => ({
+        id: b.id,
+        type: b.image_url ? 'category' : 'promo',
+        label: b.title.replace('\\n', '\n'),
+        link: b.cta_link || '/products',
+        image: b.image_url || undefined,
+        bg: b.bg_color,
+        textColor: b.text_color,
+      }))
+    : FALLBACK_TILES;
+
   return (
     <section className="w-full py-4 sm:py-6">
       <div className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto lg:overflow-visible scrollbar-hide px-4 sm:px-6 lg:px-10 xl:px-16 w-full pb-2 lg:pb-0">
-        {TILES.map((tile) =>
+        {tiles.map((tile) =>
           tile.type === 'promo' ? (
-            <PromoTile key={tile.label} tile={tile} />
+            <PromoTile key={tile.id} tile={tile} />
           ) : (
-            <CategoryTile key={tile.label} tile={tile} />
+            <CategoryTile key={tile.id} tile={tile} />
           ),
         )}
       </div>

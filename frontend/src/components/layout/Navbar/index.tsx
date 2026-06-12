@@ -63,17 +63,16 @@ export default function Navbar() {
       const currentScrollY = window.scrollY;
       setScrolled(currentScrollY > 60);
 
-      // Handle hide/show logic based on scroll direction
+      // On mobile, keep the search bar available while browsing down the list,
+      // and give the bottom nav priority when the user scrolls back up.
       if (currentScrollY < 100) {
         setHidden(false);
       } else {
         const diff = currentScrollY - lastScrollY.current;
         if (diff > 10) {
-          // Scrolling down deliberately
-          setHidden(true);
-        } else if (diff < -10) {
-          // Scrolling up deliberately
           setHidden(false);
+        } else if (diff < -10) {
+          setHidden(true);
         }
       }
       
@@ -201,14 +200,14 @@ export default function Navbar() {
   function isNavActive(item: NavItemDef): boolean {
     const params = new URLSearchParams(location.search);
     const currentCategory = params.get('category') || '';
-    const currentTag = params.get('tag') || '';
+    const currentTag = params.get('tags') || params.get('tag') || '';
 
     const [itemPath, itemSearch] = item.href.split('?');
     const itemParams = new URLSearchParams(itemSearch || '');
 
     if (itemParams.get('category') === currentCategory && currentCategory)
       return true;
-    if (itemParams.get('tag') === currentTag && currentTag) return true;
+    if ((itemParams.get('tags') || itemParams.get('tag')) === currentTag && currentTag) return true;
 
     if (
       !item.href.startsWith('/products') &&
@@ -244,23 +243,23 @@ export default function Navbar() {
       {/* ================================================================ */}
       {/* ROW 1 â€” Logo Â· Search Â· Icons (Ugaoo-style)                      */}
       {/* ================================================================ */}
-      <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 h-[64px] sm:h-[76px] flex items-center gap-3 sm:gap-6">
+      <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 h-[64px] sm:h-[76px] flex items-center gap-3 sm:gap-6 relative">
 
         {/* Hamburger â€” visible on every breakpoint */}
         <button
-          className="p-2 -ml-1 text-gray-700 hover:text-primary transition-colors touch-target"
+          className="p-2 -ml-1 text-gray-700 hover:text-primary transition-colors touch-target md:hidden"
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
         >
           <Menu size={24} />
         </button>
 
-        {/* Logo â€” left-aligned, prominent */}
-        <Link to="/" className="flex items-center gap-3 shrink-0 group">
+        {/* Logo â€” centered on mobile, left-aligned on desktop */}
+        <Link to="/" className="absolute left-1/2 -translate-x-1/2 md:static md:translate-x-0 flex items-center shrink-0 group">
           <img
             src="/plantoga-logo.png"
             alt="Plantoga"
-            className="h-12 sm:h-14 object-contain"
+            className="h-16 md:h-14 object-contain"
           />
         </Link>
 

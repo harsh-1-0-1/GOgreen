@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,6 +38,7 @@ class User(Base):
     addresses: Mapped[list["Address"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     orders: Mapped[list["Order"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     cart: Mapped["Cart | None"] = relationship(back_populates="user", uselist=False)
+    reviews: Mapped[list["ProductReview"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class Category(Base):
@@ -78,6 +80,36 @@ class Product(Base):
     variants: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     category: Mapped["Category"] = relationship(back_populates="products")
+    reviews: Mapped[list["ProductReview"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+
+
+class ReviewStatus(str, enum.Enum):
+    PUBLISHED = "published"
+    PENDING = "pending"
+    REJECTED = "rejected"
+
+
+class ProductReview(Base):
+    __tablename__ = "product_reviews"
+    __table_args__ = (
+        UniqueConstraint("product_id", "user_id", name="uq_product_reviews_product_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(140), nullable=True)
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[ReviewStatus] = mapped_column(Enum(ReviewStatus), default=ReviewStatus.PUBLISHED, index=True)
+    is_verified_purchase: Mapped[bool] = mapped_column(Boolean, default=False)
+    helpful_count: Mapped[int] = mapped_column(Integer, default=0)
+    reported_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    product: Mapped["Product"] = relationship(back_populates="reviews")
+    user: Mapped["User"] = relationship(back_populates="reviews")
 
 
 class Cart(Base):

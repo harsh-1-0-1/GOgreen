@@ -84,6 +84,15 @@ async def test_list_price_range(client: AsyncClient, admin_token: str):
 
 
 @pytest.mark.asyncio
+async def test_list_filter_by_tags(client: AsyncClient, admin_token: str):
+    await _bulk_seed(client, admin_token, count=5)
+    resp = await client.get(PROD_URL, params={"tags": "indoor"})
+    data = resp.json()
+    assert data["total"] == 2
+    assert all("indoor" in item["tags"] for item in data["items"])
+
+
+@pytest.mark.asyncio
 async def test_list_sort_price_asc(client: AsyncClient, admin_token: str):
     await _bulk_seed(client, admin_token, count=5)
     resp = await client.get(PROD_URL, params={"sort_by": "price_asc"})

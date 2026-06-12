@@ -65,6 +65,35 @@ export interface ProductListResponse {
   limit: number;
 }
 
+export interface ReviewSummary {
+  average_rating: number;
+  review_count: number;
+  rating_counts: Record<number, number>;
+}
+
+export interface ProductReview {
+  id: number;
+  product_id: number;
+  user_id: number;
+  author_name: string;
+  rating: number;
+  title: string | null;
+  body: string | null;
+  is_verified_purchase: boolean;
+  helpful_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewListResponse {
+  items: ProductReview[];
+  summary: ReviewSummary;
+  total: number;
+  page: number;
+  pages: number;
+  limit: number;
+}
+
 export interface CartItemProduct {
   id: number;
   name: string;

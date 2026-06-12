@@ -29,6 +29,7 @@ import CategoriesAdminPage from '@/pages/admin/CategoriesAdminPage';
 import OrdersAdminPage from '@/pages/admin/OrdersAdminPage';
 import UsersAdminPage from '@/pages/admin/UsersAdminPage';
 import BannersAdminPage from '@/pages/admin/BannersAdminPage';
+import BlogAdminPage from '@/pages/admin/BlogAdminPage';
 
 function ScrollToHashElement() {
   const { hash } = useLocation();
@@ -97,6 +98,7 @@ export default function App() {
                 <Route path="orders" element={<OrdersAdminPage />} />
                 <Route path="users" element={<UsersAdminPage />} />
                 <Route path="banners" element={<BannersAdminPage />} />
+                <Route path="blog" element={<BlogAdminPage />} />
               </Route>
             </Route>
           </Routes>
