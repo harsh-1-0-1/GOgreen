@@ -3,9 +3,11 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Droplets, Minus, Plus, ShoppingCart, Sun } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProduct, useProducts } from '@/hooks/useProducts';
+import { useProductReviews } from '@/hooks/useReviews';
 import { useCartStore } from '@/store/cartStore';
 import ProductCard from '@/components/product/ProductCard';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
+import ProductReviews, { ProductRatingInline } from '@/components/product/ProductReviews';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 
@@ -117,6 +119,7 @@ export default function ProductDetailPage() {
   const [selectedPot, setSelectedPot] = useState<string | null>(null);
 
   const { data: similar } = useProducts({ limit: 5 });
+  const { data: reviewPreview } = useProductReviews(product?.id, { limit: 1 });
 
   useEffect(() => {
     if (!product?.variants) return;
@@ -216,6 +219,8 @@ export default function ProductDetailPage() {
               asLinks
               className="mt-1"
             />
+
+            <ProductRatingInline summary={reviewPreview?.summary} />
 
             <div className="flex items-baseline gap-2 sm:gap-3">
               <span className="text-2xl sm:text-3xl font-bold text-primary">₹{displayPrice}</span>
@@ -362,6 +367,8 @@ export default function ProductDetailPage() {
             <CareTips tips={product.care_tips || []} />
           </div>
         </div>
+
+        <ProductReviews productId={product.id} />
 
         {/* Similar products */}
         {similarProducts.length > 0 && (
