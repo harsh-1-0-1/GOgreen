@@ -97,7 +97,8 @@ class ProductReview(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False, index=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    guest_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str | None] = mapped_column(String(140), nullable=True)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -109,7 +110,7 @@ class ProductReview(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     product: Mapped["Product"] = relationship(back_populates="reviews")
-    user: Mapped["User"] = relationship(back_populates="reviews")
+    user: Mapped["User | None"] = relationship(back_populates="reviews")
 
 
 class Cart(Base):

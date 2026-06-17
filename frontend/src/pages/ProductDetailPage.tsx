@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { useProduct, useProducts } from '@/hooks/useProducts';
 import { useProductReviews } from '@/hooks/useReviews';
 import { useCartStore } from '@/store/cartStore';
+import { useAuthStore } from '@/store/authStore';
 import ProductCard from '@/components/product/ProductCard';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
 import ProductReviews, { ProductRatingInline } from '@/components/product/ProductReviews';
@@ -113,6 +114,7 @@ export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading, isError } = useProduct(slug!);
   const addItem = useCartStore((s) => s.addItem);
+  const { user, openAuthModal } = useAuthStore();
   const navigate = useNavigate();
   const [qty, setQty] = useState(1);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
@@ -174,6 +176,10 @@ export default function ProductDetailPage() {
   async function handleBuyNow() {
     try {
       await addItem(product!.id, qty, product!, selectedOptions);
+      if (!user) {
+        openAuthModal();
+        return;
+      }
       navigate('/checkout');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to process');

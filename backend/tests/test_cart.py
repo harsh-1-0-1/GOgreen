@@ -6,6 +6,7 @@ from tests.conftest import (
     _seed_category,
     _register_user,
     _seed_product_and_category,
+    REGULAR_USER,
     test_session_factory,
 )
 
@@ -211,3 +212,69 @@ async def test_variant_cart_groups_by_normalized_options(client: AsyncClient):
     data = resp2.json()
     assert len(data["items"]) == 1
     assert data["items"][0]["quantity"] == 3
+
+
+async def test_guest_cart_add_multiple_products(client: AsyncClient):
+    admin = await _register_and_make_admin(client)
+    product_a = await _seed_product_and_category(client, admin, stock=10)
+
+    from app.db.models import Product
+    async with test_session_factory() as db:
+        from sqlalchemy import select
+        from app.db.models import Category
+
+        cat = (await db.execute(select(Category).limit(1))).scalar_one()
+        product_b = Product(
+            name="Cart Plant B", slug="cart-plant-b", description="Second plant",
+            price=399.0, original_price=None, stock_qty=10,
+            category_id=cat.id, images=["https://placehold.co/300"],
+            tags=["indoor"], is_active=True,
+        )
+        db.add(product_b)
+        await db.commit()
+        await db.refresh(product_b)
+        product_b_id = product_b.id
+
+    resp = await client.post("/api/v1/cart/items", json={"product_id": product_a["id"], "quantity": 1})
+    assert resp.status_code == 201, resp.text
+    cookies = resp.cookies
+
+    resp2 = await client.post(
+        "/api/v1/cart/items",
+        json={"product_id": product_b_id, "quantity": 2},
+        cookies=cookies,
+    )
+    assert resp2.status_code == 201, resp2.text
+    data = resp2.json()
+    assert data["item_count"] == 3
+    assert len(data["items"]) == 2
+
+
+async def test_duplicate_carts_are_consolidated(client: AsyncClient):
+    from app.db.models import Cart, User
+    from sqlalchemy import select
+
+    admin = await _register_and_make_admin(client)
+    product = await _seed_product_and_category(client, admin, stock=10)
+    token = await _register_user(client)
+
+    async with test_session_factory() as db:
+        user = (await db.execute(select(User).where(User.email == REGULAR_USER["email"]))).scalar_one()
+        db.add_all([Cart(user_id=user.id), Cart(user_id=user.id)])
+        await db.commit()
+
+    resp = await client.post(
+        "/api/v1/cart/items",
+        json={"product_id": product["id"], "quantity": 1},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201, resp.text
+
+    resp2 = await client.post(
+        "/api/v1/cart/items",
+        json={"product_id": product["id"], "quantity": 1},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp2.status_code == 201, resp2.text
+    assert resp2.json()["item_count"] == 2
+    assert len(resp2.json()["items"]) == 1

@@ -27,7 +27,9 @@ def _clean(value: str | None) -> str | None:
     return cleaned or None
 
 
-def _display_name(name: str) -> str:
+def _display_name(name: str | None) -> str:
+    if not name:
+        return "Plantoga customer"
     parts = [p for p in name.strip().split() if p]
     if not parts:
         return "Plantoga customer"
@@ -122,27 +124,33 @@ async def user_has_verified_purchase(db: AsyncSession, user_id: int, product_id:
 async def create_or_update_review(
     db: AsyncSession,
     product_id: int,
-    user: User,
+    user: User | None,
     payload: ReviewCreate,
 ) -> ProductReview:
     product = (await db.execute(select(Product).where(Product.id == product_id, Product.is_active == True))).scalar_one_or_none()  # noqa: E712
     if not product:
         raise ValueError("Product not found")
 
-    existing = (
-        await db.execute(
-            select(ProductReview).where(
-                ProductReview.product_id == product_id,
-                ProductReview.user_id == user.id,
+    existing = None
+    is_verified = False
+    if user:
+        existing = (
+            await db.execute(
+                select(ProductReview).where(
+                    ProductReview.product_id == product_id,
+                    ProductReview.user_id == user.id,
+                )
             )
-        )
-    ).scalar_one_or_none()
-    is_verified = await user_has_verified_purchase(db, user.id, product_id)
+        ).scalar_one_or_none()
+        is_verified = await user_has_verified_purchase(db, user.id, product_id)
+
+    guest_name = _clean(payload.author_name) or "Guest customer"
 
     if existing:
         existing.rating = payload.rating
         existing.title = _clean(payload.title)
         existing.body = _clean(payload.body)
+        existing.guest_name = None
         existing.status = ReviewStatus.PUBLISHED
         existing.is_verified_purchase = is_verified
         existing.updated_at = datetime.now(timezone.utc)
@@ -151,7 +159,8 @@ async def create_or_update_review(
     else:
         review = ProductReview(
             product_id=product_id,
-            user_id=user.id,
+            user_id=user.id if user else None,
+            guest_name=None if user else guest_name,
             rating=payload.rating,
             title=_clean(payload.title),
             body=_clean(payload.body),
@@ -187,11 +196,15 @@ async def mark_helpful(db: AsyncSession, review_id: int, user: User) -> ProductR
 
 
 def to_review_response(review: ProductReview) -> dict:
+    if review.user:
+        author_name = _display_name(review.user.full_name)
+    else:
+        author_name = review.guest_name or "Guest customer"
     return {
         "id": review.id,
         "product_id": review.product_id,
         "user_id": review.user_id,
-        "author_name": _display_name(review.user.full_name),
+        "author_name": author_name,
         "rating": review.rating,
         "title": review.title,
         "body": review.body,
