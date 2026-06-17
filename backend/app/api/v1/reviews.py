@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_current_active_user
+from app.core.security import get_current_active_user, get_optional_user
 from app.db.models import User
 from app.db.session import get_db
 from app.schemas.review import ReviewCreate, ReviewListResponse, ReviewResponse
@@ -48,13 +48,12 @@ async def create_product_review(
     product_id: int,
     payload: ReviewCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_active_user),
+    user: User | None = Depends(get_optional_user),
 ):
     try:
         review = await review_service.create_or_update_review(db, product_id, user, payload)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    review.user = user
     return review_service.to_review_response(review)
 
 

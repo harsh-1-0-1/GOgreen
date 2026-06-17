@@ -2,6 +2,7 @@ import json
 
 from loguru import logger
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -110,29 +111,71 @@ def resolve_variant_details(
     }
 
 
-async def get_or_create_cart(
+async def _find_carts(
     db: AsyncSession, *, user_id: int | None = None, session_id: str | None = None,
-) -> Cart:
+) -> list[Cart]:
     if user_id:
-        result = await db.execute(
-            select(Cart).where(Cart.user_id == user_id)
-            .options(selectinload(Cart.items).selectinload(CartItem.product))
-        )
+        query = select(Cart).where(Cart.user_id == user_id)
     elif session_id:
-        result = await db.execute(
-            select(Cart).where(Cart.session_id == session_id)
-            .options(selectinload(Cart.items).selectinload(CartItem.product))
-        )
+        query = select(Cart).where(Cart.session_id == session_id)
     else:
         raise ValueError("Either user_id or session_id is required")
 
-    cart = result.scalar_one_or_none()
-    if not cart:
-        cart = Cart(user_id=user_id, session_id=session_id)
-        db.add(cart)
+    result = await db.execute(
+        query.options(selectinload(Cart.items).selectinload(CartItem.product))
+        .order_by(Cart.id)
+    )
+    return list(result.scalars().all())
+
+
+async def _merge_duplicate_items(target: Cart, source: Cart, db: AsyncSession) -> None:
+    existing = {
+        (item.product_id, options_key(item.selected_options)): item
+        for item in target.items
+    }
+    for item in list(source.items):
+        key = (item.product_id, options_key(item.selected_options))
+        if key in existing:
+            existing[key].quantity += item.quantity
+            await db.delete(item)
+        else:
+            item.cart_id = target.id
+            target.items.append(item)
+            existing[key] = item
+
+
+async def _consolidate_carts(db: AsyncSession, carts: list[Cart]) -> Cart:
+    primary = carts[0]
+    for duplicate in carts[1:]:
+        await _merge_duplicate_items(primary, duplicate, db)
+        await db.delete(duplicate)
+    await db.flush()
+    logger.info("Consolidated {} duplicate carts into cart_id={}", len(carts) - 1, primary.id)
+    return await _load_cart(db, primary)
+
+
+async def get_or_create_cart(
+    db: AsyncSession, *, user_id: int | None = None, session_id: str | None = None,
+) -> Cart:
+    carts = await _find_carts(db, user_id=user_id, session_id=session_id)
+    if len(carts) > 1:
+        return await _consolidate_carts(db, carts)
+    if carts:
+        return carts[0]
+
+    cart = Cart(user_id=user_id, session_id=session_id)
+    db.add(cart)
+    try:
         await db.flush()
-        cart = await _load_cart(db, cart)
-    return cart
+        return await _load_cart(db, cart)
+    except IntegrityError:
+        await db.rollback()
+        carts = await _find_carts(db, user_id=user_id, session_id=session_id)
+        if not carts:
+            raise
+        if len(carts) > 1:
+            return await _consolidate_carts(db, carts)
+        return carts[0]
 
 
 def build_cart_response(cart: Cart) -> CartResponse:
@@ -231,11 +274,13 @@ async def remove_item(db: AsyncSession, cart: Cart, item_id: int) -> Cart:
 
 async def merge_guest_cart(db: AsyncSession, user_id: int, session_id: str) -> Cart:
     """Merge guest cart into user cart. On conflict keep higher qty."""
-    guest_result = await db.execute(
-        select(Cart).where(Cart.session_id == session_id)
-        .options(selectinload(Cart.items))
-    )
-    guest_cart = guest_result.scalar_one_or_none()
+    guest_carts = await _find_carts(db, session_id=session_id)
+    if len(guest_carts) > 1:
+        guest_cart = await _consolidate_carts(db, guest_carts)
+    elif guest_carts:
+        guest_cart = guest_carts[0]
+    else:
+        guest_cart = None
 
     user_cart = await get_or_create_cart(db, user_id=user_id)
 

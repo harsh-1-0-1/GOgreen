@@ -74,7 +74,7 @@ export interface ReviewSummary {
 export interface ProductReview {
   id: number;
   product_id: number;
-  user_id: number;
+  user_id: number | null;
   author_name: string;
   rating: number;
   title: string | null;

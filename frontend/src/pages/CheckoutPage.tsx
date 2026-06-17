@@ -93,7 +93,7 @@ function AccordionStep({ step, title, icon, open, onToggle, children }: {
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, openAuthModal } = useAuthStore();
   const { items, total, cartId, clearLocal } = useCartStore();
   const { data: addresses, isLoading: loadingAddresses } = useAddresses();
   const deleteAddr = useDeleteAddress();
@@ -106,9 +106,13 @@ export default function CheckoutPage() {
   const [mobileStep, setMobileStep] = useState(1);
 
   useEffect(() => {
-    if (!user) navigate('/');
-    if (items.length === 0 && !payuData) navigate('/cart');
-  }, [user, items, navigate, payuData]);
+    if (!user) {
+      openAuthModal();
+      navigate('/cart', { replace: true });
+      return;
+    }
+    if (items.length === 0 && !payuData) navigate('/cart', { replace: true });
+  }, [user, items, navigate, payuData, openAuthModal]);
 
   useEffect(() => {
     if (addresses?.length && !selectedAddressId) {

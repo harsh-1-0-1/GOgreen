@@ -87,7 +87,7 @@ export default function ProductReviews({ productId }: { productId: number }) {
   const [rating, setRating] = useState(5);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const { user, openAuthModal } = useAuthStore();
+  const { openAuthModal } = useAuthStore();
   const { data, isLoading } = useProductReviews(productId, {
     page,
     limit: 8,
@@ -101,10 +101,6 @@ export default function ProductReviews({ productId }: { productId: number }) {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     try {
       await createReview.mutateAsync({
         rating,
@@ -191,7 +187,7 @@ export default function ProductReviews({ productId }: { productId: number }) {
               disabled={createReview.isPending}
               className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:opacity-60"
             >
-              {user ? 'Submit Review' : 'Sign in to Review'}
+              {createReview.isPending ? 'Submitting...' : 'Submit Review'}
             </button>
           </form>
         </aside>
