@@ -250,6 +250,44 @@ async def test_guest_cart_add_multiple_products(client: AsyncClient):
     assert len(data["items"]) == 2
 
 
+async def test_guest_cart_persists_via_session_header(client: AsyncClient):
+    admin = await _register_and_make_admin(client)
+    product_a = await _seed_product_and_category(client, admin, stock=10)
+
+    from app.db.models import Product
+    async with test_session_factory() as db:
+        from sqlalchemy import select
+        from app.db.models import Category
+
+        cat = (await db.execute(select(Category).limit(1))).scalar_one()
+        product_b = Product(
+            name="Header Cart Plant B", slug="header-cart-plant-b", description="Second plant",
+            price=399.0, original_price=None, stock_qty=10,
+            category_id=cat.id, images=["https://placehold.co/300"],
+            tags=["indoor"], is_active=True,
+        )
+        db.add(product_b)
+        await db.commit()
+        await db.refresh(product_b)
+        product_b_id = product_b.id
+
+    resp = await client.post("/api/v1/cart/items", json={"product_id": product_a["id"], "quantity": 1})
+    assert resp.status_code == 201, resp.text
+    session_id = resp.json()["session_id"]
+    assert session_id
+
+    resp2 = await client.post(
+        "/api/v1/cart/items",
+        json={"product_id": product_b_id, "quantity": 1},
+        headers={"X-Cart-Session-Id": session_id},
+    )
+    assert resp2.status_code == 201, resp2.text
+    data = resp2.json()
+    assert data["item_count"] == 2
+    assert len(data["items"]) == 2
+    assert data["session_id"] == session_id
+
+
 async def test_duplicate_carts_are_consolidated(client: AsyncClient):
     from app.db.models import Cart, User
     from sqlalchemy import select

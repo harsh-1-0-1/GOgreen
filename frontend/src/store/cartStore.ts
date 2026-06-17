@@ -2,6 +2,14 @@ import { create } from 'zustand';
 import api from '@/lib/api';
 import type { Cart, CartItem, Product } from '@/types';
 
+const CART_SESSION_KEY = 'cart_session_id';
+
+function persistGuestSession(data: Cart) {
+  if (data.session_id) {
+    localStorage.setItem(CART_SESSION_KEY, data.session_id);
+  }
+}
+
 interface CartState {
   items: CartItem[];
   total: number;
@@ -47,6 +55,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   fetchCart: async () => {
     try {
       const { data } = await api.get<Cart>('/cart');
+      persistGuestSession(data);
       set(applyCart(data));
     } catch {
       // ignore
@@ -59,6 +68,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       quantity,
       selected_options: selectedOptions,
     });
+    persistGuestSession(data);
     set({
       ...applyCart(data),
       isDrawerOpen: true,
@@ -83,6 +93,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
     try {
       const { data } = await api.put<Cart>(`/cart/items/${itemId}`, { quantity });
+      persistGuestSession(data);
       set(applyCart(data));
     } catch (err) {
       set(previousState);
@@ -103,6 +114,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
     try {
       const { data } = await api.delete<Cart>(`/cart/items/${itemId}`);
+      persistGuestSession(data);
       set(applyCart(data));
     } catch (err) {
       set(previousState);
@@ -113,6 +125,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   mergeCart: async (sessionId) => {
     try {
       const { data } = await api.post<Cart>('/cart/merge', { session_id: sessionId });
+      localStorage.removeItem(CART_SESSION_KEY);
       set(applyCart(data));
     } catch {
       // ignore
