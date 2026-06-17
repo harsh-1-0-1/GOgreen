@@ -7,7 +7,7 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function AuthModal() {
   const { isAuthModalOpen, closeAuthModal, login, register, isLoading } = useAuthStore();
-  const { fetchCart } = useCartStore();
+  const { fetchCart, mergeCart } = useCartStore();
   const [tab, setTab] = useState<'login' | 'register'>('login');
 
   const [email, setEmail] = useState('');
@@ -26,10 +26,15 @@ export default function AuthModal() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     try {
+      const guestSessionId = localStorage.getItem('cart_session_id');
       await login(email, password);
       toast.success('Welcome back!');
       reset();
-      await fetchCart();
+      if (guestSessionId) {
+        await mergeCart(guestSessionId);
+      } else {
+        await fetchCart();
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Login failed');
     }
@@ -38,10 +43,15 @@ export default function AuthModal() {
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     try {
+      const guestSessionId = localStorage.getItem('cart_session_id');
       await register(email, password, fullName, phone || undefined);
       toast.success('Account created!');
       reset();
-      await fetchCart();
+      if (guestSessionId) {
+        await mergeCart(guestSessionId);
+      } else {
+        await fetchCart();
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Registration failed');
     }

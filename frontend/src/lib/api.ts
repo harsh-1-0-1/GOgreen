@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1').replace(/\/$/, '');
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$/, '');
+
+const CART_SESSION_KEY = 'cart_session_id';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -11,6 +13,10 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  const cartSessionId = localStorage.getItem(CART_SESSION_KEY);
+  if (cartSessionId) {
+    config.headers['X-Cart-Session-Id'] = cartSessionId;
   }
   return config;
 });
