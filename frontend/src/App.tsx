@@ -31,6 +31,19 @@ import UsersAdminPage from '@/pages/admin/UsersAdminPage';
 import BannersAdminPage from '@/pages/admin/BannersAdminPage';
 import BlogAdminPage from '@/pages/admin/BlogAdminPage';
 
+function ScrollToTop() {
+  const { pathname, hash } = useLocation();
+
+  useEffect(() => {
+    // Don't override scroll when navigating to a hash anchor
+    if (!hash) {
+      window.scrollTo(0, 0);
+    }
+  }, [pathname, hash]);
+
+  return null;
+}
+
 function ScrollToHashElement() {
   const { hash } = useLocation();
 
@@ -65,6 +78,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AppInit />
+        <ScrollToTop />
         <ScrollToHashElement />
         <Toaster
           position="top-right"

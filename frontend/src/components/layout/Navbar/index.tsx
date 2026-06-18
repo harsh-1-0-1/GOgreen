@@ -245,7 +245,7 @@ export default function Navbar() {
       <div
         className={clsx(
           'mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 flex items-center gap-3 sm:gap-6 relative',
-          isHome ? 'h-[84px] sm:h-[96px] md:h-[104px]' : 'h-[72px] sm:h-[84px] md:h-[88px]',
+          'h-[84px] sm:h-[96px] md:h-[104px]',
         )}
       >
 
@@ -266,12 +266,7 @@ export default function Navbar() {
           <img
             src="/plantoga-logo.png"
             alt="Plantoga"
-            className={clsx(
-              'object-contain w-auto',
-              isHome
-                ? 'h-[76px] sm:h-[88px] md:h-[96px]'
-                : 'h-[60px] sm:h-[70px] md:h-[80px]',
-            )}
+            className="object-contain w-auto h-[76px] sm:h-[88px] md:h-[96px]"
           />
         </Link>
 

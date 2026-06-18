@@ -144,7 +144,7 @@ export default function CartPage() {
   const grandTotal = total + shipping;
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8 pb-24 lg:pb-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
       <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-8">Shopping Cart ({itemCount} items)</h1>
 
       <div className="grid lg:grid-cols-3 gap-6 sm:gap-8">
@@ -253,20 +253,17 @@ export default function CartPage() {
             <span>Total</span>
             <span className="text-primary">₹{grandTotal.toFixed(2)}</span>
           </div>
+          {/* Checkout button — inline below total */}
+          {user ? (
+            <Link to="/checkout" className="block w-full text-center py-3.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition mt-1">
+              Proceed to Checkout — ₹{grandTotal.toFixed(0)}
+            </Link>
+          ) : (
+            <button onClick={openAuthModal} className="w-full py-3.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition mt-1">
+              Login to Checkout
+            </button>
+          )}
         </div>
-      </div>
-
-      {/* Mobile fixed checkout button */}
-      <div className="lg:hidden fixed bottom-14 left-0 right-0 z-30 bg-white border-t px-3 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] safe-bottom">
-        {user ? (
-          <Link to="/checkout" className="block w-full text-center py-3 bg-primary text-white rounded-xl font-semibold text-sm">
-            Proceed to Checkout — ₹{grandTotal.toFixed(0)}
-          </Link>
-        ) : (
-          <button onClick={openAuthModal} className="w-full py-3 bg-primary text-white rounded-xl font-semibold text-sm">
-            Login to Checkout
-          </button>
-        )}
       </div>
     </div>
   );
