@@ -63,16 +63,15 @@ export default function Navbar() {
       const currentScrollY = window.scrollY;
       setScrolled(currentScrollY > 60);
 
-      // On mobile, keep the search bar available while browsing down the list,
-      // and give the bottom nav priority when the user scrolls back up.
+      // Hide navbar on scroll down, show on scroll up
       if (currentScrollY < 100) {
         setHidden(false);
       } else {
         const diff = currentScrollY - lastScrollY.current;
         if (diff > 10) {
-          setHidden(false);
+          setHidden(true);   // scrolling DOWN → hide
         } else if (diff < -10) {
-          setHidden(true);
+          setHidden(false);  // scrolling UP → show
         }
       }
       
@@ -243,7 +242,12 @@ export default function Navbar() {
       {/* ================================================================ */}
       {/* ROW 1 â€” Logo Â· Search Â· Icons (Ugaoo-style)                      */}
       {/* ================================================================ */}
-      <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 h-[64px] sm:h-[76px] flex items-center gap-3 sm:gap-6 relative">
+      <div
+        className={clsx(
+          'mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 flex items-center gap-3 sm:gap-6 relative',
+          isHome ? 'h-[84px] sm:h-[96px] md:h-[104px]' : 'h-[72px] sm:h-[84px] md:h-[88px]',
+        )}
+      >
 
         {/* Hamburger â€” visible on every breakpoint */}
         <button
@@ -254,12 +258,20 @@ export default function Navbar() {
           <Menu size={24} />
         </button>
 
-        {/* Logo â€” centered on mobile, left-aligned on desktop */}
-        <Link to="/" className="absolute left-1/2 -translate-x-1/2 md:static md:translate-x-0 flex items-center shrink-0 group">
+        {/* Logo — centered on all breakpoints */}
+        <Link
+          to="/"
+          className="absolute left-1/2 -translate-x-1/2 flex items-center shrink-0 group z-10"
+        >
           <img
             src="/plantoga-logo.png"
             alt="Plantoga"
-            className="h-16 md:h-14 object-contain"
+            className={clsx(
+              'object-contain w-auto',
+              isHome
+                ? 'h-[76px] sm:h-[88px] md:h-[96px]'
+                : 'h-[60px] sm:h-[70px] md:h-[80px]',
+            )}
           />
         </Link>
 
@@ -582,13 +594,13 @@ export default function Navbar() {
             {/* SCREEN 1: Main Menu Panel */}
             <div className="w-1/2 h-full flex flex-col shrink-0 overflow-hidden">
               {/* Mobile Drawer Header */}
-              <div className="flex items-center justify-between px-5 py-4 shrink-0">
-                <Link to="/" onClick={closeDrawer} className="flex items-center gap-3 group">
-                  <img src="/plantoga-logo.png" alt="Plantoga" className="h-9 object-contain" />
+              <div className="relative flex items-center justify-center px-5 py-4 shrink-0">
+                <Link to="/" onClick={closeDrawer} className="flex items-center group">
+                  <img src="/plantoga-logo.png" alt="Plantoga" className="h-14 object-contain" />
                 </Link>
                 <button
                   onClick={closeDrawer}
-                  className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 active:scale-90 transition-all duration-200"
+                  className="absolute right-5 w-9 h-9 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 active:scale-90 transition-all duration-200"
                   aria-label="Close menu"
                 >
                   <X size={20} />
