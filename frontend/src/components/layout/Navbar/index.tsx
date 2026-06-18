@@ -37,7 +37,6 @@ export default function Navbar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [hidden, setHidden] = useState(false);
-  const [mobileSearchVisible, setMobileSearchVisible] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
   const lastScrollY = useRef(0);
@@ -58,27 +57,20 @@ export default function Navbar() {
   // Cleanup hover timeout on unmount
   useEffect(() => () => clearTimeout(hoverTimeoutRef.current), []);
 
-  // Scroll-based sticky shadow and hide/show on scroll
+  // Scroll-based shadow and hide/show on scroll
   useEffect(() => {
     function onScroll() {
       const currentScrollY = window.scrollY;
       setScrolled(currentScrollY > 60);
 
-      // Hide navbar on scroll down, show on scroll up
       if (currentScrollY < 100) {
         setHidden(false);
-        setMobileSearchVisible(false);
       } else {
         const diff = currentScrollY - lastScrollY.current;
-        if (diff > 10) {
-          setHidden(true);
-          setMobileSearchVisible(false);
-        } else if (diff < -10) {
-          setHidden(false);
-          setMobileSearchVisible(true);
-        }
+        if (diff > 10) setHidden(true);   // scroll down → hide top navbar
+        else if (diff < -10) setHidden(false); // scroll up → show top navbar
       }
-      
+
       lastScrollY.current = currentScrollY;
     }
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -238,47 +230,43 @@ export default function Navbar() {
   return (
     <header
       className={clsx(
-        'sticky top-0 z-50 bg-white transition-all duration-300 ease-in-out',
+        'sticky top-0 z-50 bg-white transition-transform duration-300 ease-in-out',
         scrolled && 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] border-b border-gray-100',
-        hidden && 'md:-translate-y-full'
+        hidden && '-translate-y-full'
       )}
     >
       {/* ================================================================ */}
       {/* ROW 1 â€” Logo Â· Search Â· Icons (Ugaoo-style)                      */}
       {/* ================================================================ */}
       <div
-        className={clsx(
-          'mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 flex items-center gap-3 sm:gap-6 relative',
-          'h-[84px] sm:h-[96px] md:h-[104px]',
-          mobileSearchVisible && 'hidden md:flex',
-        )}
+        className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 flex items-center gap-3 sm:gap-6 relative h-[84px] sm:h-[96px] lg:h-[104px]"
       >
 
         {/* Hamburger â€” visible on every breakpoint */}
         <button
-          className="p-2 -ml-1 text-gray-700 hover:text-primary transition-colors touch-target md:hidden"
+          className="p-2 -ml-1 text-gray-700 hover:text-primary transition-colors touch-target lg:hidden"
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
         >
           <Menu size={24} />
         </button>
 
-        {/* Logo — centered on all breakpoints */}
+        {/* Logo — centered on mobile, in-flow on desktop */}
         <Link
           to="/"
-          className="absolute left-1/2 -translate-x-1/2 flex items-center shrink-0 group z-10"
+          className="absolute left-1/2 -translate-x-1/2 lg:relative lg:left-auto lg:translate-x-0 flex items-center shrink-0 group z-10"
         >
           <img
             src="/plantoga-logo.png"
             alt="Plantoga"
-            className="object-contain w-auto h-[76px] sm:h-[88px] md:h-[96px]"
+            className="object-contain w-auto h-[76px] sm:h-[88px] lg:h-[96px]"
           />
         </Link>
 
         {/* Desktop Search â€” centered, wide pill with embedded button */}
         <div
           ref={searchContainerRef}
-          className="hidden md:block flex-1 mx-auto relative"
+          className="hidden lg:block flex-1 min-w-0 max-w-4xl mx-auto relative"
         >
           <form onSubmit={handleSearch}>
             <div className="relative flex items-center">
@@ -345,7 +333,7 @@ export default function Navbar() {
         </div>
 
         {/* Right Icons â€” clean, spaced */}
-        <div className="flex items-center gap-1 ml-auto">
+        <div className="flex items-center gap-1 ml-auto shrink-0">
 
 
           {/* WhatsApp */}
@@ -364,7 +352,7 @@ export default function Navbar() {
 
           {/* Account */}
           {user ? (
-            <div className="relative hidden md:block">
+            <div className="relative hidden lg:block">
               <button
                 className="flex items-center justify-center w-11 h-11 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -414,7 +402,7 @@ export default function Navbar() {
             </div>
           ) : (
             <button
-              className="hidden md:flex items-center justify-center w-11 h-11 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
+              className="hidden lg:flex items-center justify-center w-11 h-11 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
               onClick={openAuthModal}
               aria-label="Login"
             >
@@ -424,13 +412,13 @@ export default function Navbar() {
 
           {/* Cart â€” visible on all breakpoints */}
           <button
-            className="flex items-center justify-center w-10 h-10 md:w-11 md:h-11 rounded-full relative text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
+            className="flex items-center justify-center w-10 h-10 lg:w-11 lg:h-11 rounded-full relative text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
             onClick={openDrawer}
             aria-label="Cart"
           >
             <ShoppingBag size={21} />
             {itemCount > 0 && (
-              <span className="absolute top-0 right-0 md:top-0.5 md:right-0.5 bg-accent text-white text-[9px] font-bold w-[17px] h-[17px] rounded-full flex items-center justify-center shadow-sm">
+              <span className="absolute top-0 right-0 lg:top-0.5 lg:right-0.5 bg-accent text-white text-[9px] font-bold w-[17px] h-[17px] rounded-full flex items-center justify-center shadow-sm">
                 {itemCount > 9 ? '9+' : itemCount}
               </span>
             )}
@@ -541,14 +529,7 @@ export default function Navbar() {
       {/* Mobile search bar                                                */}
       {/* Visible when product images move downward                        */}
       {/* ================================================================ */}
-      <div
-        className={clsx(
-          'md:hidden bg-white px-4 transition-all duration-300',
-          mobileSearchVisible
-            ? 'max-h-20 py-3 opacity-100'
-            : 'max-h-0 overflow-hidden py-0 opacity-0',
-        )}
-      >
+      <div className="lg:hidden bg-white px-4 py-3 border-t border-gray-100">
           <form onSubmit={handleSearch}>
             <div className="relative flex items-center">
               <Search size={16} className="absolute left-4 text-gray-400 pointer-events-none" />
