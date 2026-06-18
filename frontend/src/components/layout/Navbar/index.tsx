@@ -63,16 +63,15 @@ export default function Navbar() {
       const currentScrollY = window.scrollY;
       setScrolled(currentScrollY > 60);
 
-      // On mobile, keep the search bar available while browsing down the list,
-      // and give the bottom nav priority when the user scrolls back up.
+      // Hide navbar on scroll down, show on scroll up
       if (currentScrollY < 100) {
         setHidden(false);
       } else {
         const diff = currentScrollY - lastScrollY.current;
         if (diff > 10) {
-          setHidden(false);
+          setHidden(true);   // scrolling DOWN → hide
         } else if (diff < -10) {
-          setHidden(true);
+          setHidden(false);  // scrolling UP → show
         }
       }
       
