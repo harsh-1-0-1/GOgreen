@@ -265,7 +265,7 @@ async def update_item(db: AsyncSession, cart: Cart, item_id: int, quantity: int)
 async def remove_item(db: AsyncSession, cart: Cart, item_id: int) -> Cart:
     item = next((i for i in cart.items if i.id == item_id), None)
     if not item:
-        raise ValueError("Cart item not found")
+        return await _load_cart(db, cart)
     cart.items.remove(item)
     await db.delete(item)
     await db.flush()

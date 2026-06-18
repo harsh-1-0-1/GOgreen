@@ -3,6 +3,18 @@ import api from '@/lib/api';
 import type { Cart, CartItem, Product } from '@/types';
 
 const CART_SESSION_KEY = 'cart_session_id';
+const pendingRemovals = new Set<number>();
+
+function isNotFoundError(err: unknown): boolean {
+  const detail =
+    typeof err === 'object' &&
+    err !== null &&
+    'response' in err &&
+    typeof (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail === 'string'
+      ? ((err as { response: { data: { detail: string } } }).response.data.detail as string)
+      : '';
+  return detail.toLowerCase().includes('not found');
+}
 
 function persistGuestSession(data: Cart) {
   if (data.session_id) {
@@ -102,9 +114,11 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   removeItem: async (itemId) => {
+    if (pendingRemovals.has(itemId)) return;
+    pendingRemovals.add(itemId);
+
     const previousState = { items: get().items, total: get().total, itemCount: get().itemCount };
 
-    // Optimistic update
     const newItems = previousState.items.filter((i) => i.id !== itemId);
     set({
       items: newItems,
@@ -117,8 +131,18 @@ export const useCartStore = create<CartState>((set, get) => ({
       persistGuestSession(data);
       set(applyCart(data));
     } catch (err) {
-      set(previousState);
-      throw err;
+      try {
+        const { data } = await api.get<Cart>('/cart');
+        persistGuestSession(data);
+        set(applyCart(data));
+      } catch {
+        if (!isNotFoundError(err)) {
+          set(previousState);
+        }
+      }
+      if (!isNotFoundError(err)) throw err;
+    } finally {
+      pendingRemovals.delete(itemId);
     }
   },
 

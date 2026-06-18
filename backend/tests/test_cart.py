@@ -152,6 +152,10 @@ async def test_delete_cart_item(client: AsyncClient):
     assert resp2.status_code == 200
     assert resp2.json()["item_count"] == 0
 
+    resp3 = await client.delete(f"/api/v1/cart/items/{item_id}", cookies=cookies)
+    assert resp3.status_code == 200
+    assert resp3.json()["item_count"] == 0
+
 
 async def test_variant_cart_add_returns_computed_fields(client: AsyncClient):
     admin = await _register_and_make_admin(client)
