@@ -37,6 +37,7 @@ export default function Navbar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const [mobileSearchVisible, setMobileSearchVisible] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
   const lastScrollY = useRef(0);
@@ -66,12 +67,15 @@ export default function Navbar() {
       // Hide navbar on scroll down, show on scroll up
       if (currentScrollY < 100) {
         setHidden(false);
+        setMobileSearchVisible(false);
       } else {
         const diff = currentScrollY - lastScrollY.current;
         if (diff > 10) {
-          setHidden(true);   // scrolling DOWN → hide
+          setHidden(true);
+          setMobileSearchVisible(false);
         } else if (diff < -10) {
-          setHidden(false);  // scrolling UP → show
+          setHidden(false);
+          setMobileSearchVisible(true);
         }
       }
       
@@ -236,7 +240,7 @@ export default function Navbar() {
       className={clsx(
         'sticky top-0 z-50 bg-white transition-all duration-300 ease-in-out',
         scrolled && 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] border-b border-gray-100',
-        hidden && '-translate-y-full'
+        hidden && 'md:-translate-y-full'
       )}
     >
       {/* ================================================================ */}
@@ -246,6 +250,7 @@ export default function Navbar() {
         className={clsx(
           'mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 flex items-center gap-3 sm:gap-6 relative',
           'h-[84px] sm:h-[96px] md:h-[104px]',
+          mobileSearchVisible && 'hidden md:flex',
         )}
       >
 
@@ -534,9 +539,16 @@ export default function Navbar() {
 
       {/* ================================================================ */}
       {/* Mobile search bar                                                */}
-      {/* Always visible on all pages                                      */}
+      {/* Visible when product images move downward                        */}
       {/* ================================================================ */}
-      <div className="md:hidden px-4 pb-3 pt-1 bg-white border-t border-gray-100">
+      <div
+        className={clsx(
+          'md:hidden bg-white px-4 transition-all duration-300',
+          mobileSearchVisible
+            ? 'max-h-20 py-3 opacity-100'
+            : 'max-h-0 overflow-hidden py-0 opacity-0',
+        )}
+      >
           <form onSubmit={handleSearch}>
             <div className="relative flex items-center">
               <Search size={16} className="absolute left-4 text-gray-400 pointer-events-none" />
