@@ -33,8 +33,8 @@ export default function BottomNav() {
       setVisible(true);
     } else {
       const diff = currentY - lastScrollY.current;
-      if (diff > 10) setVisible(false);
-      else if (diff < -10) setVisible(true);
+      if (diff > 10) setVisible(true);
+      else if (diff < -10) setVisible(false);
     }
     lastScrollY.current = currentY;
   }, []);
@@ -60,7 +60,7 @@ export default function BottomNav() {
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 safe-bottom transition-transform duration-300"
       style={{ transform: visible ? 'translateY(0)' : 'translateY(100%)' }}
     >
-      <div className="flex items-center justify-around h-[58px]">
+      <div className="flex h-[58px] items-center justify-around px-3">
         {NAV_ITEMS.map((item) => {
           const active = isActive(item.to);
           const isAccount = item.to === '/account';
@@ -72,7 +72,7 @@ export default function BottomNav() {
                 onClick={() =>
                   user ? (window.location.href = '/orders') : openAuthModal()
                 }
-                className="flex flex-col items-center justify-center gap-0.5 flex-1 touch-target"
+                className="flex flex-1 flex-col items-center justify-center gap-0.5 touch-target"
               >
                 <item.icon
                   size={22}
@@ -92,7 +92,7 @@ export default function BottomNav() {
             <Link
               key={item.to}
               to={item.to}
-              className="flex flex-col items-center justify-center gap-0.5 flex-1 touch-target"
+              className="flex flex-1 flex-col items-center justify-center gap-0.5 touch-target"
             >
               <item.icon
                 size={22}
