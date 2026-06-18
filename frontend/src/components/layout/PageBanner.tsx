@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 import { useBanners } from '@/hooks/useBanners';
 import type { Banner } from '@/types';
@@ -64,7 +64,7 @@ export default function PageBanner() {
   );
 
   return (
-    <section className="border-b border-gray-100 bg-white py-2 sm:py-3 md:hidden">
+    <section className="border-b border-gray-100 bg-white py-2 sm:py-3">
       {content}
     </section>
   );
