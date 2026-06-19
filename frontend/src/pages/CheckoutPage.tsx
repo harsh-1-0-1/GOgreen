@@ -218,10 +218,9 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => {
-    if (!user) openAuthModal();
     if (isBuyNow && !directSession) navigate('/cart', { replace: true });
     if (!isBuyNow && cart.items.length === 0 && !payuData) navigate('/cart', { replace: true });
-  }, [cart.items.length, directSession, isBuyNow, navigate, openAuthModal, payuData, user]);
+  }, [cart.items.length, directSession, isBuyNow, navigate, payuData]);
 
   useEffect(() => {
     if (user) {
@@ -292,13 +291,21 @@ export default function CheckoutPage() {
 
   async function handlePay(e: FormEvent) {
     e.preventDefault();
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!validate()) return;
     setPaying(true);
     try {
+      let currentUser = user;
+      if (!currentUser) {
+        const email = form.contact;
+        const firstName = form.firstName;
+        const lastName = form.lastName;
+        const fullName = `${firstName} ${lastName}`.trim();
+        const phone = form.phone;
+        
+        await useAuthStore.getState().guestCheckoutAuth(email, fullName, phone);
+        currentUser = useAuthStore.getState().user;
+      }
+
       const savedAddress = await createAddress.mutateAsync({
         full_name: `${form.firstName} ${form.lastName}`.trim(),
         phone: form.phone,
@@ -321,8 +328,9 @@ export default function CheckoutPage() {
         });
         await openRazorpay(data);
       } else {
-        if (!cart.cartId) throw new Error('Cart not found');
-        const { data } = await api.post<CheckoutResponse>('/orders/checkout', { address_id: savedAddress.id, cart_id: cart.cartId });
+        const currentCartId = useCartStore.getState().cartId;
+        if (!currentCartId) throw new Error('Cart not found');
+        const { data } = await api.post<CheckoutResponse>('/orders/checkout', { address_id: savedAddress.id, cart_id: currentCartId });
         cart.clearLocal();
         if (data.payu_form_data) setPayuData(data.payu_form_data);
         toast.success('Order placed! Redirecting to payment...');
@@ -349,7 +357,9 @@ export default function CheckoutPage() {
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-bold">Contact</h1>
-              <button type="button" onClick={openAuthModal} className="text-lg font-medium text-primary underline">Sign in</button>
+              {!user && (
+                <button type="button" onClick={openAuthModal} className="text-lg font-medium text-primary underline">Sign in</button>
+              )}
             </div>
             <Field label="Email or mobile phone number">
               <input ref={firstInputRef} value={form.contact} onChange={(e) => set('contact', e.target.value)} className={inputClass(Boolean(errors.contact))} placeholder="Email or mobile phone number" />
