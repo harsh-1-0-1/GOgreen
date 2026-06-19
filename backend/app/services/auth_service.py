@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 import httpx
 from jose import JWTError
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -102,6 +102,38 @@ async def register_user(db: AsyncSession, email: str, password: str, full_name: 
     await db.refresh(user)
     logger.info("User registered: id={} email={}", user.id, user.email)
     return user
+
+
+async def guest_register_or_login(
+    db: AsyncSession, email: str, full_name: str, phone: str | None
+) -> User:
+    existing = await db.execute(select(User).where(func.lower(User.email) == func.lower(email)))
+    user = existing.scalar_one_or_none()
+    if user:
+        updated = False
+        if not user.phone and phone:
+            user.phone = phone
+            updated = True
+        if (not user.full_name or user.full_name == email.split('@')[0]) and full_name:
+            user.full_name = full_name
+            updated = True
+        if updated:
+            await db.flush()
+        logger.info("Guest login for existing user: id={} email={}", user.id, user.email)
+        return user
+
+    user = User(
+        email=email,
+        hashed_password=None,
+        full_name=full_name,
+        phone=phone,
+    )
+    db.add(user)
+    await db.flush()
+    await db.refresh(user)
+    logger.info("Guest user created: id={} email={}", user.id, user.email)
+    return user
+
 
 
 # ---------------------------------------------------------------------------

@@ -26,3 +26,10 @@ class RefreshRequest(BaseModel):
 class GoogleCallbackRequest(BaseModel):
     code: str
     state: str
+
+
+class GuestRequest(BaseModel):
+    email: EmailStr
+    full_name: str = Field(min_length=1, max_length=255)
+    phone: str | None = None
+

@@ -16,6 +16,7 @@ interface AuthState {
   fetchUser: () => Promise<void>;
   setTokens: (data: TokenResponse) => void;
   hydrateFromStorage: () => void;
+  guestCheckoutAuth: (email: string, full_name: string, phone?: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -99,6 +100,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user: data });
     } catch {
       set({ user: null });
+    }
+  },
+
+  guestCheckoutAuth: async (email, full_name, phone) => {
+    set({ isLoading: true });
+    try {
+      const { data } = await api.post<TokenResponse>('/auth/guest', {
+        email,
+        full_name,
+        phone,
+      });
+      get().setTokens(data);
+      await get().fetchUser();
+      
+      const sessionId = localStorage.getItem('cart_session_id');
+      if (sessionId) {
+        const { useCartStore } = await import('./cartStore');
+        await useCartStore.getState().mergeCart(sessionId);
+      }
+    } finally {
+      set({ isLoading: false });
     }
   },
 }));

@@ -6,6 +6,7 @@ from app.core.security import get_current_active_user
 from app.db.models import User
 from app.db.session import get_db
 from app.schemas.auth import (
+    GuestRequest,
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
@@ -88,3 +89,12 @@ async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_
             detail="Failed to authenticate with Google",
         ) from exc
     return await auth_service.issue_tokens(user)
+
+
+@router.post("/guest", response_model=TokenResponse)
+async def guest_login(body: GuestRequest, db: AsyncSession = Depends(get_db)):
+    user = await auth_service.guest_register_or_login(
+        db, email=body.email, full_name=body.full_name, phone=body.phone
+    )
+    return await auth_service.issue_tokens(user)
+

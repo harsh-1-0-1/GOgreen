@@ -176,10 +176,6 @@ export default function ProductDetailPage() {
 
   async function handleBuyNow() {
     try {
-      if (!user) {
-        openAuthModal();
-        return;
-      }
       saveDirectCheckoutSession({
         mode: 'buy-now',
         created_at: Date.now(),
