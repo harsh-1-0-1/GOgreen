@@ -175,7 +175,17 @@ export interface TokenResponse {
 
 export interface CheckoutResponse {
   order_id: number;
-  payu_form_data: Record<string, string>;
+  payu_form_data?: Record<string, string>;
+  razorpay_order_data?: {
+    key_id: string;
+    order_id: string | null;
+    amount: number;
+    currency: string;
+    name: string;
+    description: string;
+    prefill: Record<string, string>;
+    notes: Record<string, string>;
+  };
 }
 
 export interface Banner {

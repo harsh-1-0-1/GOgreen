@@ -11,6 +11,7 @@ import ProductTagBadges from '@/components/product/ProductTagBadges';
 import ProductReviews, { ProductRatingInline } from '@/components/product/ProductReviews';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
+import { saveDirectCheckoutSession } from '@/lib/directCheckout';
 
 
 function MobileGallery({ images }: { images: string[] }) {
@@ -175,12 +176,24 @@ export default function ProductDetailPage() {
 
   async function handleBuyNow() {
     try {
-      await addItem(product!.id, qty, product!, selectedOptions);
       if (!user) {
         openAuthModal();
         return;
       }
-      navigate('/checkout');
+      saveDirectCheckoutSession({
+        mode: 'buy-now',
+        created_at: Date.now(),
+        items: [{
+          product_id: product!.id,
+          quantity: qty,
+          selected_options: selectedOptions,
+          product: product!,
+          unit_price: displayPrice,
+          line_total: displayPrice * qty,
+          resolved_image_url: displayImage || product!.images?.[0] || 'https://placehold.co/600x600?text=Plant',
+        }],
+      });
+      navigate('/checkout?mode=buy-now');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to process');
     }

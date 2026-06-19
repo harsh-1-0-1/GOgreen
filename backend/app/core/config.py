@@ -32,6 +32,8 @@ class Settings(BaseSettings):
 
     PAYU_KEY: str = ""
     PAYU_SALT: str = ""
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
 
     LOG_JSON: bool = False
     SLOW_QUERY_MS: int = 100
