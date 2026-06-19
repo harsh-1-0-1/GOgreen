@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import get_current_active_user
 from app.db.models import User
 from app.db.session import get_db
-from app.schemas.order import CheckoutRequest, CheckoutResponse, OrderListResponse, OrderResponse
+from app.schemas.order import CheckoutRequest, CheckoutResponse, DirectCheckoutRequest, OrderListResponse, OrderResponse
 from app.services import order_service
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -31,6 +31,27 @@ async def checkout(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return CheckoutResponse(order_id=order.id, payu_form_data=payu_data)
+
+
+@router.post("/direct-checkout", response_model=CheckoutResponse, status_code=201)
+async def direct_checkout(
+    body: DirectCheckoutRequest,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        order, razorpay_data = await order_service.direct_checkout(
+            db,
+            user_id=user.id,
+            address_id=body.address_id,
+            items=body.items,
+            email=user.email,
+            full_name=user.full_name,
+            phone=user.phone or "",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return CheckoutResponse(order_id=order.id, razorpay_order_data=razorpay_data)
 
 
 @router.get("", response_model=OrderListResponse)

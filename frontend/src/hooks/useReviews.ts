@@ -25,7 +25,7 @@ export function useProductReviews(productId: number | undefined, filters: Review
 export function useCreateReview(productId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { rating: number; title?: string; body?: string }) => {
+    mutationFn: async (payload: { rating: number; title?: string; body?: string; author_name?: string }) => {
       const { data } = await api.post(`/products/${productId}/reviews`, payload);
       return data;
     },

@@ -8,6 +8,28 @@ class CheckoutRequest(BaseModel):
     cart_id: int
 
 
+class DirectCheckoutItem(BaseModel):
+    product_id: int
+    quantity: int
+    selected_options: dict[str, str] | None = None
+
+
+class DirectCheckoutRequest(BaseModel):
+    address_id: int
+    items: list[DirectCheckoutItem]
+
+
+class RazorpayOrderData(BaseModel):
+    key_id: str
+    order_id: str | None = None
+    amount: int
+    currency: str = "INR"
+    name: str = "Plantoga"
+    description: str
+    prefill: dict[str, str]
+    notes: dict[str, str]
+
+
 class OrderItemResponse(BaseModel):
     id: int
     product_id: int
@@ -35,7 +57,8 @@ class OrderResponse(BaseModel):
 
 class CheckoutResponse(BaseModel):
     order_id: int
-    payu_form_data: dict
+    payu_form_data: dict | None = None
+    razorpay_order_data: RazorpayOrderData | None = None
 
 
 class OrderListResponse(BaseModel):
