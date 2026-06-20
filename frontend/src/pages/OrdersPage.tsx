@@ -12,12 +12,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-700',
 };
 
-const PAYMENT_COLORS: Record<string, string> = {
-  pending: 'text-yellow-600',
-  paid: 'text-green-600',
-  failed: 'text-red-600',
-  refunded: 'text-gray-600',
-};
+
 
 export default function OrdersPage() {
   const [page, setPage] = useState(1);
@@ -63,9 +58,6 @@ export default function OrdersPage() {
                   <p className="mt-0.5">{order.items.length} item{order.items.length !== 1 && 's'}</p>
                 </div>
                 <div className="text-right">
-                  <span className={`text-xs font-medium capitalize block ${PAYMENT_COLORS[order.payment_status] || ''}`}>
-                    {order.payment_status}
-                  </span>
                   <span className="font-bold text-primary text-base sm:text-lg">₹{order.total_amount.toFixed(0)}</span>
                 </div>
               </div>
