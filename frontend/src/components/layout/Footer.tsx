@@ -1,6 +1,8 @@
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { X, LogIn } from 'lucide-react';
 import { LOGO_PATH } from '@/lib/branding';
-
+import { useAuthStore } from '@/store/authStore';
 
 const LINK_COLUMNS = [
   {
@@ -39,11 +41,14 @@ const LINK_COLUMNS = [
   {
     title: 'Help',
     links: [
-      { label: 'Track Order', to: '/orders' },
       { label: 'Blog & FAQs', to: '/blog' },
     ],
   },
 ];
+
+function scrollTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 function InstagramIcon() {
   return (
@@ -86,68 +91,165 @@ const SOCIALS = [
   { Icon: XIcon, href: 'https://x.com', label: 'X' },
 ];
 
-export default function Footer() {
+/** Modal that prompts the user to log in before viewing their orders. */
+function LoginRequiredModal({ onClose, onLogin }: { onClose: () => void; onLogin: () => void }) {
   return (
-    <footer className="bg-[#1B4332] text-white mt-10 sm:mt-20 pb-20 md:pb-0">
-      <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 py-10 sm:py-14">
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-6">
-          {/* Logo column */}
-          <div className="col-span-2 lg:col-span-1 mb-2 lg:mb-0">
-                <Link to="/" className="flex items-center gap-2 mb-3">
-                  <img src={LOGO_PATH} alt="Plantoga" className="h-12 sm:h-14 object-contain" />
-                </Link>
-            <p className="text-white/60 text-sm leading-relaxed mb-5">
-              Where every leaf begins a new story.
-            </p>
-            <div className="flex items-center gap-3">
-              {SOCIALS.map(({ Icon, href, label }) => (
-                <a
-                  key={label}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={label}
-                  className="text-white/60 hover:text-white transition"
-                >
-                  <Icon />
-                </a>
-              ))}
-            </div>
-          </div>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="login-modal-title"
+    >
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
 
-          {/* Link columns */}
-          {LINK_COLUMNS.map((col) => (
-            <div key={col.title}>
-              <h4 className="font-bold text-sm mb-3 sm:mb-4">{col.title}</h4>
-              <ul className="flex flex-col gap-2 text-sm text-white/60">
-                {col.links.map((link) => (
-                  <li key={link.label}>
-                    <Link
-                      to={link.to}
-                      className="hover:text-white transition"
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
+      {/* Panel */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7 flex flex-col items-center text-center gap-5 animate-[fadeInScale_0.2s_ease-out]">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition"
+          aria-label="Close"
+        >
+          <X size={20} />
+        </button>
+
+        {/* Icon */}
+        <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+          <LogIn size={26} className="text-primary" />
+        </div>
+
+        <div>
+          <h2 id="login-modal-title" className="text-lg font-bold text-gray-900 mb-1">
+            Sign in Required
+          </h2>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            Please log in to track your order and view your order history.
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 w-full">
+          <button
+            onClick={onLogin}
+            className="flex-1 py-3 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition active:scale-[0.98]"
+          >
+            Login / Sign Up
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm hover:bg-gray-50 transition active:scale-[0.98]"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Footer() {
+  const { user, openAuthModal } = useAuthStore();
+  const navigate = useNavigate();
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  function handleTrackOrder() {
+    if (user) {
+      scrollTop();
+      navigate('/orders');
+    } else {
+      setShowLoginModal(true);
+    }
+  }
+
+  function handleLoginFromModal() {
+    setShowLoginModal(false);
+    openAuthModal();
+  }
+
+  return (
+    <>
+      {showLoginModal && (
+        <LoginRequiredModal
+          onClose={() => setShowLoginModal(false)}
+          onLogin={handleLoginFromModal}
+        />
+      )}
+
+      <footer className="bg-[#1B4332] text-white mt-10 sm:mt-20 pb-20 md:pb-0">
+        <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 py-10 sm:py-14">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-6">
+            {/* Logo column */}
+            <div className="col-span-2 lg:col-span-1 mb-2 lg:mb-0">
+              <Link to="/" onClick={scrollTop} className="flex items-center gap-2 mb-3">
+                <img src={LOGO_PATH} alt="Plantoga" className="h-12 sm:h-14 object-contain" />
+              </Link>
+              <p className="text-white/60 text-sm leading-relaxed mb-5">
+                Where every leaf begins a new story.
+              </p>
+              <div className="flex items-center gap-3">
+                {SOCIALS.map(({ Icon, href, label }) => (
+                  <a
+                    key={label}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={label}
+                    className="text-white/60 hover:text-white transition"
+                  >
+                    <Icon />
+                  </a>
                 ))}
-              </ul>
+              </div>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Bottom bar */}
-      <div className="border-t border-white/10">
-        <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white/40">
-          <span>© 2024 Plantoga. All rights reserved.</span>
-          <div className="flex items-center gap-3">
-            <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">VISA</span>
-            <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">MASTERCARD</span>
-            <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">UPI</span>
-            <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">PayU</span>
+            {/* Link columns */}
+            {LINK_COLUMNS.map((col) => (
+              <div key={col.title}>
+                <h4 className="font-bold text-sm mb-3 sm:mb-4">{col.title}</h4>
+                <ul className="flex flex-col gap-2 text-sm text-white/60">
+                  {col.links.map((link) => (
+                    <li key={link.label}>
+                      <Link
+                        to={link.to}
+                        onClick={scrollTop}
+                        className="hover:text-white transition"
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  ))}
+                  {/* Inject Track Order into Help column */}
+                  {col.title === 'Help' && (
+                    <li>
+                      <button
+                        onClick={handleTrackOrder}
+                        className="hover:text-white transition text-left"
+                      >
+                        Track Order
+                      </button>
+                    </li>
+                  )}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
-    </footer>
+
+        {/* Bottom bar */}
+        <div className="border-t border-white/10">
+          <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white/40">
+            <span>© 2026 Plantoga. All rights reserved.</span>
+            <div className="flex items-center gap-3">
+              <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">VISA</span>
+              <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">MASTERCARD</span>
+              <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">UPI</span>
+              <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">PayU</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </>
   );
 }
