@@ -350,7 +350,7 @@ export default function CheckoutPage() {
           <img
             src={LOGO_PATH}
             alt="Plantoga"
-            className="mx-auto object-contain h-8 sm:h-9 lg:h-10 w-auto"
+            className="mx-auto object-contain h-[76px] sm:h-[88px] lg:h-[96px] w-auto"
           />
         </Link>
       </header>
