@@ -313,6 +313,7 @@ export default function ProductsPage() {
     if (p > 1) params.set('page', String(p));
     else params.delete('page');
     setSearchParams(params);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function handleTagToggle(tag: string) {
