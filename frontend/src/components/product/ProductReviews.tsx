@@ -126,6 +126,27 @@ export default function ProductReviews({ productId }: { productId: number }) {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!title.trim()) {
+      toast.error('Review Title is required');
+      return;
+    }
+    if (!body.trim()) {
+      toast.error('Review Content is required');
+      return;
+    }
+    if (!displayName.trim()) {
+      toast.error('Display Name is required');
+      return;
+    }
+    if (!email.trim()) {
+      toast.error('Email Address is required');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
     try {
       await createReview.mutateAsync({
         rating,
@@ -218,19 +239,20 @@ export default function ProductReviews({ productId }: { productId: number }) {
               </div>
 
               <div className="space-y-2.5">
-                <FieldLabel htmlFor="review-title">Review Title</FieldLabel>
+                <FieldLabel htmlFor="review-title">Review Title *</FieldLabel>
                 <input
                   id="review-title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   maxLength={140}
                   placeholder="Give your review a title"
+                  required
                   className="min-h-12 w-full rounded-lg border border-gray-200 bg-white px-4 text-center text-base text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-primary focus:ring-4 focus:ring-primary/10"
                 />
               </div>
 
               <div className="space-y-2.5">
-                <FieldLabel htmlFor="review-body">Review Content</FieldLabel>
+                <FieldLabel htmlFor="review-body">Review Content *</FieldLabel>
                 <textarea
                   id="review-body"
                   value={body}
@@ -238,6 +260,7 @@ export default function ProductReviews({ productId }: { productId: number }) {
                   maxLength={4000}
                   rows={5}
                   placeholder="Share your experience with this product"
+                  required
                   className="w-full resize-none rounded-lg border border-gray-200 bg-white px-4 py-3 text-center text-base leading-relaxed text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-primary focus:ring-4 focus:ring-primary/10"
                 />
               </div>
@@ -268,25 +291,27 @@ export default function ProductReviews({ productId }: { productId: number }) {
 
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="space-y-2.5">
-                  <FieldLabel htmlFor="review-name">Display Name</FieldLabel>
+                  <FieldLabel htmlFor="review-name">Display Name *</FieldLabel>
                   <input
                     id="review-name"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     maxLength={255}
                     placeholder="Your name"
+                    required
                     className="min-h-12 w-full rounded-lg border border-gray-200 bg-white px-4 text-center text-base text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-primary focus:ring-4 focus:ring-primary/10"
                   />
                 </div>
 
                 <div className="space-y-2.5">
-                  <FieldLabel htmlFor="review-email">Email Address</FieldLabel>
+                  <FieldLabel htmlFor="review-email">Email Address *</FieldLabel>
                   <input
                     id="review-email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
+                    required
                     className="min-h-12 w-full rounded-lg border border-gray-200 bg-white px-4 text-center text-base text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-primary focus:ring-4 focus:ring-primary/10"
                   />
                 </div>

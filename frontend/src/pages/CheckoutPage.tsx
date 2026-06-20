@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { BadgePercent, ChevronDown, ChevronUp, CreditCard, Leaf, LockKeyhole, PackageCheck, ShieldCheck, Sprout } from 'lucide-react';
+import { BadgePercent, ChevronDown, ChevronUp, CreditCard, LockKeyhole, PackageCheck, ShieldCheck, Sprout } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { clearDirectCheckoutSession, readDirectCheckoutSession } from '@/lib/directCheckout';
@@ -9,6 +9,7 @@ import type { CheckoutResponse, ProductVariantColor, ProductVariantPotType } fro
 import { useCreateAddress } from '@/hooks/useAddresses';
 import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
+import { LOGO_PATH } from '@/lib/branding';
 
 declare global {
   interface Window {
@@ -46,7 +47,7 @@ function Field({ label, className = '', children }: { label: string; className?:
 }
 
 function inputClass(hasError?: boolean) {
-  return `h-14 w-full rounded-xl border bg-white px-4 text-base outline-none transition placeholder:text-gray-500 focus:ring-2 ${
+  return `h-11 w-full rounded-lg border bg-white px-3.5 text-sm outline-none transition placeholder:text-gray-400 focus:ring-2 ${
     hasError ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-primary focus:ring-primary/15'
   }`;
 }
@@ -115,73 +116,73 @@ function OrderSummary({
   setMobileOpen: (value: boolean) => void;
 }) {
   const body = (
-    <div className="space-y-5">
-      <div className="space-y-4">
+    <div className="space-y-4">
+      <div className="space-y-3">
         {items.map((item) => (
-          <div key={`${item.product_id}-${JSON.stringify(item.selected_options)}`} className="flex gap-3">
-            <div className="relative h-16 w-16 shrink-0 rounded-xl border border-gray-200 bg-white">
-              <img src={item.resolved_image_url || item.product.images?.[0]} alt={item.product.name} className="h-full w-full rounded-xl object-cover" />
-              <span className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-gray-950 text-xs font-bold text-white">{item.quantity}</span>
+          <div key={`${item.product_id}-${JSON.stringify(item.selected_options)}`} className="flex gap-3 items-center">
+            <div className="relative h-12 w-12 shrink-0 rounded-lg border border-gray-200 bg-white">
+              <img src={item.resolved_image_url || item.product.images?.[0]} alt={item.product.name} className="h-full w-full rounded-lg object-cover" />
+              <span className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-gray-950 text-[10px] font-bold text-white">{item.quantity}</span>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-950">{item.product.name}</p>
-              {optionSummary(item) && <p className="mt-1 text-xs text-gray-500">{optionSummary(item)}</p>}
+              <p className="text-xs font-semibold text-gray-950 truncate">{item.product.name}</p>
+              {optionSummary(item) && <p className="mt-0.5 text-[10px] text-gray-500 truncate">{optionSummary(item)}</p>}
             </div>
-            <p className="text-sm font-semibold text-gray-950">{money(item.line_total)}</p>
+            <p className="text-xs font-semibold text-gray-950">{money(item.line_total)}</p>
           </div>
         ))}
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex gap-2">
         <input className={inputClass()} placeholder="Discount code or gift card" />
-        <button className="h-14 rounded-xl border border-gray-200 bg-[#fbf8f1] px-5 text-sm font-bold text-gray-600 transition hover:border-primary">Apply</button>
+        <button className="h-11 rounded-lg border border-gray-200 bg-[#fbf8f1] px-4 text-xs sm:text-sm font-semibold text-gray-600 transition hover:border-primary">Apply</button>
       </div>
 
-      <div className="space-y-3 text-base">
+      <div className="space-y-2 text-xs">
         <div className="flex justify-between"><span>Subtotal</span><span>{money(subtotal)}</span></div>
         <div className="flex justify-between"><span>Shipping</span><span className="text-right text-gray-500">{shipping === 0 ? 'Free' : money(shipping)}</span></div>
-        <div className="flex justify-between border-t border-gray-200 pt-4 text-2xl font-bold"><span>Total</span><span><span className="mr-2 text-sm font-medium text-gray-500">INR</span>{money(total)}</span></div>
+        <div className="flex justify-between border-t border-gray-200 pt-3 text-base font-bold text-gray-900"><span>Total</span><span><span className="mr-1.5 text-[10px] font-medium text-gray-500">INR</span>{money(total)}</span></div>
       </div>
     </div>
   );
 
   return (
-      <div className="lg:hidden">
-        <button onClick={() => setMobileOpen(!mobileOpen)} className="flex w-full items-center justify-between border-y border-gray-200 bg-gray-50 px-4 py-5 text-left">
-          <span className="flex items-center gap-2 font-semibold text-primary">Order summary {mobileOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
-          <span className="text-xl font-bold">{money(total)}</span>
-        </button>
-        {mobileOpen && <div className="border-b border-gray-200 bg-[#fbfaf7] px-4 py-5">{body}</div>}
-      </div>
+    <div className="lg:hidden">
+      <button onClick={() => setMobileOpen(!mobileOpen)} className="flex w-full items-center justify-between border-y border-gray-200 bg-gray-50 px-4 py-3.5 text-left text-sm">
+        <span className="flex items-center gap-1.5 font-semibold text-primary">Order summary {mobileOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
+        <span className="text-base font-bold text-gray-900">{money(total)}</span>
+      </button>
+      {mobileOpen && <div className="border-b border-gray-200 bg-[#fbfaf7] px-4 py-4">{body}</div>}
+    </div>
   );
 }
 
 function DesktopSummary({ items, subtotal, shipping, total }: { items: CheckoutItem[]; subtotal: number; shipping: number; total: number }) {
   return (
-    <aside className="sticky top-0 min-h-screen border-l border-gray-200 bg-[#fbfaf7] px-8 py-10">
-      <h2 className="mb-6 text-lg font-bold">Order Summary</h2>
-      <div className="space-y-5">
+    <aside className="sticky top-0 min-h-screen border-l border-gray-200 bg-[#fbfaf7] px-4 py-6 sm:px-6 lg:pl-10 lg:pr-4 lg:py-8">
+      <h2 className="mb-4 text-base font-bold text-gray-900">Order Summary</h2>
+      <div className="space-y-4">
         {items.map((item) => (
-          <div key={`${item.product_id}-${JSON.stringify(item.selected_options)}`} className="flex gap-3">
-            <div className="relative h-16 w-16 shrink-0 rounded-xl border border-gray-200 bg-white">
-              <img src={item.resolved_image_url || item.product.images?.[0]} alt={item.product.name} className="h-full w-full rounded-xl object-cover" />
-              <span className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-gray-950 text-xs font-bold text-white">{item.quantity}</span>
+          <div key={`${item.product_id}-${JSON.stringify(item.selected_options)}`} className="flex gap-3 items-center">
+            <div className="relative h-12 w-12 shrink-0 rounded-lg border border-gray-200 bg-white">
+              <img src={item.resolved_image_url || item.product.images?.[0]} alt={item.product.name} className="h-full w-full rounded-lg object-cover" />
+              <span className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-gray-950 text-[10px] font-bold text-white">{item.quantity}</span>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-950">{item.product.name}</p>
-              {optionSummary(item) && <p className="mt-1 text-xs text-gray-500">{optionSummary(item)}</p>}
+              <p className="text-xs font-semibold text-gray-950 truncate">{item.product.name}</p>
+              {optionSummary(item) && <p className="mt-0.5 text-[10px] text-gray-500 truncate">{optionSummary(item)}</p>}
             </div>
-            <p className="text-sm font-semibold text-gray-950">{money(item.line_total)}</p>
+            <p className="text-xs font-semibold text-gray-950">{money(item.line_total)}</p>
           </div>
         ))}
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <input className={inputClass()} placeholder="Discount code or gift card" />
-          <button className="h-14 rounded-xl border border-gray-200 bg-[#fbf8f1] px-5 text-sm font-bold text-gray-600 transition hover:border-primary">Apply</button>
+          <button className="h-11 rounded-lg border border-gray-200 bg-[#fbf8f1] px-4 text-xs sm:text-sm font-semibold text-gray-600 transition hover:border-primary">Apply</button>
         </div>
-        <div className="space-y-3 text-base">
+        <div className="space-y-2 text-xs">
           <div className="flex justify-between"><span>Subtotal</span><span>{money(subtotal)}</span></div>
           <div className="flex justify-between"><span>Shipping</span><span className="text-right text-gray-500">{shipping === 0 ? 'Free' : money(shipping)}</span></div>
-          <div className="flex justify-between border-t border-gray-200 pt-4 text-2xl font-bold"><span>Total</span><span><span className="mr-2 text-sm font-medium text-gray-500">INR</span>{money(total)}</span></div>
+          <div className="flex justify-between border-t border-gray-200 pt-3 text-base font-bold text-gray-900"><span>Total</span><span><span className="mr-1.5 text-[10px] font-medium text-gray-500">INR</span>{money(total)}</span></div>
         </div>
       </div>
     </aside>
@@ -344,120 +345,133 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-white text-gray-950">
-      <header className="border-b border-gray-200 bg-white px-4 py-7 text-center lg:py-9">
-        <Link to="/" className="inline-flex items-center gap-2 text-4xl font-black tracking-tight text-primary">
-          <Leaf className="h-10 w-10" /> Plantoga
+      <header className="border-b border-gray-200 bg-white px-4 py-4 text-center lg:py-5">
+        <Link to="/" className="inline-block">
+          <img
+            src={LOGO_PATH}
+            alt="Plantoga"
+            className="mx-auto object-contain h-8 sm:h-9 lg:h-10 w-auto"
+          />
         </Link>
       </header>
 
       <OrderSummary items={items} subtotal={subtotal} shipping={shipping} total={total} mobileOpen={summaryOpen} setMobileOpen={setSummaryOpen} />
 
-      <main className="mx-auto grid max-w-7xl lg:grid-cols-[minmax(0,1fr)_520px]">
-        <form onSubmit={handlePay} className="px-4 py-8 sm:px-8 lg:px-12 lg:py-10">
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h1 className="text-3xl font-bold">Contact</h1>
+      <main className="mx-auto grid max-w-5xl lg:grid-cols-[minmax(0,1fr)_400px]">
+        <form onSubmit={handlePay} className="px-4 py-6 sm:px-6 lg:pl-8 lg:pr-12 lg:py-8">
+          <section className="space-y-3">
+            <div className="flex items-baseline justify-between">
+              <h1 className="text-base sm:text-lg font-bold text-gray-900">Contact</h1>
               {!user && (
-                <button type="button" onClick={openAuthModal} className="text-lg font-medium text-primary underline">Sign in</button>
+                <button type="button" onClick={openAuthModal} className="text-xs sm:text-sm font-medium text-primary underline hover:text-primary-light">Sign in</button>
               )}
             </div>
             <Field label="Email or mobile phone number">
               <input ref={firstInputRef} value={form.contact} onChange={(e) => set('contact', e.target.value)} className={inputClass(Boolean(errors.contact))} placeholder="Email or mobile phone number" />
             </Field>
-            <label className="flex items-center gap-3 text-lg">
-              <input type="checkbox" checked={form.newsletter} onChange={(e) => set('newsletter', e.target.checked)} className="h-7 w-7 rounded accent-primary" />
+            <label className="flex items-center gap-2.5 text-xs sm:text-sm text-gray-700 select-none cursor-pointer">
+              <input type="checkbox" checked={form.newsletter} onChange={(e) => set('newsletter', e.target.checked)} className="h-4 w-4 rounded accent-primary border-gray-300 text-primary" />
               Email me with news and offers
             </label>
           </section>
 
-          <section className="mt-10 space-y-4">
-            <h2 className="text-3xl font-bold">Delivery</h2>
+          <section className="mt-7 space-y-3">
+            <h2 className="text-base sm:text-lg font-bold text-gray-900">Delivery</h2>
             <select value={form.country} onChange={(e) => set('country', e.target.value)} className={inputClass()}>
               <option>India</option>
             </select>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               <input value={form.firstName} onChange={(e) => set('firstName', e.target.value)} className={inputClass(Boolean(errors.firstName))} placeholder="First name" />
               <input value={form.lastName} onChange={(e) => set('lastName', e.target.value)} className={inputClass(Boolean(errors.lastName))} placeholder="Last name" />
             </div>
             <input value={form.address} onChange={(e) => set('address', e.target.value)} className={inputClass(Boolean(errors.address))} placeholder="Address" />
             <input value={form.apartment} onChange={(e) => set('apartment', e.target.value)} className={inputClass()} placeholder="Apartment, suite, etc. (optional)" />
-            <input value={form.city} onChange={(e) => set('city', e.target.value)} className={inputClass(Boolean(errors.city))} placeholder="City" />
-            <select value={form.state} onChange={(e) => set('state', e.target.value)} className={inputClass(Boolean(errors.state))}>
-              {states.map((state) => <option key={state}>{state}</option>)}
-            </select>
-            <input inputMode="numeric" value={form.pincode} onChange={(e) => set('pincode', e.target.value)} className={inputClass(Boolean(errors.pincode))} placeholder="PIN code" maxLength={6} />
-            <input inputMode="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} className={inputClass(Boolean(errors.phone))} placeholder="Phone" maxLength={10} />
-            <label className="flex items-center gap-3 text-lg">
-              <input type="checkbox" checked={form.saveInfo} onChange={(e) => set('saveInfo', e.target.checked)} className="h-7 w-7 rounded accent-primary" />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input value={form.city} onChange={(e) => set('city', e.target.value)} className={inputClass(Boolean(errors.city))} placeholder="City" />
+              <select value={form.state} onChange={(e) => set('state', e.target.value)} className={inputClass(Boolean(errors.state))}>
+                {states.map((state) => <option key={state}>{state}</option>)}
+              </select>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input inputMode="numeric" value={form.pincode} onChange={(e) => set('pincode', e.target.value)} className={inputClass(Boolean(errors.pincode))} placeholder="PIN code" maxLength={6} />
+              <input inputMode="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} className={inputClass(Boolean(errors.phone))} placeholder="Phone" maxLength={10} />
+            </div>
+            <label className="flex items-center gap-2.5 text-xs sm:text-sm text-gray-700 select-none cursor-pointer">
+              <input type="checkbox" checked={form.saveInfo} onChange={(e) => set('saveInfo', e.target.checked)} className="h-4 w-4 rounded accent-primary border-gray-300 text-primary" />
               Save this information for next time
             </label>
           </section>
 
-          <section className="mt-10 space-y-4">
-            <h2 className="text-2xl font-bold">Shipping method</h2>
+          <section className="mt-7 space-y-3">
+            <h2 className="text-base sm:text-lg font-bold text-gray-900">Shipping method</h2>
             {addressReady ? (
-              <div className="overflow-hidden rounded-xl border border-gray-200">
+              <div className="overflow-hidden rounded-lg border border-gray-200">
                 {[
                   ['standard', 'Standard Delivery', '3-5 Days', shipping === 0 ? 'Free' : money(shipping)],
                   ['express', 'Express Delivery', '1-2 Days', money(99)],
                 ].map(([value, title, subtitle, price]) => (
-                  <label key={value} className={`flex cursor-pointer items-center gap-3 border-b border-gray-200 p-4 last:border-0 ${shippingMethod === value ? 'border-primary bg-primary/5' : ''}`}>
-                    <input type="radio" name="shipping" checked={shippingMethod === value} onChange={() => setShippingMethod(value as 'standard' | 'express')} className="h-5 w-5 accent-primary" />
-                    <span className="flex-1"><span className="block font-bold">{title}</span><span className="text-sm text-gray-500">{subtitle}</span></span>
-                    <span className="font-bold">{price}</span>
+                  <label key={value} className={`flex cursor-pointer items-center gap-3 border-b border-gray-200 p-3 last:border-0 text-sm ${shippingMethod === value ? 'border-primary bg-primary/5' : ''}`}>
+                    <input type="radio" name="shipping" checked={shippingMethod === value} onChange={() => setShippingMethod(value as 'standard' | 'express')} className="h-4 w-4 accent-primary" />
+                    <span className="flex-1"><span className="block font-semibold text-gray-950">{title}</span><span className="text-xs text-gray-500">{subtitle}</span></span>
+                    <span className="font-semibold text-gray-950">{price}</span>
                   </label>
                 ))}
               </div>
             ) : (
-              <div className="rounded-xl bg-gray-100 p-5 text-lg text-gray-500">Enter your shipping address to view available shipping methods.</div>
+              <div className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">Enter your shipping address to view available shipping methods.</div>
             )}
           </section>
 
-          <section className="mt-10 space-y-4">
-            <h2 className="text-3xl font-bold">Payment</h2>
-            <p className="text-lg text-gray-500">All transactions are secure and encrypted.</p>
-            <div className="overflow-hidden rounded-xl border border-gray-200">
-              <label className="flex items-start gap-3 border-2 border-primary p-4">
-                <input type="radio" checked readOnly className="mt-1 h-5 w-5 accent-primary" />
-                <span className="flex-1 text-lg font-bold">Razorpay Secure<br /><span className="text-base">(UPI, Cards, NetBanking, Wallets)</span></span>
-                <CreditCard className="text-primary" />
+          <section className="mt-7 space-y-3">
+            <h2 className="text-base sm:text-lg font-bold text-gray-900">Payment</h2>
+            <p className="text-xs sm:text-sm text-gray-500">All transactions are secure and encrypted.</p>
+            <div className="overflow-hidden rounded-lg border border-gray-200">
+              <label className="flex items-start gap-3 border border-primary bg-primary/5 p-3 text-sm">
+                <input type="radio" checked readOnly className="mt-0.5 h-4 w-4 accent-primary" />
+                <span className="flex-1 font-bold text-gray-950">Razorpay Secure <span className="text-xs text-gray-500 font-normal ml-1.5">(UPI, Cards, NetBanking, Wallets)</span></span>
+                <CreditCard className="text-primary h-5 w-5" />
               </label>
-              <div className="bg-gray-50 p-6 text-center text-lg">You’ll be redirected to Razorpay Secure to complete your purchase.</div>
+              <div className="bg-gray-50 p-4 text-center text-xs text-gray-600">You’ll be redirected to Razorpay Secure to complete your purchase.</div>
             </div>
           </section>
 
-          <section className="mt-10 space-y-4">
-            <h2 className="text-2xl font-bold">Billing address</h2>
-            <div className="overflow-hidden rounded-xl border border-gray-200">
-              <label className={`flex cursor-pointer items-center gap-3 border-b p-4 text-lg ${billingMode === 'same' ? 'border-primary bg-primary/5' : 'border-gray-200'}`}>
-                <input type="radio" checked={billingMode === 'same'} onChange={() => setBillingMode('same')} className="h-5 w-5 accent-primary" />
-                Same as shipping address
+          <section className="mt-7 space-y-3">
+            <h2 className="text-base sm:text-lg font-bold text-gray-900">Billing address</h2>
+            <div className="overflow-hidden rounded-lg border border-gray-200">
+              <label className={`flex cursor-pointer items-center gap-3 border-b border-gray-200 p-3 text-sm cursor-pointer ${billingMode === 'same' ? 'border-primary bg-primary/5' : ''}`}>
+                <input type="radio" checked={billingMode === 'same'} onChange={() => setBillingMode('same')} className="h-4 w-4 accent-primary" />
+                <span className="font-semibold text-gray-950">Same as shipping address</span>
               </label>
-              <label className="flex cursor-pointer items-center gap-3 p-4 text-lg">
-                <input type="radio" checked={billingMode === 'different'} onChange={() => setBillingMode('different')} className="h-5 w-5 accent-primary" />
-                Use a different billing address
+              <label className={`flex cursor-pointer items-center gap-3 p-3 text-sm cursor-pointer ${billingMode === 'different' ? 'border-primary bg-primary/5' : ''}`}>
+                <input type="radio" checked={billingMode === 'different'} onChange={() => setBillingMode('different')} className="h-4 w-4 accent-primary" />
+                <span className="font-semibold text-gray-950">Use a different billing address</span>
               </label>
             </div>
-            {billingMode === 'different' && <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-600">Billing form can reuse the same fields and API once separate billing storage is added.</div>}
+            {billingMode === 'different' && <div className="rounded-lg bg-gray-50 p-3.5 text-xs text-gray-600">Billing form can reuse the same fields and API once separate billing storage is added.</div>}
           </section>
 
-          <button disabled={paying || createAddress.isPending} className="mt-8 h-16 w-full rounded-xl bg-primary text-xl font-bold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
+          <button disabled={paying || createAddress.isPending} className="mt-6 h-12 w-full rounded-lg bg-primary text-base font-semibold text-white transition hover:bg-primary/95 disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.99]">
             {paying || createAddress.isPending ? 'Processing...' : 'Pay Now'}
           </button>
 
-          <section className="mt-10 space-y-6">
-            <h2 className="text-2xl font-bold">10 Million+ Happy Customers Trust Us!</h2>
-            {[
-              [ShieldCheck, '14-Day Replacement Guarantee', 'If your plant arrives damaged, we’ll replace it.'],
-              [Sprout, 'Farm-Fresh Long-Lasting Plants', 'Grown with love and care for your home.'],
-              [PackageCheck, 'Safe Secure Packaging', 'Every plant is packed with care and reaches you safely.'],
-              [LockKeyhole, 'Trusted Plant Community', 'India’s growing green family and you’re now a part of it.'],
-            ].map(([Icon, title, text]) => (
-              <div key={title as string} className="flex gap-5">
-                <Icon className="mt-1 h-14 w-14 shrink-0 text-gray-400" />
-                <div><h3 className="text-xl font-bold">{title as string}</h3><p className="mt-2 text-lg leading-relaxed text-gray-500">{text as string}</p></div>
-              </div>
-            ))}
+          <section className="mt-8 space-y-4 border-t border-gray-100 pt-6">
+            <h2 className="text-sm sm:text-base font-bold text-gray-950">10 Million+ Happy Customers Trust Us!</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {[
+                [ShieldCheck, '14-Day Replacement Guarantee', 'If your plant arrives damaged, we’ll replace it.'],
+                [Sprout, 'Farm-Fresh Long-Lasting Plants', 'Grown with love and care for your home.'],
+                [PackageCheck, 'Safe Secure Packaging', 'Every plant is packed with care and reaches you safely.'],
+                [LockKeyhole, 'Trusted Plant Community', 'India’s growing green family.'],
+              ].map(([Icon, title, text]) => (
+                <div key={title as string} className="flex gap-3">
+                  <Icon className="h-7 w-7 shrink-0 text-primary/70 mt-0.5" />
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-900">{title as string}</h3>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500">{text as string}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
 
           {payuData && (
@@ -472,8 +486,8 @@ export default function CheckoutPage() {
         </div>
       </main>
 
-      <button type="button" className="fixed bottom-5 left-4 z-20 hidden rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold shadow-sm lg:inline-flex">
-        <BadgePercent size={18} /> Add discount
+      <button type="button" className="fixed bottom-5 left-4 z-20 hidden rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold shadow-sm hover:border-primary transition lg:inline-flex">
+        <BadgePercent size={16} className="mr-1.5" /> Add discount
       </button>
     </div>
   );
