@@ -28,6 +28,8 @@ import { NAV_ITEMS, WHATSAPP_NUMBER } from './navData';
 import type { NavItemDef } from './navData';
 import { WhatsAppIcon } from './WhatsAppIcon';
 import { MobileCollectionList } from './MobileCollectionList';
+import { LOGO_PATH } from '@/lib/branding';
+
 export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
@@ -257,7 +259,7 @@ export default function Navbar() {
           className="absolute left-1/2 -translate-x-1/2 lg:relative lg:left-auto lg:translate-x-0 flex items-center shrink-0 group z-10"
         >
           <img
-            src="/plantoga-logo.png"
+            src={LOGO_PATH}
             alt="Plantoga"
             className="object-contain w-auto h-[76px] sm:h-[88px] lg:h-[96px]"
           />
@@ -584,7 +586,7 @@ export default function Navbar() {
               {/* Mobile Drawer Header */}
               <div className="relative flex items-center justify-center px-5 py-4 shrink-0">
                 <Link to="/" onClick={closeDrawer} className="flex items-center group">
-                  <img src="/plantoga-logo.png" alt="Plantoga" className="h-14 object-contain" />
+                  <img src={LOGO_PATH} alt="Plantoga" className="h-14 object-contain" />
                 </Link>
                 <button
                   onClick={closeDrawer}

@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { LOGO_PATH } from '@/lib/branding';
+
 
 const LINK_COLUMNS = [
   {
@@ -92,7 +94,7 @@ export default function Footer() {
           {/* Logo column */}
           <div className="col-span-2 lg:col-span-1 mb-2 lg:mb-0">
                 <Link to="/" className="flex items-center gap-2 mb-3">
-                  <img src="/plantoga-logo.png" alt="Plantoga" className="h-12 sm:h-14 object-contain" />
+                  <img src={LOGO_PATH} alt="Plantoga" className="h-12 sm:h-14 object-contain" />
                 </Link>
             <p className="text-white/60 text-sm leading-relaxed mb-5">
               Where every leaf begins a new story.
