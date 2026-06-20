@@ -30,6 +30,9 @@ import OrdersAdminPage from '@/pages/admin/OrdersAdminPage';
 import UsersAdminPage from '@/pages/admin/UsersAdminPage';
 import BannersAdminPage from '@/pages/admin/BannersAdminPage';
 import BlogAdminPage from '@/pages/admin/BlogAdminPage';
+import CorporateAdminPage from '@/pages/admin/CorporateAdminPage';
+import CouponsAdminPage from '@/pages/admin/CouponsAdminPage';
+import SettingsAdminPage from '@/pages/admin/SettingsAdminPage';
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
@@ -113,6 +116,9 @@ export default function App() {
                 <Route path="users" element={<UsersAdminPage />} />
                 <Route path="banners" element={<BannersAdminPage />} />
                 <Route path="blog" element={<BlogAdminPage />} />
+                <Route path="corporate" element={<CorporateAdminPage />} />
+                <Route path="coupons" element={<CouponsAdminPage />} />
+                <Route path="settings" element={<SettingsAdminPage />} />
               </Route>
             </Route>
           </Routes>

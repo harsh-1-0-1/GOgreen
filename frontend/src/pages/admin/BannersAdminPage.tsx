@@ -20,7 +20,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Image as ImageIcon, Plus, X } from 'lucide-react';
+import { GripVertical, Image as ImageIcon, Plus, X, Info, Layout, Calendar, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import api from '@/lib/api';
@@ -28,26 +28,66 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import type { Banner } from '@/types';
 
 const PLACEMENTS = [
-  { key: 'hero', label: 'Hero Carousel' },
-  { key: 'announcement', label: 'Announcement Bar' },
-  { key: 'page', label: 'Page Banner' },
-  { key: 'trending', label: 'Trending Carousel' },
-  { key: 'themed', label: 'Themed Sections' },
-  { key: 'strip', label: 'Strip Tiles' },
-  { key: 'highlight', label: 'Highlight Cards' },
-  { key: 'collection', label: 'Collections Menu' },
+  {
+    key: 'hero',
+    label: '🏠 Home Page Hero Banner',
+    description: 'This banner appears at the very top of the homepage. It is the first thing customers see.',
+    helpText: 'Use high-quality widescreen landscape images. Recommended size: 1920x650px.',
+  },
+  {
+    key: 'announcement',
+    label: '📢 Top Announcement Bar',
+    description: 'A thin colored bar displayed at the very top of all pages. Great for quick updates.',
+    helpText: 'Keep announcement text short and catchy. Recommended: under 80 characters.',
+  },
+  {
+    key: 'page',
+    label: '📄 Shop Listing Page Banner',
+    description: 'A wide horizontal strip banner displayed below the header on product listing pages.',
+    helpText: 'Best for category-wide discounts. Recommended size: 1400x300px.',
+  },
+  {
+    key: 'trending',
+    label: '🔥 Trending Carousel Banner',
+    description: 'Square promotional banners displayed within the "Trending Now" homepage slider.',
+    helpText: 'Recommended size: 600x600px square format. Use vibrant colors.',
+  },
+  {
+    key: 'themed',
+    label: '🎨 Seasonal Offer Banner',
+    description: 'Large grids and themed sections on the homepage, e.g., "Monsoon Collection".',
+    helpText: 'Recommended size: 800x480px. Used to group curated collections.',
+  },
+  {
+    key: 'strip',
+    label: '🏷️ Promotional Strip Tile',
+    description: 'A thin horizontal banner strip embedded between sections on the homepage.',
+    helpText: 'Recommended size: 1200x120px. Ideal for coupon announcements.',
+  },
+  {
+    key: 'highlight',
+    label: '⭐ Best Seller Highlight Card',
+    description: 'Vertical card in a 4-column grid. Highlights custom sets like "Combos" or "Starter Kits".',
+    helpText: 'Recommended size: 400x550px. The title becomes the bold text overlay.',
+  },
+  {
+    key: 'collection',
+    label: '💼 Corporate Gifting / Menu Banner',
+    description: 'Portrait banner displayed in the collections sidebar and main mega-menu sections.',
+    helpText: 'Recommended size: 320x450px. Highlight bulk packages here.',
+  },
 ] as const;
 
 const bannerSchema = z
   .object({
-    title: z.string().min(1, 'Required').max(100),
+    title: z.string().min(1, 'Title is required').max(100),
     subtitle: z.string().max(255).optional().or(z.literal('')),
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
     placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'collection']),
-    bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex'),
-    text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex'),
+    bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #FFFFFF)'),
+    text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #000000)'),
     is_active: z.boolean(),
     valid_from: z.string().optional().or(z.literal('')),
     valid_until: z.string().optional().or(z.literal('')),
@@ -58,13 +98,13 @@ const bannerSchema = z
         return new Date(d.valid_until) > new Date(d.valid_from);
       return true;
     },
-    { message: 'Valid Until must be after Valid From', path: ['valid_until'] },
+    { message: 'End date/time must be after start date/time', path: ['valid_until'] },
   );
 
 type BannerFormData = z.infer<typeof bannerSchema>;
 
 const inputClass =
-  'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-light';
+  'w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors';
 
 // ── Sortable row ───────────────────────────────────────────────────────────
 
@@ -95,7 +135,7 @@ function SortableBannerRow({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 px-3 sm:px-4 py-3 bg-white border-b last:border-0 hover:bg-gray-50/50"
+      className="flex items-center gap-3 px-3 sm:px-4 py-3.5 bg-white border-b last:border-0 hover:bg-gray-50/50"
     >
       <button
         {...attributes}
@@ -110,26 +150,26 @@ function SortableBannerRow({
         <img
           src={banner.image_url}
           alt=""
-          className="w-20 h-[50px] object-cover rounded-md shrink-0 bg-gray-100"
+          className="w-16 h-10 object-cover rounded-lg shrink-0 bg-gray-50 border border-gray-100"
           onError={(e) => {
             e.currentTarget.style.display = 'none';
           }}
         />
       ) : (
-        <div className="w-20 h-[50px] rounded-md bg-gray-100 flex items-center justify-center shrink-0">
-          <ImageIcon size={18} className="text-gray-300" />
+        <div className="w-16 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 border border-gray-100">
+          <ImageIcon size={16} className="text-gray-300" />
         </div>
       )}
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{banner.title}</p>
+        <p className="text-sm font-semibold text-gray-800 truncate">{banner.title}</p>
         <p className="text-xs text-gray-400 truncate">
           {banner.subtitle || banner.cta_link || '—'}
         </p>
       </div>
 
       <span
-        className={`hidden sm:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${
+        className={`hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
           banner.is_active
             ? 'bg-green-50 text-green-700'
             : 'bg-gray-100 text-gray-500'
@@ -138,42 +178,42 @@ function SortableBannerRow({
         <span
           className={`w-1.5 h-1.5 rounded-full ${banner.is_active ? 'bg-green-500' : 'bg-gray-400'}`}
         />
-        {banner.is_active ? 'Active' : 'Inactive'}
+        {banner.is_active ? 'Active' : 'Paused'}
       </span>
 
       <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={() => onEdit(banner)}
-          className="px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary-light/10 rounded-lg transition touch-target"
+          className="px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary-light/10 rounded-lg transition"
         >
           Edit
         </button>
         <button
           onClick={() => onToggle(banner.id)}
-          className="px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition touch-target hidden sm:inline-flex"
+          className="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-100 rounded-lg transition hidden sm:inline-flex"
         >
-          {banner.is_active ? 'Deactivate' : 'Activate'}
+          {banner.is_active ? 'Pause' : 'Activate'}
         </button>
         {deleteConfirmId === banner.id ? (
           <span className="flex items-center gap-1 text-xs">
             <span className="text-gray-500">Sure?</span>
             <button
               onClick={() => onDelete(banner.id)}
-              className="text-red-600 font-medium hover:underline touch-target"
+              className="text-red-600 font-medium hover:underline px-1"
             >
               Delete
             </button>
             <button
               onClick={() => setDeleteConfirmId(null)}
-              className="text-gray-500 hover:underline touch-target"
+              className="text-gray-500 hover:underline px-1"
             >
-              Cancel
+              No
             </button>
           </span>
         ) : (
           <button
             onClick={() => setDeleteConfirmId(banner.id)}
-            className="px-2.5 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 rounded-lg transition touch-target"
+            className="px-2.5 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 rounded-lg transition"
           >
             Delete
           </button>
@@ -183,7 +223,7 @@ function SortableBannerRow({
   );
 }
 
-// ── Live Preview ───────────────────────────────────────────────────────────
+// ── Live Preview Mockups ───────────────────────────────────────────────────
 
 function BannerPreview({
   title,
@@ -201,10 +241,10 @@ function BannerPreview({
   imageSrc: string | null;
 }) {
   return (
-    <div className="mt-4">
-      <p className="text-[11px] text-gray-400 mb-2">Preview (approximate)</p>
+    <div className="mt-4 p-4 border rounded-xl bg-gray-50">
+      <p className="text-[11px] font-semibold text-gray-400 mb-2 uppercase tracking-wider">Live Mockup Preview</p>
       <div
-        className="w-full overflow-hidden rounded-lg border border-gray-200"
+        className="w-full overflow-hidden rounded-lg border border-gray-200 bg-[#F5F0E8]"
         style={{ height: 200 }}
       >
         <div
@@ -220,7 +260,7 @@ function BannerPreview({
             position: 'relative',
           }}
         >
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, paddingRight: 24 }}>
             <h2
               style={{
                 fontSize: 52,
@@ -230,7 +270,7 @@ function BannerPreview({
                 lineHeight: 1.1,
               }}
             >
-              {title || 'Banner Title'}
+              {title || 'Seasonal Specials'}
             </h2>
             {subtitle && (
               <p
@@ -247,8 +287,8 @@ function BannerPreview({
             {ctaText && (
               <div
                 style={{
-                  background: '#F4D03F',
-                  color: '#1B4332',
+                  background: textColor || '#1B4332',
+                  color: bgColor || '#FFFFFF',
                   padding: '14px 28px',
                   borderRadius: 8,
                   display: 'inline-block',
@@ -269,6 +309,7 @@ function BannerPreview({
                 objectFit: 'cover',
                 marginLeft: 'auto',
                 maxWidth: '50%',
+                borderRadius: 12
               }}
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
@@ -295,9 +336,9 @@ function HighlightCardPreview({
   imageSrc: string | null;
 }) {
   return (
-    <div className="mt-4">
-      <p className="text-[11px] text-gray-400 mb-2">Preview (approximate)</p>
-      <div className="mx-auto w-full max-w-[260px]">
+    <div className="mt-4 p-4 border rounded-xl bg-gray-50 flex flex-col items-center">
+      <p className="text-[11px] font-semibold text-gray-400 mb-2 uppercase tracking-wider">Highlight Card Preview</p>
+      <div className="w-full max-w-[180px]">
         <div
           className="relative aspect-[3/4] overflow-hidden rounded-xl border border-gray-200 shadow-sm"
           style={{ backgroundColor: bgColor || '#F5F0E8' }}
@@ -312,13 +353,13 @@ function HighlightCardPreview({
               }}
             />
           ) : null}
-          <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-black/35 via-black/10 to-transparent" />
-          <h3 className="absolute inset-x-2 top-4 text-center text-2xl font-medium leading-tight text-white drop-shadow-sm">
+          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/60 to-transparent" />
+          <h3 className="absolute inset-x-2 bottom-4 text-center text-sm font-semibold leading-tight text-white">
             {title || 'Combos'}
           </h3>
         </div>
         <p
-          className="mt-2.5 text-center text-xl font-semibold leading-tight"
+          className="mt-2 text-center text-xs font-bold leading-tight"
           style={{ color: textColor || '#16A34A' }}
         >
           {subtitle || 'Get 4 at ₹699'}
@@ -344,10 +385,10 @@ function TrendingBannerPreview({
   imageSrc: string | null;
 }) {
   return (
-    <div className="mt-4">
-      <p className="text-[11px] text-gray-400 mb-2">Preview (approximate)</p>
+    <div className="mt-4 p-4 border rounded-xl bg-gray-50 flex flex-col items-center">
+      <p className="text-[11px] font-semibold text-gray-400 mb-2 uppercase tracking-wider">Carousel Banner Preview</p>
       <div
-        className="relative aspect-square w-full overflow-hidden rounded-xl border border-gray-200"
+        className="relative aspect-square w-48 overflow-hidden rounded-xl border border-gray-200"
         style={{ backgroundColor: bgColor || '#e9dfc9' }}
       >
         {imageSrc ? (
@@ -360,21 +401,19 @@ function TrendingBannerPreview({
             }}
           />
         ) : null}
-        <div className="absolute inset-0 bg-gradient-to-br from-black/45 via-black/10 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
         <h3
-          className="absolute left-5 top-6 max-w-[62%] text-3xl font-extrabold leading-[0.98] drop-shadow"
-          style={{ color: textColor || '#ffeb3b' }}
+          className="absolute left-3 top-3 max-w-[80%] text-xs font-bold leading-tight text-white drop-shadow"
+          style={{ color: textColor || '#FFFFFF' }}
         >
-          {title || 'Perfect plants for effortless indoor garden'}
+          {title || 'Perfect Indoor Plants'}
         </h3>
         {subtitle && (
-          <div className="absolute right-5 top-6 grid h-20 w-20 rotate-[-10deg] place-items-center rounded-full bg-[#ffeb3b] text-center text-primary shadow [clip-path:polygon(50%_0%,59%_12%,73%_6%,78%_21%,94%_22%,88%_38%,100%_50%,88%_62%,94%_78%,78%_79%,73%_94%,59%_88%,50%_100%,41%_88%,27%_94%,22%_79%,6%_78%,12%_62%,0%_50%,12%_38%,6%_22%,22%_21%,27%_6%,41%_12%)]">
-            <span className="rotate-[10deg] px-2 text-sm font-bold leading-tight">
-              {subtitle}
-            </span>
+          <div className="absolute right-3 top-3 bg-yellow-400 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+            {subtitle}
           </div>
         )}
-        <div className="absolute bottom-7 left-1/2 -translate-x-1/2 rounded-md bg-[#ffeb3b] px-5 py-1.5 text-xs font-extrabold text-primary shadow">
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded bg-[#ffeb3b] px-3 py-1 text-[9px] font-bold text-primary shadow">
           {ctaText || 'SHOP NOW'}
         </div>
       </div>
@@ -398,6 +437,10 @@ function BannerDrawer({
   onSaved: () => void;
 }) {
   const isEdit = !!banner;
+
+  const activePlacementDetails = useMemo(() => {
+    return PLACEMENTS.find((p) => p.key === (banner?.placement || placement)) || PLACEMENTS[0];
+  }, [banner, placement]);
 
   const {
     register,
@@ -515,7 +558,7 @@ function BannerDrawer({
         });
       }
 
-      toast.success('Banner saved!');
+      toast.success('Banner saved successfully!');
       onSaved();
       onClose();
     } catch (err: any) {
@@ -530,15 +573,18 @@ function BannerDrawer({
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/30 z-40"
+        className="fixed inset-0 bg-black/40 z-40 transition-opacity"
         onClick={onClose}
       />
-      <div className="fixed right-0 top-0 h-full w-full sm:w-[480px] bg-white z-50 shadow-[-4px_0_24px_rgba(0,0,0,0.08)] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b shrink-0">
-          <h2 className="text-lg font-bold">
-            {isEdit ? 'Edit Banner' : 'Add Banner'}
-          </h2>
-          <button onClick={onClose} className="p-2 touch-target">
+      <div className="fixed right-0 top-0 h-full w-full sm:w-[480px] bg-[#FAFAF8] z-50 shadow-2xl flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b bg-white shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">
+              {isEdit ? 'Edit Banner Settings' : 'Create New Banner'}
+            </h2>
+            <p className="text-xs text-gray-500">Configure visual advertisements for customers</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -547,53 +593,26 @@ function BannerDrawer({
           onSubmit={handleSubmit(onSubmit)}
           className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4"
         >
-          {watchedPlacement === 'highlight' && (
-            <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-[12px] text-emerald-900 leading-relaxed">
-              <strong className="font-semibold">Highlight card fields:</strong>{' '}
-              <span className="text-emerald-800">Title</span> = card label
-              (e.g. <em>Combos</em>),{' '}
-              <span className="text-emerald-800">Subtitle</span> = green offer
-              caption (e.g. <em>Get 4 at ₹699</em>),{' '}
-              <span className="text-emerald-800">CTA Link</span> = where the
-              card navigates,{' '}
-              <span className="text-emerald-800">Image</span> = card
-              background. Cards render in 4-column grid in display order.
+          {/* Active Placement Help Card */}
+          <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex gap-2 text-xs text-emerald-800 leading-relaxed">
+            <Info size={16} className="shrink-0 text-primary-light mt-0.5" />
+            <div>
+              <p className="font-bold text-primary">{activePlacementDetails.label}</p>
+              <p className="mt-0.5">{activePlacementDetails.description}</p>
+              <p className="font-semibold text-emerald-900 mt-1.5">{activePlacementDetails.helpText}</p>
             </div>
-          )}
-
-          {watchedPlacement === 'collection' && (
-            <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-[12px] text-emerald-900 leading-relaxed">
-              <strong className="font-semibold">Collections menu fields:</strong>{' '}
-              <span className="text-emerald-800">Title</span> = row label
-              (e.g. <em>Plants</em>),{' '}
-              <span className="text-emerald-800">CTA Link</span> = where the
-              row navigates (e.g. <em>/products?category=plants</em>),{' '}
-              <span className="text-emerald-800">Image</span> = portrait photo
-              on the right side,{' '}
-              <span className="text-emerald-800">Background Color</span> =
-              accent blob color (use pastel, e.g. <em>#f9c8d4</em>).
-              Rows appear in the hamburger menu in display order.
-            </div>
-          )}
-
-          {watchedPlacement === 'page' && (
-            <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-[12px] text-emerald-900 leading-relaxed">
-              <strong className="font-semibold">Page banner fields:</strong>{' '}
-              <span className="text-emerald-800">Title</span> is used for
-              accessibility and fallback text,{' '}
-              <span className="text-emerald-800">CTA Link</span> makes the
-              strip clickable, and{' '}
-              <span className="text-emerald-800">Image</span> is the narrow
-              banner shown below the header on customer pages. The first active
-              banner in display order is shown.
-            </div>
-          )}
+          </div>
 
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">
-              Title *
+            <label className="text-xs font-semibold text-gray-700 mb-1 block">
+              Banner Heading / Title *
             </label>
-            <input {...register('title')} className={inputClass} />
+            <input
+              {...register('title')}
+              className={inputClass}
+              placeholder="e.g. Monsoon Plant Sale"
+            />
+            <p className="text-[10px] text-gray-400 mt-0.5">The main text displaying bold over the banner.</p>
             {errors.title && (
               <p className="text-xs text-red-500 mt-1">
                 {errors.title.message}
@@ -602,63 +621,55 @@ function BannerDrawer({
           </div>
 
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">
-              Subtitle
+            <label className="text-xs font-semibold text-gray-700 mb-1 block">
+              Sub-heading / Description
             </label>
-            <input {...register('subtitle')} className={inputClass} />
+            <input
+              {...register('subtitle')}
+              className={inputClass}
+              placeholder="e.g. Up to 40% off on all indoor ferns and air-purifiers."
+            />
+            <p className="text-[10px] text-gray-400 mt-0.5">Subtext displayed under the main heading.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">
-                CTA Button Text
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Button Label (Text)
               </label>
               <input
                 {...register('cta_text')}
-                placeholder="Shop Now"
+                placeholder="e.g. Shop Sale"
                 className={inputClass}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">
-                CTA Link
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Link Address (URL)
               </label>
               <input
                 {...register('cta_link')}
-                placeholder="/products"
+                placeholder="e.g. /products?category=ferns"
                 className={inputClass}
               />
             </div>
           </div>
 
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">
-              Badge Text
+            <label className="text-xs font-semibold text-gray-700 mb-1 block">
+              Top Offer Badge Text
             </label>
             <input
               {...register('badge_text')}
-              placeholder="4 Plants @ ₹699"
+              placeholder="e.g. LIMITED PERIOD ONLY or 20% OFF"
               className={inputClass}
             />
           </div>
 
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">
-              Placement *
-            </label>
-            <select {...register('placement')} className={inputClass}>
-              {PLACEMENTS.map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">
-                Background Color
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Theme Background Color
               </label>
               <div className="flex gap-2">
                 <input
@@ -667,7 +678,7 @@ function BannerDrawer({
                   onChange={(e) =>
                     setValue('bg_color', e.target.value)
                   }
-                  className="w-10 h-10 rounded-lg border cursor-pointer shrink-0"
+                  className="w-9 h-9 rounded-lg border cursor-pointer shrink-0"
                 />
                 <input
                   {...register('bg_color')}
@@ -681,8 +692,8 @@ function BannerDrawer({
               )}
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">
-                Text Color
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Banner Text Color
               </label>
               <div className="flex gap-2">
                 <input
@@ -691,7 +702,7 @@ function BannerDrawer({
                   onChange={(e) =>
                     setValue('text_color', e.target.value)
                   }
-                  className="w-10 h-10 rounded-lg border cursor-pointer shrink-0"
+                  className="w-9 h-9 rounded-lg border cursor-pointer shrink-0"
                 />
                 <input
                   {...register('text_color')}
@@ -708,8 +719,8 @@ function BannerDrawer({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">
-                Valid From
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Start Schedule (Show From)
               </label>
               <input
                 type="datetime-local"
@@ -718,13 +729,14 @@ function BannerDrawer({
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">
-                Valid Until
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                End Schedule (Show Until)
               </label>
               <input
                 type="datetime-local"
                 {...register('valid_until')}
                 className={inputClass}
+                {...register('valid_until')}
               />
               {errors.valid_until && (
                 <p className="text-xs text-red-500 mt-1">
@@ -734,16 +746,19 @@ function BannerDrawer({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <label className="text-xs font-medium text-gray-500">
-              Active
-            </label>
+          <div className="flex items-center gap-3 bg-white p-3 rounded-lg border">
+            <div>
+              <label className="text-xs font-semibold text-gray-700 block">
+                Publish Status
+              </label>
+              <span className="text-[10px] text-gray-400">Make it visible immediately on the website</span>
+            </div>
             <button
               type="button"
               onClick={() =>
                 setValue('is_active', !watch('is_active'))
               }
-              className={`relative w-11 h-6 rounded-full transition-colors ${
+              className={`relative w-11 h-6 rounded-full transition-colors ml-auto ${
                 watch('is_active') ? 'bg-primary' : 'bg-gray-300'
               }`}
             >
@@ -757,151 +772,133 @@ function BannerDrawer({
             </button>
           </div>
 
-          {/* Image section — hidden for announcement */}
+          {/* Image Upload section — hidden for announcement */}
           {watchedPlacement !== 'announcement' && (
             <div className="space-y-3 pt-2 border-t">
-              <label className="text-xs font-medium text-gray-500 block">
-                Image
+              <label className="text-xs font-semibold text-gray-700 block">
+                Banner Graphic / Image
               </label>
 
               {isEdit && banner?.image_url && !imageCleared && (
-                <div>
-                  <p className="text-[11px] text-gray-400 mb-1">
-                    Current image
-                  </p>
+                <div className="relative rounded-lg overflow-hidden border">
                   <img
                     src={banner.image_url}
-                    alt=""
-                    className="w-full h-[140px] object-cover rounded-lg"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
+                    alt="Current banner"
+                    className="w-full h-32 object-cover"
                   />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImageCleared(true);
-                      setSelectedFile(null);
-                      setFilePreview(null);
-                    }}
-                    className="text-xs text-red-500 hover:underline mt-1"
-                  >
-                    Remove image
-                  </button>
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImageCleared(true);
+                        setSelectedFile(null);
+                        setFilePreview(null);
+                      }}
+                      className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold"
+                    >
+                      Replace Image
+                    </button>
+                  </div>
                 </div>
               )}
 
-              <div className="flex gap-4 text-xs">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="imageMode"
-                    checked={imageMode === 'upload'}
-                    onChange={() => setImageMode('upload')}
-                  />
-                  Upload file
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="imageMode"
-                    checked={imageMode === 'url'}
-                    onChange={() => setImageMode('url')}
-                  />
-                  Use image URL
-                </label>
-              </div>
-
-              {imageMode === 'upload' ? (
-                <div>
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const file = e.dataTransfer.files?.[0];
-                      if (file) handleFileSelect(file);
-                    }}
-                    className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                  >
-                    {filePreview ? (
-                      <img
-                        src={filePreview}
-                        alt="Preview"
-                        className="max-h-40 mx-auto object-contain rounded"
+              {(!isEdit || imageCleared || !banner?.image_url) && (
+                <>
+                  <div className="flex gap-4 text-xs font-semibold text-gray-600">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="imageMode"
+                        checked={imageMode === 'upload'}
+                        onChange={() => setImageMode('upload')}
                       />
-                    ) : (
-                      <div className="text-gray-400">
-                        <ImageIcon
-                          size={32}
-                          className="mx-auto mb-2"
-                        />
-                        <p className="text-sm">
-                          Click or drag image here
-                        </p>
-                      </div>
-                    )}
+                      Upload File
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="imageMode"
+                        checked={imageMode === 'url'}
+                        onChange={() => setImageMode('url')}
+                      />
+                      Use Web URL
+                    </label>
                   </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileSelect(file);
-                    }}
-                  />
-                  <p className="text-[11px] text-gray-400 mt-1.5">
-                    Max 5 MB. JPG, PNG, WebP accepted.
-                  </p>
-                  {fileError && (
-                    <p className="text-xs text-red-500 mt-1">
-                      {fileError}
-                    </p>
+
+                  {imageMode === 'upload' ? (
+                    <div>
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                      >
+                        {filePreview ? (
+                          <img
+                            src={filePreview}
+                            alt="Preview"
+                            className="max-h-32 mx-auto object-contain rounded"
+                          />
+                        ) : (
+                          <div className="text-gray-400">
+                            <ImageIcon
+                              size={28}
+                              className="mx-auto mb-2"
+                            />
+                            <p className="text-xs font-semibold text-gray-700">
+                              Upload Banner Image
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                              Drag file or click to select
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFileSelect(file);
+                        }}
+                      />
+                      {fileError && (
+                        <p className="text-xs text-red-500 mt-1">
+                          {fileError}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        type="url"
+                        value={manualUrl}
+                        onChange={(e) => {
+                          setManualUrl(e.target.value);
+                          setUrlValid(null);
+                        }}
+                        onBlur={handleUrlBlur}
+                        placeholder="e.g. https://images.unsplash.com/..."
+                        className={inputClass}
+                      />
+                      {urlValid === true && (
+                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                          <CheckCircle size={12} /> Image URL loaded successfully
+                        </p>
+                      )}
+                      {urlValid === false && (
+                        <p className="text-xs text-red-500 mt-1">
+                          Could not verify image. Double check the address.
+                        </p>
+                      )}
+                    </div>
                   )}
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    {cloudinaryEnabled
-                      ? '☁ Uploads go to Cloudinary CDN'
-                      : '💾 Uploads saved locally. Configure Cloudinary in .env for CDN.'}
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <input
-                    type="url"
-                    value={manualUrl}
-                    onChange={(e) => {
-                      setManualUrl(e.target.value);
-                      setUrlValid(null);
-                    }}
-                    onBlur={handleUrlBlur}
-                    placeholder="https://images.unsplash.com/..."
-                    className={inputClass}
-                  />
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Paste any image URL — Unsplash, your CDN, etc.
-                  </p>
-                  {urlValid === true && (
-                    <p className="text-xs text-green-600 mt-1">
-                      ✓ Image loaded successfully
-                    </p>
-                  )}
-                  {urlValid === false && (
-                    <p className="text-xs text-red-500 mt-1">
-                      Cannot load this URL, try another
-                    </p>
-                  )}
-                </div>
+                </>
               )}
             </div>
           )}
 
-          {/* Live preview for hero */}
+          {/* Live mockups based on placement */}
           {watchedPlacement === 'hero' && (
             <BannerPreview
               title={watchedTitle || ''}
@@ -924,21 +921,6 @@ function BannerDrawer({
             />
           )}
 
-          {/* Announcement preview */}
-          {watchedPlacement === 'announcement' && watchedTitle && (
-            <div className="mt-4">
-              <p className="text-[11px] text-gray-400 mb-2">
-                Preview (approximate)
-              </p>
-              <div
-                className="w-full h-9 flex items-center justify-center text-white text-[12px] font-medium tracking-wide rounded-lg overflow-hidden"
-                style={{ backgroundColor: '#1B4332' }}
-              >
-                {watchedTitle}
-              </div>
-            </div>
-          )}
-
           {watchedPlacement === 'highlight' && (
             <HighlightCardPreview
               title={watchedTitle || ''}
@@ -950,12 +932,10 @@ function BannerDrawer({
           )}
 
           {watchedPlacement === 'page' && (
-            <div className="mt-4">
-              <p className="text-[11px] text-gray-400 mb-2">
-                Preview (approximate)
-              </p>
+            <div className="mt-4 p-4 border rounded-xl bg-gray-50">
+              <p className="text-[11px] font-semibold text-gray-400 mb-2 uppercase tracking-wider">Page Banner Strip</p>
               <div
-                className="h-[72px] w-full overflow-hidden rounded-lg border border-gray-200"
+                className="h-[60px] w-full overflow-hidden rounded-lg border border-gray-200"
                 style={{ backgroundColor: watchedBgColor }}
               >
                 {previewImageSrc ? (
@@ -970,10 +950,10 @@ function BannerDrawer({
                 ) : (
                   <div className="flex h-full items-center justify-center px-4 text-center">
                     <span
-                      className="text-sm font-semibold"
+                      className="text-xs font-bold"
                       style={{ color: watchedTextColor }}
                     >
-                      {watchedTitle || 'Page banner'}
+                      {watchedTitle || 'Shop Wide Offer'}
                     </span>
                   </div>
                 )}
@@ -981,18 +961,18 @@ function BannerDrawer({
             </div>
           )}
 
-          <div className="flex gap-3 pt-4 border-t">
+          <div className="flex gap-3 pt-4 border-t bg-white">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 border rounded-xl text-sm font-medium hover:bg-gray-50 transition"
+              className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50 transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 disabled:opacity-60 transition"
+              className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 transition"
             >
               {submitting ? 'Saving...' : 'Save Banner'}
             </button>
@@ -1085,9 +1065,9 @@ export default function BannersAdminPage() {
       queryClient.invalidateQueries({
         queryKey: ['banners', activePlacement],
       });
-      toast.success('Banner toggled');
+      toast.success('Status toggled');
     } catch {
-      toast.error('Failed to toggle');
+      toast.error('Failed to toggle status');
     }
   }
 
@@ -1101,7 +1081,7 @@ export default function BannersAdminPage() {
       });
       toast.success('Banner deleted');
     } catch {
-      toast.error('Failed to delete');
+      toast.error('Failed to delete banner');
     }
   }
 
@@ -1122,39 +1102,23 @@ export default function BannersAdminPage() {
     });
   }
 
+  const activePlacementInfo = useMemo(() => {
+    return PLACEMENTS.find((p) => p.key === activePlacement) || PLACEMENTS[0];
+  }, [activePlacement]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h1 className="text-xl sm:text-2xl font-bold">Banners</h1>
-        <div className="flex items-center gap-3">
-          {config !== undefined && (
-            <span className="text-[11px]">
-              {config?.cloudinary_enabled ? (
-                <span className="text-green-600">
-                  ● Cloudinary — CDN active
-                </span>
-              ) : (
-                <span className="text-amber-600">
-                  ● Local storage active
-                  <a
-                    href="https://cloudinary.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-1.5 underline"
-                  >
-                    Set up Cloudinary →
-                  </a>
-                </span>
-              )}
-            </span>
-          )}
-          <button
-            onClick={openAddDrawer}
-            className="px-4 py-2.5 bg-primary text-white text-sm rounded-lg font-medium flex items-center gap-2 hover:bg-primary/90 touch-target"
-          >
-            <Plus size={16} /> Add Banner
-          </button>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Banner Management</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Control advertisements, announcement banners, and collection spotlights.</p>
         </div>
+        <button
+          onClick={openAddDrawer}
+          className="px-4 py-2.5 bg-primary hover:bg-primary/95 text-white text-sm rounded-lg font-semibold flex items-center gap-2 transition shrink-0"
+        >
+          <Plus size={16} /> Add Banner
+        </button>
       </div>
 
       {/* Placement tabs */}
@@ -1163,10 +1127,10 @@ export default function BannersAdminPage() {
           <button
             key={p.key}
             onClick={() => setActivePlacement(p.key)}
-            className={`px-4 py-2 text-sm rounded-full font-medium whitespace-nowrap transition-colors ${
+            className={`px-4 py-2 text-xs font-semibold rounded-full whitespace-nowrap transition-colors border ${
               activePlacement === p.key
-                ? 'bg-[#1B4332] text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-100 border'
+                ? 'bg-primary text-white border-primary'
+                : 'bg-white text-gray-600 hover:bg-gray-100 border-gray-200'
             }`}
           >
             {p.label}
@@ -1174,20 +1138,34 @@ export default function BannersAdminPage() {
         ))}
       </div>
 
+      {/* active placement help bar */}
+      <div className="bg-white border rounded-xl p-4 flex gap-3 shadow-sm">
+        <div className="bg-primary/10 w-9 h-9 rounded-lg flex items-center justify-center text-primary shrink-0">
+          <Layout size={18} />
+        </div>
+        <div>
+          <h3 className="font-bold text-sm text-gray-800">{activePlacementInfo.label}</h3>
+          <p className="text-xs text-gray-500 mt-0.5">{activePlacementInfo.description}</p>
+          <p className="text-[11px] text-[#2D6A4F] font-semibold mt-1.5 flex items-center gap-1">
+            <Info size={12} /> {activePlacementInfo.helpText}
+          </p>
+        </div>
+      </div>
+
       {/* Banner list */}
-      <div className="bg-white rounded-xl border overflow-hidden">
+      <div className="bg-white rounded-xl border overflow-hidden shadow-sm">
         {isLoading ? (
           <div className="px-4 py-12 text-center text-gray-400 text-sm">
-            Loading...
+            Loading active banners list...
           </div>
         ) : localBanners.length === 0 ? (
           <div className="px-4 py-12 text-center text-gray-400 text-sm">
-            No banners for this placement.{' '}
+            No banners configured for this section yet.{' '}
             <button
               onClick={openAddDrawer}
-              className="text-primary hover:underline"
+              className="text-primary font-semibold hover:underline"
             >
-              Add one
+              Add one now
             </button>
           </div>
         ) : (
@@ -1200,17 +1178,19 @@ export default function BannersAdminPage() {
               items={localBanners.map((b) => b.id)}
               strategy={verticalListSortingStrategy}
             >
-              {localBanners.map((banner) => (
-                <SortableBannerRow
-                  key={banner.id}
-                  banner={banner}
-                  onEdit={openEditDrawer}
-                  onToggle={handleToggle}
-                  onDelete={handleDelete}
-                  deleteConfirmId={deleteConfirmId}
-                  setDeleteConfirmId={setDeleteConfirmId}
-                />
-              ))}
+              <div className="divide-y">
+                {localBanners.map((banner) => (
+                  <SortableBannerRow
+                    key={banner.id}
+                    banner={banner}
+                    onEdit={openEditDrawer}
+                    onToggle={handleToggle}
+                    onDelete={handleDelete}
+                    deleteConfirmId={deleteConfirmId}
+                    setDeleteConfirmId={setDeleteConfirmId}
+                  />
+                ))}
+              </div>
             </SortableContext>
           </DndContext>
         )}

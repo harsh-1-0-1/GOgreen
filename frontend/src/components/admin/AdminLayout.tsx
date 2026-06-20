@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
-import { FolderTree, Image, LayoutDashboard, MoreHorizontal, Package, ShoppingCart, Users, X, FileText } from 'lucide-react';
+import { FolderTree, Image, LayoutDashboard, MoreHorizontal, Package, ShoppingCart, Users, X, FileText, Briefcase, Tag, Settings } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
@@ -12,10 +12,13 @@ const NAV = [
   { to: '/admin/users', icon: Users, label: 'Users' },
   { to: '/admin/banners', icon: Image, label: 'Banners' },
   { to: '/admin/blog', icon: FileText, label: 'Blog' },
+  { to: '/admin/corporate', icon: Briefcase, label: 'Inquiries' },
+  { to: '/admin/coupons', icon: Tag, label: 'Coupons' },
+  { to: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
 const MOBILE_TABS = NAV.slice(0, 3); // Dashboard, Products, Categories
-const MORE_ITEMS = NAV.slice(3); // Orders, Users
+const MORE_ITEMS = NAV.slice(3); // Orders, Users, Banners, Blog, Corporate, Coupons, Settings
 
 export default function AdminLayout() {
   const { user } = useAuthStore();
