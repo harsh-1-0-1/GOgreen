@@ -138,7 +138,7 @@ function CollectionAccordionRow({
 }
 
 export function MobileCollectionList({ onNavigate }: { onNavigate: () => void }) {
-  const { data: banners = [] } = useBanners('collection');
+  const { data: banners = [] } = useBanners('menu_banner');
   const rows: MobileCollection[] =
     banners.length > 0
       ? banners.map(bannerToCollection)

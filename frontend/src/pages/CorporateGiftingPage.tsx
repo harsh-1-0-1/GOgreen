@@ -1,6 +1,7 @@
 import { ArrowDown, Building2, CheckCircle2, Gift, Leaf, PackageCheck, ShieldCheck, Sparkles, Truck } from 'lucide-react';
 import CorporateGiftInquiryForm from '@/components/corporate/CorporateGiftInquiryForm';
 import FloatingWhatsAppButton from '@/components/corporate/FloatingWhatsAppButton';
+import { useBanners } from '@/hooks/useBanners';
 
 const TRUST_POINTS = [
   { icon: Truck, title: 'Last Mile Delivery', text: 'Coordinated dispatches for offices, events, and distributed teams.' },
@@ -25,9 +26,68 @@ const PROCESS = [
 ];
 
 export default function CorporateGiftingPage() {
+  const { data: corporateBanners = [] } = useBanners('corporate_gifting');
+
   return (
     <div className="overflow-hidden bg-[#F8FAF4]">
       <CorporateGiftInquiryForm />
+      {corporateBanners.length > 0 && (
+        <section className="bg-white py-3 sm:py-4">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-10 xl:px-16">
+            <div className="grid gap-3">
+              {corporateBanners.map((banner) => (
+                <a
+                  key={banner.id}
+                  href={banner.cta_link || '#corporate-inquiry'}
+                  className="group relative block overflow-hidden rounded-2xl bg-[#173A2A] shadow-[0_16px_44px_rgba(27,67,50,0.14)]"
+                  style={{ backgroundColor: banner.bg_color }}
+                >
+                  <div className="relative min-h-[150px] sm:min-h-[190px]">
+                    {banner.image_url ? (
+                      <img
+                        src={banner.image_url}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : null}
+                    <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/20 to-transparent" />
+                    <div className="relative flex min-h-[150px] max-w-2xl flex-col justify-center px-5 py-6 sm:min-h-[190px] sm:px-8">
+                      {banner.badge_text && (
+                        <span className="mb-3 w-fit rounded-full bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
+                          {banner.badge_text}
+                        </span>
+                      )}
+                      <h2
+                        className="text-2xl font-bold tracking-tight sm:text-3xl"
+                        style={{ color: banner.text_color }}
+                      >
+                        {banner.title}
+                      </h2>
+                      {banner.subtitle && (
+                        <p
+                          className="mt-2 max-w-xl text-sm leading-6 sm:text-base"
+                          style={{ color: banner.text_color }}
+                        >
+                          {banner.subtitle}
+                        </p>
+                      )}
+                      {banner.cta_text && (
+                        <span className="mt-4 w-fit rounded-full bg-white px-5 py-2 text-xs font-bold text-primary shadow-sm">
+                          {banner.cta_text}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
       <section className="relative isolate">
         <div className="absolute inset-0 -z-10 bg-[linear-gradient(115deg,#edf5e8_0%,#fffaf1_48%,#eff8f1_100%)]" />
         <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[1.02fr_0.98fr] lg:px-10 lg:py-20 xl:px-16">

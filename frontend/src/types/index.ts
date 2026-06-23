@@ -200,6 +200,7 @@ export interface Banner {
   text_color: string;
   position: number;
   placement: string;
+  target_path?: string | null;
   is_active: boolean;
   valid_from?: string;
   valid_until?: string;

@@ -22,6 +22,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useBanners } from '@/hooks/useBanners';
 import type { ProductListResponse } from '@/types';
 
 import { NAV_ITEMS, WHATSAPP_NUMBER } from './navData';
@@ -29,6 +30,19 @@ import type { NavItemDef } from './navData';
 import { WhatsAppIcon } from './WhatsAppIcon';
 import { MobileCollectionList } from './MobileCollectionList';
 import { LOGO_PATH } from '@/lib/branding';
+
+const FALLBACK_MOBILE_MENU_ITEMS = [
+  { label: 'Plants', href: '/products?category=plants', img: 'https://images.unsplash.com/photo-1545241047-6083a3684587?w=80&h=80&fit=crop&q=80' },
+  { label: 'Seeds', href: '/products?category=seeds', img: 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?w=80&h=80&fit=crop&q=80' },
+  { label: 'Pots & Planters', href: '/products?category=pots-planters', img: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=80&h=80&fit=crop&q=80' },
+  { label: 'Plant Care', href: '/products?category=plant-care', img: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=80&h=80&fit=crop&q=80' },
+  { label: 'Gifting', href: '/products?tags=gifting', img: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=80&h=80&fit=crop&q=80' },
+  { label: 'Corporate / Bulk Gifting', href: '/corporate-gifting', img: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=80&h=80&fit=crop&q=80' },
+  { label: 'Vastu Plants', href: '/products?tags=vastu-friendly', img: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=80&h=80&fit=crop&q=80' },
+  { label: 'Air Purifying Plants', href: '/products?category=air-purifying-plants', img: 'https://images.unsplash.com/photo-1596547609652-9cf5d8d76921?w=80&h=80&fit=crop&q=80' },
+  { label: 'Offers', href: '/products?tags=offers', img: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=80&h=80&fit=crop&q=80' },
+  { label: 'Blog', href: '/blog', img: 'https://images.unsplash.com/photo-1506880018603-83d5b814b5a6?w=80&h=80&fit=crop&q=80' },
+];
 
 export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -53,6 +67,17 @@ export default function Navbar() {
 
   const debouncedQuery = useDebounce(searchQuery, 300);
   const isHome = location.pathname === '/';
+  const { data: mobilePromoBanners = [] } = useBanners('mobile_promo');
+  const { data: menuBanners = [] } = useBanners('menu_banner');
+  const mobilePromoBanner = mobilePromoBanners[0];
+  const mobileMenuItems =
+    menuBanners.length > 0
+      ? menuBanners.map((banner) => ({
+          label: banner.title,
+          href: banner.cta_link || '/products',
+          img: banner.image_url || '',
+        }))
+      : FALLBACK_MOBILE_MENU_ITEMS;
 
   useBodyScrollLock(drawerOpen);
 
@@ -600,23 +625,38 @@ export default function Navbar() {
               {/* Promotional Banner Card */}
               <div className="px-5 pb-3 shrink-0">
                 <Link
-                  to="/products?tags=vastu-friendly"
+                  to={mobilePromoBanner?.cta_link || '/products?tags=vastu-friendly'}
                   onClick={closeDrawer}
                   className="relative flex items-center gap-3.5 p-3.5 rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-50/90 to-teal-50/30 border border-emerald-100/50 shadow-[0_4px_12px_rgba(45,106,79,0.04)] group transition active:scale-[0.98]"
+                  style={
+                    mobilePromoBanner?.bg_color
+                      ? { background: mobilePromoBanner.bg_color }
+                      : undefined
+                  }
                 >
                   <div className="absolute -right-6 -bottom-6 w-16 h-16 rounded-full bg-emerald-100/30 blur-md pointer-events-none" />
                   
                   <img 
-                    src="https://images.unsplash.com/photo-1545241047-6083a3684587?w=100&h=100&fit=crop" 
+                    src={mobilePromoBanner?.image_url || 'https://images.unsplash.com/photo-1545241047-6083a3684587?w=100&h=100&fit=crop'}
                     className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm shrink-0 group-hover:scale-105 transition-transform duration-300" 
-                    alt="Vastu Plants" 
+                    alt=""
                   />
                   <div className="flex-1 min-w-0">
                     <span className="inline-block px-1.5 py-0.5 rounded-md bg-emerald-600/10 text-[9px] font-bold text-emerald-800 uppercase tracking-wider leading-none">
-                      Vastu Collection
+                      {mobilePromoBanner?.badge_text || 'Vastu Collection'}
                     </span>
-                    <p className="text-xs font-bold text-emerald-950 truncate mt-1 leading-snug">Bring Home Positivity</p>
-                    <p className="text-[11px] font-semibold text-emerald-700 mt-0.5">Live plants from just ₹299</p>
+                    <p
+                      className="text-xs font-bold text-emerald-950 truncate mt-1 leading-snug"
+                      style={{ color: mobilePromoBanner?.text_color }}
+                    >
+                      {mobilePromoBanner?.title || 'Bring Home Positivity'}
+                    </p>
+                    <p
+                      className="text-[11px] font-semibold text-emerald-700 mt-0.5"
+                      style={{ color: mobilePromoBanner?.text_color }}
+                    >
+                      {mobilePromoBanner?.subtitle || mobilePromoBanner?.cta_text || 'Live plants from just ₹299'}
+                    </p>
                   </div>
                   <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0 group-hover:bg-primary group-hover:text-white transition-colors duration-300">
                     <ChevronRight size={14} className="text-emerald-800 group-hover:text-inherit transition-colors" />
@@ -668,18 +708,7 @@ export default function Navbar() {
               <div className="flex-1 overflow-y-auto scrollbar-none scroll-smooth flex flex-col justify-between" style={{ WebkitOverflowScrolling: 'touch' }}>
                 {/* Strictly ordered 10 Menu Items with Circular Previews */}
                 <div className="px-3 py-3 space-y-1">
-                  {[
-                    { label: 'Plants', href: '/products?category=plants', img: 'https://images.unsplash.com/photo-1545241047-6083a3684587?w=80&h=80&fit=crop&q=80' },
-                    { label: 'Seeds', href: '/products?category=seeds', img: 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?w=80&h=80&fit=crop&q=80' },
-                    { label: 'Pots & Planters', href: '/products?category=pots-planters', img: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=80&h=80&fit=crop&q=80' },
-                    { label: 'Plant Care', href: '/products?category=plant-care', img: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=80&h=80&fit=crop&q=80' },
-                    { label: 'Gifting', href: '/products?tags=gifting', img: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=80&h=80&fit=crop&q=80' },
-                    { label: 'Corporate / Bulk Gifting', href: '/corporate-gifting', img: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=80&h=80&fit=crop&q=80' },
-                    { label: 'Vastu Plants', href: '/products?tags=vastu-friendly', img: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=80&h=80&fit=crop&q=80' },
-                    { label: 'Air Purifying Plants', href: '/products?category=air-purifying-plants', img: 'https://images.unsplash.com/photo-1596547609652-9cf5d8d76921?w=80&h=80&fit=crop&q=80' },
-                    { label: 'Offers', href: '/products?tags=offers', img: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=80&h=80&fit=crop&q=80' },
-                    { label: 'Blog', href: '/blog', img: 'https://images.unsplash.com/photo-1506880018603-83d5b814b5a6?w=80&h=80&fit=crop&q=80' },
-                  ].map((item) => {
+                  {mobileMenuItems.map((item) => {
                     const subcategories = getSubcategories(item.label);
                     const hasSubmenu = subcategories !== null;
                     
@@ -699,7 +728,7 @@ export default function Navbar() {
                       >
                         <div className="flex items-center gap-3.5">
                           <img
-                            src={item.img}
+                            src={item.img || 'https://images.unsplash.com/photo-1545241047-6083a3684587?w=80&h=80&fit=crop&q=80'}
                             alt={item.label}
                             className="w-9 h-9 rounded-full object-cover border border-gray-100/60 shadow-xs group-hover:scale-105 transition-transform duration-300"
                             loading="lazy"
