@@ -241,6 +241,7 @@ class Banner(Base):
     text_color: Mapped[str] = mapped_column(String(20), default="#1B4332")
     position: Mapped[int] = mapped_column(Integer, default=0)
     placement: Mapped[str] = mapped_column(String(20), default="hero")
+    target_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -71,10 +71,34 @@ const PLACEMENTS = [
     helpText: 'Recommended size: 400x550px. The title becomes the bold text overlay.',
   },
   {
-    key: 'collection',
-    label: '💼 Corporate Gifting / Menu Banner',
-    description: 'Portrait banner displayed in the collections sidebar and main mega-menu sections.',
-    helpText: 'Recommended size: 320x450px. Highlight bulk packages here.',
+    key: 'mobile_promo',
+    label: '📱 Mobile Drawer Promo',
+    description: 'Compact promotional card shown at the top of the mobile menu drawer.',
+    helpText: 'Recommended size: 400x400px. The first active banner is used for the drawer promo card.',
+  },
+  {
+    key: 'menu_banner',
+    label: '🧭 Menu Banner',
+    description: 'Portrait banner displayed in the mobile collections menu.',
+    helpText: 'Recommended size: 320x450px. Use clear category imagery and short labels.',
+  },
+  {
+    key: 'mobile_category',
+    label: '📲 Home Mobile Category Chips',
+    description: 'Circular category shortcuts shown above the homepage hero on mobile.',
+    helpText: 'Recommended size: 300x300px square images. Title becomes the chip label.',
+  },
+  {
+    key: 'cart_suggestions',
+    label: '🛒 Empty Cart Suggestions',
+    description: 'Collection cards shown when the cart drawer or cart page is empty.',
+    helpText: 'Recommended size: 500x380px. Title, subtitle, link, and image are used.',
+  },
+  {
+    key: 'corporate_gifting',
+    label: '💼 Corporate Gifting Banner',
+    description: 'Promotional banner displayed on the corporate gifting page.',
+    helpText: 'Recommended size: 1400x420px. Highlight bulk packages, gifting programs, or seasonal offers.',
   },
 ] as const;
 
@@ -85,7 +109,8 @@ const bannerSchema = z
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
-    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'collection']),
+    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'mobile_promo', 'menu_banner', 'mobile_category', 'cart_suggestions', 'corporate_gifting']),
+    target_path: z.string().max(255).optional().or(z.literal('')),
     bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #FFFFFF)'),
     text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #000000)'),
     is_active: z.boolean(),
@@ -164,7 +189,9 @@ function SortableBannerRow({
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-gray-800 truncate">{banner.title}</p>
         <p className="text-xs text-gray-400 truncate">
-          {banner.subtitle || banner.cta_link || '—'}
+          {banner.placement === 'page' && banner.target_path
+            ? `Target: ${banner.target_path}`
+            : banner.subtitle || banner.cta_link || '—'}
         </p>
       </div>
 
@@ -457,6 +484,7 @@ function BannerDrawer({
       cta_link: banner?.cta_link || '',
       badge_text: banner?.badge_text || '',
       placement: (banner?.placement || placement) as any,
+      target_path: banner?.target_path || '',
       bg_color: banner?.bg_color || '#F5F0E8',
       text_color: banner?.text_color || '#1B4332',
       is_active: banner?.is_active ?? true,
@@ -533,6 +561,7 @@ function BannerDrawer({
       fd.append('cta_link', data.cta_link || '');
       fd.append('badge_text', data.badge_text || '');
       fd.append('placement', data.placement);
+      fd.append('target_path', data.target_path || '');
       fd.append('bg_color', data.bg_color);
       fd.append('text_color', data.text_color);
       fd.append('is_active', String(data.is_active));
@@ -602,6 +631,27 @@ function BannerDrawer({
               <p className="font-semibold text-emerald-900 mt-1.5">{activePlacementDetails.helpText}</p>
             </div>
           </div>
+
+          {watchedPlacement === 'page' && (
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Target Path
+              </label>
+              <input
+                {...register('target_path')}
+                className={inputClass}
+                placeholder="e.g. /products, /cart, or * for fallback"
+              />
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                Exact page path for this banner. Leave blank or use * to make it the fallback banner.
+              </p>
+              {errors.target_path && (
+                <p className="text-xs text-red-500 mt-1">
+                  {errors.target_path.message}
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="text-xs font-semibold text-gray-700 mb-1 block">
@@ -1111,7 +1161,7 @@ export default function BannersAdminPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Banner Management</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Control advertisements, announcement banners, and collection spotlights.</p>
+          <p className="text-xs text-gray-500 mt-0.5">Control advertisements, announcement banners, and page spotlights.</p>
         </div>
         <button
           onClick={openAddDrawer}

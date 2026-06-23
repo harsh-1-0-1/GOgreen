@@ -18,7 +18,13 @@ const FALLBACK_PAGE_BANNER: Banner = {
 export default function PageBanner() {
   const location = useLocation();
   const { data: banners = [] } = useBanners('page');
-  const banner = banners[0] || FALLBACK_PAGE_BANNER;
+  const banner =
+    banners.find((item) => item.target_path === location.pathname) ||
+    banners.find((item) => {
+      const targetPath = item.target_path?.trim();
+      return !targetPath || targetPath === '*';
+    }) ||
+    FALLBACK_PAGE_BANNER;
 
   if (location.pathname.startsWith('/admin')) return null;
   if (location.pathname === '/') return null;

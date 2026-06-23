@@ -86,6 +86,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       isDrawerOpen: true,
       lastAddedProduct: product ?? null,
     });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   },
 
   updateItem: async (itemId, quantity) => {

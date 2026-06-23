@@ -97,6 +97,7 @@ async def create_banner(
     text_color: str = Form("#1B4332"),
     position: int = Form(0),
     placement: str = Form("hero"),
+    target_path: Optional[str] = Form(None),
     is_active: bool = Form(True),
     valid_from: Optional[str] = Form(None),
     valid_until: Optional[str] = Form(None),
@@ -125,6 +126,7 @@ async def create_banner(
         text_color=text_color,
         position=position,
         placement=placement,
+        target_path=target_path,
         is_active=is_active,
         image_url=image_url,
         image_public_id=image_public_id,
@@ -151,6 +153,7 @@ async def update_banner(
     text_color: Optional[str] = Form(None),
     position: Optional[int] = Form(None),
     placement: Optional[str] = Form(None),
+    target_path: Optional[str] = Form(None),
     is_active: Optional[bool] = Form(None),
     valid_from: Optional[str] = Form(None),
     valid_until: Optional[str] = Form(None),
@@ -188,6 +191,7 @@ async def update_banner(
         text_color=text_color,
         position=position,
         placement=placement,
+        target_path=target_path,
         is_active=is_active,
     )
     for field, value in updatable.items():
