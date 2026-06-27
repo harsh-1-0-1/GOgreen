@@ -119,6 +119,7 @@ export default function ProductDetailPage() {
   const [qty, setQty] = useState(1);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedPot, setSelectedPot] = useState<string | null>(null);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
 
   const { data: similar } = useProducts({ limit: 5 });
   const { data: reviewPreview } = useProductReviews(product?.id, { limit: 1 });
@@ -127,9 +128,11 @@ export default function ProductDetailPage() {
     if (!product?.variants) return;
     const colors = product.variants.colors || [];
     const pots = product.variants.pot_types || [];
+    const sizes = product.variants.sizes || [];
     if (!selectedColor && colors.length) setSelectedColor(colors[0].slug);
     if (!selectedPot && pots.length) setSelectedPot(pots[0].slug);
-  }, [product, selectedColor, selectedPot]);
+    if (!selectedSize && sizes.length) setSelectedSize(sizes[0].slug);
+  }, [product, selectedColor, selectedPot, selectedSize]);
 
   if (isLoading) return <Spinner className="py-32" />;
   if (isError || !product) {
@@ -147,21 +150,46 @@ export default function ProductDetailPage() {
       : null;
 
   const variants = product.variants;
-  const hasVariants = Boolean(variants?.colors?.length && variants?.pot_types?.length);
-  const comboKey = selectedColor && selectedPot ? `${selectedColor}__${selectedPot}` : '';
+  const sizes = variants?.sizes || [];
+  const hasColorPotVariants = Boolean(variants?.colors?.length && variants?.pot_types?.length);
+  const isSizeOnly = Boolean(sizes.length && !variants?.colors?.length && !variants?.pot_types?.length);
+  const hasVariants = hasColorPotVariants || isSizeOnly;
+
+  // Build combo key depending on variant mode
+  let comboKey = '';
+  if (hasColorPotVariants && sizes.length) {
+    if (selectedColor && selectedPot && selectedSize) comboKey = `${selectedColor}__${selectedPot}__${selectedSize}`;
+  } else if (hasColorPotVariants) {
+    if (selectedColor && selectedPot) comboKey = `${selectedColor}__${selectedPot}`;
+  } else if (isSizeOnly) {
+    if (selectedSize) comboKey = selectedSize;
+  }
+
   const selectedPotType = variants?.pot_types?.find((p) => p.slug === selectedPot);
+  const selectedSizeType = sizes.find((s) => s.slug === selectedSize);
   const selectedStock = hasVariants ? Number(variants?.stock?.[comboKey] ?? 0) : product.stock_qty;
-  const displayPrice = product.price + (selectedPotType?.price_modifier || 0);
-  const displayImage = hasVariants
+  const displayPrice = product.price
+    + (selectedPotType?.price_modifier || 0)
+    + (selectedSizeType?.price_modifier || 0);
+  const displayImage = hasColorPotVariants
     ? variants?.image_map?.[comboKey] || variants?.default_image || product.images?.[0]
     : product.images?.[0];
   const galleryImages = displayImage
     ? [displayImage, ...(product.images || []).filter((img) => img !== displayImage)]
     : product.images || [];
-  const selectedOptions = hasVariants && selectedColor && selectedPot
-    ? { color: selectedColor, pot_type: selectedPot }
-    : null;
-  const selectionIncomplete = hasVariants && (!selectedColor || !selectedPot);
+
+  // Build selectedOptions for cart
+  let selectedOptions: Record<string, string> | null = null;
+  if (hasColorPotVariants && selectedColor && selectedPot) {
+    selectedOptions = { color: selectedColor, pot_type: selectedPot };
+    if (sizes.length && selectedSize) selectedOptions.size = selectedSize;
+  } else if (isSizeOnly && selectedSize) {
+    selectedOptions = { size: selectedSize };
+  }
+
+  const selectionIncomplete =
+    (hasColorPotVariants && (!selectedColor || !selectedPot || (sizes.length > 0 && !selectedSize)))
+    || (isSizeOnly && !selectedSize);
   const isUnavailable = selectionIncomplete || selectedStock <= 0;
 
   async function handleAddToCart() {
@@ -247,50 +275,101 @@ export default function ProductDetailPage() {
 
             {hasVariants && variants && (
               <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Color</p>
-                  <div className="flex flex-wrap gap-2">
-                    {variants.colors.map((color) => {
-                      const disabled = selectedPot ? Number(variants.stock?.[`${color.slug}__${selectedPot}`] ?? 0) <= 0 : false;
-                      return (
-                        <button
-                          key={color.slug}
-                          type="button"
-                          disabled={disabled}
-                          onClick={() => setSelectedColor(color.slug)}
-                          className={`w-9 h-9 rounded-full border-2 transition disabled:opacity-30 disabled:cursor-not-allowed ${
-                            selectedColor === color.slug ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200'
-                          }`}
-                          title={color.name}
-                          aria-label={color.name}
-                          style={{ backgroundColor: color.hex }}
-                        />
-                      );
-                    })}
+                {/* Plant Size Selector */}
+                {sizes.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        Select Plant Size
+                        {selectedSizeType?.description && (
+                          <span className="ml-2 text-primary normal-case font-normal">— {selectedSizeType.description}</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {sizes.map((size) => {
+                        const sizeCombo = isSizeOnly
+                          ? size.slug
+                          : (selectedColor && selectedPot ? `${selectedColor}__${selectedPot}__${size.slug}` : '');
+                        const stockForSize = sizeCombo ? Number(variants?.stock?.[sizeCombo] ?? 0) : 0;
+                        const disabled = isSizeOnly
+                          ? stockForSize <= 0
+                          : (selectedColor && selectedPot ? stockForSize <= 0 : false);
+                        const isActive = selectedSize === size.slug;
+                        return (
+                          <button
+                            key={size.slug}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => setSelectedSize(size.slug)}
+                            className={`px-5 py-2 rounded-full border-2 text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                              isActive
+                                ? 'bg-primary border-primary text-white shadow-sm'
+                                : 'border-gray-300 text-gray-700 hover:border-primary hover:text-primary bg-white'
+                            }`}
+                          >
+                            {size.name}
+                            {size.price_modifier > 0 && (
+                              <span className={`ml-1 text-xs ${isActive ? 'text-white/80' : 'text-gray-400'}`}>
+                                +₹{size.price_modifier}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pot Type</p>
-                  <div className="flex flex-wrap gap-2">
-                    {variants.pot_types.map((pot) => {
-                      const disabled = selectedColor ? Number(variants.stock?.[`${selectedColor}__${pot.slug}`] ?? 0) <= 0 : false;
-                      return (
-                        <button
-                          key={pot.slug}
-                          type="button"
-                          disabled={disabled}
-                          onClick={() => setSelectedPot(pot.slug)}
-                          className={`px-4 py-2 rounded-full border text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${
-                            selectedPot === pot.slug ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 hover:border-primary/40'
-                          }`}
-                        >
-                          {pot.name}{pot.price_modifier > 0 ? ` (+₹${pot.price_modifier})` : ''}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                {/* Color Selector */}
+                {hasColorPotVariants && (
+                  <>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Color</p>
+                      <div className="flex flex-wrap gap-2">
+                        {variants!.colors.map((color) => {
+                          const disabled = selectedPot ? Number(variants?.stock?.[`${color.slug}__${selectedPot}`] ?? 0) <= 0 : false;
+                          return (
+                            <button
+                              key={color.slug}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => setSelectedColor(color.slug)}
+                              className={`w-9 h-9 rounded-full border-2 transition disabled:opacity-30 disabled:cursor-not-allowed ${
+                                selectedColor === color.slug ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200'
+                              }`}
+                              title={color.name}
+                              aria-label={color.name}
+                              style={{ backgroundColor: color.hex }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pot Type</p>
+                      <div className="flex flex-wrap gap-2">
+                        {variants!.pot_types.map((pot) => {
+                          const disabled = selectedColor ? Number(variants?.stock?.[`${selectedColor}__${pot.slug}`] ?? 0) <= 0 : false;
+                          return (
+                            <button
+                              key={pot.slug}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => setSelectedPot(pot.slug)}
+                              className={`px-4 py-2 rounded-full border text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                                selectedPot === pot.slug ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 hover:border-primary/40'
+                              }`}
+                            >
+                              {pot.name}{pot.price_modifier > 0 ? ` (+₹${pot.price_modifier})` : ''}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
