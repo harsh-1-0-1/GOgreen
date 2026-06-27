@@ -14,7 +14,10 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.security import hash_password
-from app.db.models import Banner, BlogCategory, BlogPost, Category, Product, User
+from app.db.models import (
+    Address, Banner, BlogCategory, BlogPost, Cart, CartItem,
+    Category, Order, OrderItem, Product, ProductReview, User,
+)
 
 
 def _resolve_database_url() -> str | None:
@@ -129,6 +132,70 @@ def _make_variants(stock_overrides: dict = {}) -> dict:
     }
 
 
+def _make_variants_with_sizes(stock_overrides: dict = {}) -> dict:
+    """Generate a 3D variants block: color x pot_type x size."""
+    colors = [
+        {"name": "Terracotta",  "hex": "#C4622D", "slug": "terracotta"},
+        {"name": "Sage Green",  "hex": "#7A9E7E", "slug": "sage-green"},
+        {"name": "White",       "hex": "#F5F5F0", "slug": "white"},
+        {"name": "Charcoal",    "hex": "#4A4A4A", "slug": "charcoal"},
+    ]
+    pot_types = [
+        {"name": "Plastic",       "slug": "plastic",       "price_modifier": 0},
+        {"name": "Ceramic",       "slug": "ceramic",       "price_modifier": 150},
+        {"name": "Terracotta Pot","slug": "terracotta-pot","price_modifier": 100},
+        {"name": "Metal",         "slug": "metal",         "price_modifier": 200},
+    ]
+    sizes = [
+        {"name": "Small",  "slug": "small",  "price_modifier": 0,   "description": "6–10 inches"},
+        {"name": "Medium", "slug": "medium", "price_modifier": 150, "description": "12–18 inches"},
+        {"name": "Large",  "slug": "large",  "price_modifier": 350, "description": "24+ inches"},
+    ]
+
+    color_images = {
+        "terracotta":  "https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=600&q=80",
+        "sage-green":  "https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80",
+        "white":       "https://images.unsplash.com/photo-1485955900006-d5666c72437d?w=600&q=80",
+        "charcoal":    "https://images.unsplash.com/photo-1520412099551-62b6bafeb5bb?w=600&q=80",
+    }
+
+    image_map = {}
+    stock = {}
+    for c in colors:
+        for p in pot_types:
+            for s in sizes:
+                key = f"{c['slug']}__{p['slug']}__{s['slug']}"
+                image_map[key] = color_images[c["slug"]]
+                stock[key] = stock_overrides.get(key, 8)  # default 8 units per combo
+
+    return {
+        "colors": colors,
+        "pot_types": pot_types,
+        "sizes": sizes,
+        "image_map": image_map,
+        "default_image": color_images["sage-green"],
+        "stock": stock,
+    }
+
+
+def _make_size_only_variants(stock_overrides: dict = {}) -> dict:
+    """Generate a size-only variants block (no colors / pot types)."""
+    sizes = [
+        {"name": "Small",  "slug": "small",  "price_modifier": 0,   "description": "6–10 inches"},
+        {"name": "Medium", "slug": "medium", "price_modifier": 200, "description": "12–18 inches"},
+        {"name": "Large",  "slug": "large",  "price_modifier": 500, "description": "24+ inches"},
+    ]
+    stock = {s["slug"]: stock_overrides.get(s["slug"], 12) for s in sizes}
+    return {
+        "colors": [],
+        "pot_types": [],
+        "sizes": sizes,
+        "image_map": {},
+        "default_image": "",
+        "stock": stock,
+    }
+
+
 PRODUCTS = [
     # Indoor Plants (cat: indoor-plants)
         {"name": "Money Plant Golden", "cat": "indoor-plants", "price": 249,
@@ -137,21 +204,21 @@ PRODUCTS = [
          "tags": ["air-purifying", "low-maintenance", "indoor", "beginner-friendly", "workspace", "living-room"],
          "care_tips": ["Water when topsoil feels dry", "Prune to encourage bushier growth"],
          "badge": "Bestseller",
-         "variants": _make_variants({"terracotta__plastic": 30, "sage-green__ceramic": 0, "charcoal__metal": 15})},
+         "variants": _make_variants_with_sizes({"terracotta__plastic__small": 20, "sage-green__ceramic__medium": 15, "charcoal__metal__large": 8})},
 
         {"name": "Snake Plant Sansevieria", "cat": "indoor-plants", "price": 399,
          "desc": "Hardy succulent that thrives on neglect and purifies air at night.",
          "sunlight": "Low to Bright Indirect", "watering": "Every 2 weeks",
          "tags": ["air-purifying", "low-maintenance", "bedroom", "beginner-friendly", "workspace"],
          "care_tips": ["Avoid overwatering", "Tolerates low light well"], "badge": "Trending",
-         "variants": _make_variants({"white__ceramic": 20, "charcoal__metal": 8, "dusty-pink__plastic": 0})},
+         "variants": _make_variants_with_sizes({"white__ceramic__medium": 18, "charcoal__metal__large": 6, "terracotta__plastic__small": 25})},
 
         {"name": "Peace Lily", "cat": "indoor-plants", "price": 549,
          "desc": "Elegant white-flowering plant that removes toxins from indoor air.",
          "sunlight": "Low to Medium Indirect", "watering": "Twice a week",
          "tags": ["air-purifying", "flowering", "indoor", "beginner-friendly", "living-room"],
          "care_tips": ["Keep soil moist but not soggy", "Mist leaves in dry weather"],
-         "variants": _make_variants({"white__ceramic": 25, "white__terracotta-pot": 12, "dusty-pink__hanging": 0})},
+         "variants": _make_variants_with_sizes({"white__ceramic__medium": 20, "white__terracotta-pot__small": 15, "sage-green__plastic__large": 0})},
 
         {"name": "Pothos Marble Queen", "cat": "indoor-plants", "price": 199,
          "desc": "Variegated trailing plant with stunning white and green leaves.",
@@ -165,21 +232,21 @@ PRODUCTS = [
          "sunlight": "Bright Indirect", "watering": "Twice a week",
          "tags": ["air-purifying", "tropical", "large", "living-room", "vastu-friendly"],
          "care_tips": ["Mist regularly", "Avoid direct sunlight to prevent leaf burn"], "badge": "Popular",
-         "variants": _make_variants({"sage-green__metal": 6, "terracotta__terracotta-pot": 18, "charcoal__plastic": 0})},
+         "variants": _make_variants_with_sizes({"sage-green__metal__large": 5, "terracotta__terracotta-pot__medium": 12, "charcoal__plastic__small": 20})},
 
         {"name": "ZZ Plant", "cat": "indoor-plants", "price": 449,
          "desc": "Glossy-leaved virtually indestructible houseplant.",
          "sunlight": "Low to Bright Indirect", "watering": "Every 2-3 weeks",
          "tags": ["low-maintenance", "modern", "indoor", "beginner-friendly", "workspace", "living-room"],
          "care_tips": ["Drought tolerant – do not overwater", "Wipe leaves for shine"],
-         "variants": _make_variants({"charcoal__metal": 22, "charcoal__ceramic": 14, "white__ceramic": 9})},
+         "variants": _make_variants_with_sizes({"charcoal__metal__medium": 16, "white__ceramic__small": 22, "sage-green__plastic__large": 8})},
 
         {"name": "Rubber Plant", "cat": "indoor-plants", "price": 499,
          "desc": "Bold burgundy leaves that make a dramatic statement in any room.",
          "sunlight": "Bright Indirect", "watering": "Once a week",
          "tags": ["statement", "air-purifying", "indoor", "living-room"],
          "care_tips": ["Clean leaves monthly", "Rotate for even growth"],
-         "variants": _make_variants({"charcoal__metal": 11, "terracotta__terracotta-pot": 20, "dusty-pink__ceramic": 0})},
+         "variants": _make_size_only_variants({"small": 30, "medium": 20, "large": 10})},
 
         {"name": "Jade Plant", "cat": "indoor-plants", "price": 349,
          "desc": "Lucky succulent symbolising prosperity and good fortune.",
@@ -486,7 +553,13 @@ async def seed() -> None:
         print("DATABASE_URL not set – skipping seed.")
         return
     async with async_session_factory() as db:
-        # Clear existing seed data so the script is re-runnable
+        # Clear in dependency order (children first, then parents)
+        await db.execute(CartItem.__table__.delete())
+        await db.execute(Cart.__table__.delete())
+        await db.execute(OrderItem.__table__.delete())
+        await db.execute(Order.__table__.delete())
+        await db.execute(Address.__table__.delete())
+        await db.execute(ProductReview.__table__.delete())
         await db.execute(Banner.__table__.delete())
         await db.execute(Product.__table__.delete())
         await db.execute(Category.__table__.delete())

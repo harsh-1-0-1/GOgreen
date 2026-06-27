@@ -12,6 +12,7 @@ from app.schemas.cart import CartItemProduct, CartItemResponse, CartResponse
 
 OPTION_COLOR_KEY = "color"
 OPTION_POT_KEY = "pot_type"
+OPTION_SIZE_KEY = "size"
 
 
 async def _load_cart(db: AsyncSession, cart: Cart) -> Cart:
@@ -26,11 +27,18 @@ async def _load_cart(db: AsyncSession, cart: Cart) -> Cart:
 
 def _has_variants(product: Product) -> bool:
     variants = product.variants or {}
-    return bool(
+    has_color_pot = bool(
         variants.get("colors")
         and variants.get("pot_types")
         and isinstance(variants.get("stock"), dict)
     )
+    has_size_only = bool(
+        variants.get("sizes")
+        and not variants.get("colors")
+        and not variants.get("pot_types")
+        and isinstance(variants.get("stock"), dict)
+    )
+    return has_color_pot or has_size_only
 
 
 def normalize_selected_options(options: dict | None) -> dict[str, str] | None:
@@ -38,11 +46,14 @@ def normalize_selected_options(options: dict | None) -> dict[str, str] | None:
         return None
     color = options.get(OPTION_COLOR_KEY) or options.get("color_slug")
     pot_type = options.get(OPTION_POT_KEY) or options.get("pot_slug")
+    size = options.get(OPTION_SIZE_KEY) or options.get("size_slug")
     normalized: dict[str, str] = {}
     if color:
         normalized[OPTION_COLOR_KEY] = str(color)
     if pot_type:
         normalized[OPTION_POT_KEY] = str(pot_type)
+    if size:
+        normalized[OPTION_SIZE_KEY] = str(size)
     return normalized or None
 
 
@@ -51,7 +62,26 @@ def options_key(options: dict | None) -> str:
 
 
 def combination_key(options: dict[str, str]) -> str:
-    return f"{options[OPTION_COLOR_KEY]}__{options[OPTION_POT_KEY]}"
+    """Build a combination key from selected options.
+
+    Supports three modes:
+    - color + pot + size  → "color__pot__size"
+    - color + pot only    → "color__pot"
+    - size only           → "size"
+    """
+    has_color = OPTION_COLOR_KEY in options
+    has_pot = OPTION_POT_KEY in options
+    has_size = OPTION_SIZE_KEY in options
+
+    if has_color and has_pot and has_size:
+        return f"{options[OPTION_COLOR_KEY]}__{options[OPTION_POT_KEY]}__{options[OPTION_SIZE_KEY]}"
+    elif has_color and has_pot:
+        return f"{options[OPTION_COLOR_KEY]}__{options[OPTION_POT_KEY]}"
+    elif has_size:
+        return options[OPTION_SIZE_KEY]
+    elif has_color:
+        return options[OPTION_COLOR_KEY]
+    raise ValueError("Cannot build combination key from options: " + str(options))
 
 
 def _primary_image(product: Product) -> str:
@@ -79,16 +109,38 @@ def resolve_variant_details(
 
     variants = product.variants or {}
     normalized = normalize_selected_options(selected_options)
-    if not normalized or OPTION_COLOR_KEY not in normalized or OPTION_POT_KEY not in normalized:
-        raise ValueError("Please select a color and pot type")
 
-    color_slugs = {c.get("slug") for c in variants.get("colors", [])}
+    sizes = variants.get("sizes", [])
+    colors = variants.get("colors", [])
     pot_types = variants.get("pot_types", [])
+    size_by_slug = {s.get("slug"): s for s in sizes}
     pot_by_slug = {p.get("slug"): p for p in pot_types}
-    if normalized[OPTION_COLOR_KEY] not in color_slugs:
-        raise ValueError("Invalid color option")
-    if normalized[OPTION_POT_KEY] not in pot_by_slug:
-        raise ValueError("Invalid pot type option")
+
+    is_size_only = bool(sizes) and not colors and not pot_types
+
+    if is_size_only:
+        # Size-only mode: only size selection required
+        if not normalized or OPTION_SIZE_KEY not in normalized:
+            raise ValueError("Please select a plant size")
+        if normalized[OPTION_SIZE_KEY] not in size_by_slug:
+            raise ValueError("Invalid size option")
+    else:
+        # Color + pot (+ optional size) mode
+        if not normalized or OPTION_COLOR_KEY not in normalized or OPTION_POT_KEY not in normalized:
+            if sizes:
+                raise ValueError("Please select a color, pot type, and plant size")
+            else:
+                raise ValueError("Please select a color and pot type")
+
+        color_slugs = {c.get("slug") for c in colors}
+        if normalized[OPTION_COLOR_KEY] not in color_slugs:
+            raise ValueError("Invalid color option")
+        if normalized[OPTION_POT_KEY] not in pot_by_slug:
+            raise ValueError("Invalid pot type option")
+        if sizes and OPTION_SIZE_KEY not in normalized:
+            raise ValueError("Please select a plant size")
+        if sizes and normalized.get(OPTION_SIZE_KEY) not in size_by_slug:
+            raise ValueError("Invalid size option")
 
     combo = combination_key(normalized)
     stock = variants.get("stock", {})
@@ -99,7 +151,13 @@ def resolve_variant_details(
         if quantity is not None and available_stock < quantity:
             raise ValueError(f"Only {available_stock} in stock for the selected configuration")
 
-    price_modifier = float(pot_by_slug[normalized[OPTION_POT_KEY]].get("price_modifier", 0) or 0)
+    # Price: base + pot modifier + size modifier
+    price_modifier = 0.0
+    if not is_size_only and normalized.get(OPTION_POT_KEY):
+        price_modifier += float(pot_by_slug[normalized[OPTION_POT_KEY]].get("price_modifier", 0) or 0)
+    if normalized.get(OPTION_SIZE_KEY) and normalized[OPTION_SIZE_KEY] in size_by_slug:
+        price_modifier += float(size_by_slug[normalized[OPTION_SIZE_KEY]].get("price_modifier", 0) or 0)
+
     image_map = variants.get("image_map", {}) or {}
     resolved_image = image_map.get(combo) or variants.get("default_image") or _primary_image(product)
     return {

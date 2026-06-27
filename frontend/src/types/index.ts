@@ -49,9 +49,17 @@ export interface ProductVariantPotType {
   price_modifier: number;
 }
 
+export interface ProductVariantSize {
+  name: string;        // e.g. "Small", "Medium", "Large"
+  slug: string;        // e.g. "small", "medium", "large"
+  price_modifier: number;
+  description?: string; // e.g. "6–12 inches"
+}
+
 export interface ProductVariants {
   colors: ProductVariantColor[];
   pot_types: ProductVariantPotType[];
+  sizes?: ProductVariantSize[];
   image_map: Record<string, string>;
   default_image: string;
   stock: Record<string, number>;

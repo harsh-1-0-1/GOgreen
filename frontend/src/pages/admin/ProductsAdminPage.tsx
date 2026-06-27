@@ -42,6 +42,7 @@ const productSchema = z.object({
 type ProductFormData = z.infer<typeof productSchema>;
 type VariantColorDraft = { name: string; hex: string };
 type VariantPotDraft = { name: string; price_modifier: number };
+type VariantSizeDraft = { name: string; price_modifier: number; description: string };
 
 function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -102,10 +103,13 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
 
   // Variant States
   const [colors, setColors] = useState<VariantColorDraft[]>(
-    product?.variants?.colors.map(c => ({ name: c.name, hex: c.hex })) || []
+    product?.variants?.colors?.map(c => ({ name: c.name, hex: c.hex })) || []
   );
   const [pots, setPots] = useState<VariantPotDraft[]>(
-    product?.variants?.pot_types.map(p => ({ name: p.name, price_modifier: p.price_modifier })) || []
+    product?.variants?.pot_types?.map(p => ({ name: p.name, price_modifier: p.price_modifier })) || []
+  );
+  const [sizes, setSizes] = useState<VariantSizeDraft[]>(
+    product?.variants?.sizes?.map(s => ({ name: s.name, price_modifier: s.price_modifier, description: s.description || '' })) || []
   );
   const [defaultImage, setDefaultImage] = useState(product?.variants?.default_image || '');
   const [stockByKey, setStockByKey] = useState<Record<string, number>>(product?.variants?.stock || {});
@@ -139,7 +143,7 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
       let variants: ProductVariants | null = null;
 
       // Handle custom variant setup
-      if (colors.length || pots.length || defaultImage.trim()) {
+      if (colors.length || pots.length || sizes.length || defaultImage.trim()) {
         const cleanColors = colors
           .filter((c) => c.name.trim())
           .map(c => ({ name: c.name.trim(), hex: c.hex, slug: slugify(c.name) }));
@@ -147,6 +151,10 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
         const cleanPots = pots
           .filter((p) => p.name.trim())
           .map(p => ({ name: p.name.trim(), slug: slugify(p.name), price_modifier: Number(p.price_modifier || 0) }));
+
+        const cleanSizes = sizes
+          .filter((s) => s.name.trim())
+          .map(s => ({ name: s.name.trim(), slug: slugify(s.name), price_modifier: Number(s.price_modifier || 0), description: s.description.trim() }));
 
         if (colors.length > 0 && !cleanColors.length) {
           setVariantError('Please fill in names for the added colors.');
@@ -158,13 +166,38 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
           setSubmitting(false);
           return;
         }
+        if (sizes.length > 0 && !cleanSizes.length) {
+          setVariantError('Please fill in names for the added sizes.');
+          setSubmitting(false);
+          return;
+        }
 
-        // If one variant exists, we generate combination list
-        if (cleanColors.length && cleanPots.length) {
-          const rowKeys = cleanColors.flatMap((color) => cleanPots.map((pot) => `${color.slug}__${pot.slug}`));
+        // Size-only mode: no colors/pots, just sizes
+        if (cleanSizes.length > 0 && !cleanColors.length && !cleanPots.length) {
+          variants = {
+            colors: [],
+            pot_types: [],
+            sizes: cleanSizes,
+            default_image: defaultImage,
+            image_map: {},
+            stock: Object.fromEntries(cleanSizes.map(s => [s.slug, Number(stockByKey[s.slug] || 0)])),
+          };
+        } else if (cleanColors.length && cleanPots.length) {
+          // Color + pot (+ optional size) combinations
+          let rowKeys: string[];
+          if (cleanSizes.length) {
+            rowKeys = cleanColors.flatMap(color =>
+              cleanPots.flatMap(pot =>
+                cleanSizes.map(size => `${color.slug}__${pot.slug}__${size.slug}`)
+              )
+            );
+          } else {
+            rowKeys = cleanColors.flatMap((color) => cleanPots.map((pot) => `${color.slug}__${pot.slug}`));
+          }
           variants = {
             colors: cleanColors,
             pot_types: cleanPots,
+            ...(cleanSizes.length ? { sizes: cleanSizes } : {}),
             default_image: defaultImage,
             image_map: Object.fromEntries(rowKeys.map((key) => [key, imageByKey[key] || ''])),
             stock: Object.fromEntries(rowKeys.map((key) => [key, Number(stockByKey[key] || 0)])),
@@ -240,11 +273,30 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
   
   const activeColors = colors.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), slug: slugify(c.name) }));
   const activePots = pots.filter(p => p.name.trim()).map(p => ({ name: p.name.trim(), slug: slugify(p.name) }));
+  const activeSizes = sizes.filter(s => s.name.trim()).map(s => ({ name: s.name.trim(), slug: slugify(s.name) }));
   
-  const variantRows = activeColors.flatMap((color) => activePots.map((pot) => ({
-    key: `${color.slug}__${pot.slug}`,
-    label: `${color.name} / ${pot.name}`,
-  })));
+  // Build variant rows for the stock/image matrix
+  let variantRows: { key: string; label: string }[] = [];
+  if (activeColors.length && activePots.length && activeSizes.length) {
+    // 3D: color + pot + size
+    variantRows = activeColors.flatMap(color =>
+      activePots.flatMap(pot =>
+        activeSizes.map(size => ({
+          key: `${color.slug}__${pot.slug}__${size.slug}`,
+          label: `${color.name} / ${pot.name} / ${size.name}`,
+        }))
+      )
+    );
+  } else if (activeColors.length && activePots.length) {
+    // 2D: color + pot
+    variantRows = activeColors.flatMap((color) => activePots.map((pot) => ({
+      key: `${color.slug}__${pot.slug}`,
+      label: `${color.name} / ${pot.name}`,
+    })));
+  } else if (activeSizes.length && !activeColors.length && !activePots.length) {
+    // Size-only
+    variantRows = activeSizes.map(size => ({ key: size.slug, label: size.name }));
+  }
 
   return (
     <>
@@ -665,9 +717,74 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
                   </div>
                 </div>
 
+                {/* Plant Sizes Setup */}
+                <div className="space-y-2 border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-gray-700 block">3. Plant Sizes</span>
+                      <span className="text-[10px] text-gray-400">Add size options (e.g. Small, Medium, Large) with optional price difference</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSizes([...sizes, { name: '', price_modifier: 0, description: '' }])}
+                      className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
+                    >
+                      + Add Size
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {sizes.map((size, index) => (
+                      <div key={index} className="flex gap-2 items-center">
+                        <input
+                          value={size.name}
+                          onChange={(e) => setSizes(sizes.map((s, i) => i === index ? { ...s, name: e.target.value } : s))}
+                          placeholder="Size name (e.g. Small, Medium, Large)"
+                          className={`${inputClass} flex-1`}
+                        />
+                        <input
+                          value={size.description}
+                          onChange={(e) => setSizes(sizes.map((s, i) => i === index ? { ...s, description: e.target.value } : s))}
+                          placeholder="Hint (e.g. 6–12 in)"
+                          className={`${inputClass} w-28`}
+                        />
+                        <div className="flex items-center gap-1.5 shrink-0 w-28">
+                          <span className="text-xs text-gray-500">₹</span>
+                          <input
+                            type="number"
+                            value={size.price_modifier}
+                            onChange={(e) => setSizes(sizes.map((s, i) => i === index ? { ...s, price_modifier: Number(e.target.value) } : s))}
+                            placeholder="+Price"
+                            className={inputClass}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSizes(sizes.filter((_, i) => i !== index))}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    ))}
+                    {sizes.length === 0 && (
+                      <p className="text-xs text-gray-400 italic text-center py-1">No size options. Add sizes like Small, Medium, Large.</p>
+                    )}
+                  </div>
+                  {sizes.length > 0 && !colors.length && !pots.length && (
+                    <p className="text-[10px] text-blue-600 bg-blue-50 rounded-lg px-3 py-1.5">
+                      💡 Size-only mode: Stock will be tracked per size (no color/pot needed).
+                    </p>
+                  )}
+                  {sizes.length > 0 && colors.length > 0 && pots.length > 0 && (
+                    <p className="text-[10px] text-amber-700 bg-amber-50 rounded-lg px-3 py-1.5">
+                      ⚠️ 3D mode: Stock will be tracked per Color × Pot × Size combination.
+                    </p>
+                  )}
+                </div>
+
                 {/* Default Fallback Image URL */}
                 <div className="border-t pt-4 space-y-1">
-                  <label className="text-xs font-semibold text-gray-700 block">3. Default Variant Image URL</label>
+                  <label className="text-xs font-semibold text-gray-700 block">4. Default Variant Image URL</label>
                   <input
                     value={defaultImage}
                     onChange={(e) => setDefaultImage(e.target.value)}
