@@ -104,7 +104,7 @@ export default function OrderDetailPage() {
                 <p className="font-medium text-sm">Product #{item.product_id}</p>
                 {item.selected_options && (
                   <p className="text-xs text-gray-500">
-                    {[item.selected_options.color && `Color: ${labelize(item.selected_options.color)}`, item.selected_options.pot_type && `Pot: ${labelize(item.selected_options.pot_type)}`].filter(Boolean).join(' · ')}
+                    {[item.selected_options.color && `Color: ${labelize(item.selected_options.color)}`, item.selected_options.pot_type && `Pot: ${labelize(item.selected_options.pot_type)}`, item.selected_options.size && `Size: ${labelize(item.selected_options.size)}`].filter(Boolean).join(' · ')}
                   </p>
                 )}
                 <p className="text-xs text-gray-500">Qty: {item.quantity} × ₹{item.unit_price}</p>

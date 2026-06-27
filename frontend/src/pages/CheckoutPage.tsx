@@ -5,7 +5,7 @@ import { BadgePercent, ChevronDown, ChevronUp, CreditCard, LockKeyhole, PackageC
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { clearDirectCheckoutSession, readDirectCheckoutSession } from '@/lib/directCheckout';
-import type { CheckoutResponse, ProductVariantColor, ProductVariantPotType } from '@/types';
+import type { CheckoutResponse, ProductVariantColor, ProductVariantPotType, ProductVariantSize } from '@/types';
 import { useCreateAddress } from '@/hooks/useAddresses';
 import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
@@ -56,7 +56,8 @@ function optionSummary(item: CheckoutItem) {
   if (!item.selected_options) return null;
   const color = item.product.variants?.colors?.find((c: ProductVariantColor) => c.slug === item.selected_options?.color)?.name || item.selected_options.color;
   const pot = item.product.variants?.pot_types?.find((p: ProductVariantPotType) => p.slug === item.selected_options?.pot_type)?.name || item.selected_options.pot_type;
-  return [color && `Color: ${color}`, pot && `Pot: ${pot}`].filter(Boolean).join(' · ');
+  const size = item.product.variants?.sizes?.find((s: ProductVariantSize) => s.slug === item.selected_options?.size)?.name || item.selected_options.size;
+  return [color && `Color: ${color}`, pot && `Pot: ${pot}`, size && `Size: ${size}`].filter(Boolean).join(' · ');
 }
 
 type CheckoutItem = {

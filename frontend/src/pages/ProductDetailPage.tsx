@@ -125,14 +125,27 @@ export default function ProductDetailPage() {
   const { data: reviewPreview } = useProductReviews(product?.id, { limit: 1 });
 
   useEffect(() => {
-    if (!product?.variants) return;
+    if (!product) return;
+    if (!product.variants) {
+      setSelectedColor(null);
+      setSelectedPot(null);
+      setSelectedSize(null);
+      setQty(1);
+      return;
+    }
     const colors = product.variants.colors || [];
     const pots = product.variants.pot_types || [];
     const sizes = product.variants.sizes || [];
-    if (!selectedColor && colors.length) setSelectedColor(colors[0].slug);
-    if (!selectedPot && pots.length) setSelectedPot(pots[0].slug);
-    if (!selectedSize && sizes.length) setSelectedSize(sizes[0].slug);
-  }, [product, selectedColor, selectedPot, selectedSize]);
+    const firstInStockKey = Object.entries(product.variants.stock || {})
+      .find(([, stock]) => Number(stock) > 0)?.[0];
+    const inStockParts = firstInStockKey?.split('__') || [];
+    setSelectedColor(colors.length ? (inStockParts[0] || colors[0].slug) : null);
+    setSelectedPot(pots.length ? (inStockParts[1] || pots[0].slug) : null);
+    setSelectedSize(sizes.length
+      ? (colors.length && pots.length ? inStockParts[2] : inStockParts[0]) || sizes[0].slug
+      : null);
+    setQty(1);
+  }, [product]);
 
   if (isLoading) return <Spinner className="py-32" />;
   if (isError || !product) {
@@ -143,11 +156,6 @@ export default function ProductDetailPage() {
       </div>
     );
   }
-
-  const discount =
-    product.original_price && product.original_price > product.price
-      ? Math.round(((product.original_price - product.price) / product.original_price) * 100)
-      : null;
 
   const variants = product.variants;
   const sizes = variants?.sizes || [];
@@ -168,10 +176,17 @@ export default function ProductDetailPage() {
   const selectedPotType = variants?.pot_types?.find((p) => p.slug === selectedPot);
   const selectedSizeType = sizes.find((s) => s.slug === selectedSize);
   const selectedStock = hasVariants ? Number(variants?.stock?.[comboKey] ?? 0) : product.stock_qty;
-  const displayPrice = product.price
-    + (selectedPotType?.price_modifier || 0)
-    + (selectedSizeType?.price_modifier || 0);
-  const displayImage = hasColorPotVariants
+  const selectedPriceModifier =
+    (selectedPotType?.price_modifier || 0) + (selectedSizeType?.price_modifier || 0);
+  const displayPrice = product.price + selectedPriceModifier;
+  const displayOriginalPrice = product.original_price
+    ? product.original_price + selectedPriceModifier
+    : null;
+  const discount =
+    displayOriginalPrice && displayOriginalPrice > displayPrice
+      ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
+      : null;
+  const displayImage = hasVariants
     ? variants?.image_map?.[comboKey] || variants?.default_image || product.images?.[0]
     : product.images?.[0];
   const galleryImages = displayImage
@@ -255,9 +270,9 @@ export default function ProductDetailPage() {
 
             <div className="flex items-baseline gap-2 sm:gap-3">
               <span className="text-2xl sm:text-3xl font-bold text-primary">₹{displayPrice}</span>
-              {product.original_price && product.original_price > product.price && (
+              {displayOriginalPrice && displayOriginalPrice > displayPrice && (
                 <>
-                  <span className="text-base sm:text-lg text-gray-400 line-through">₹{product.original_price}</span>
+                  <span className="text-base sm:text-lg text-gray-400 line-through">₹{displayOriginalPrice}</span>
                   <span className="text-xs sm:text-sm font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded">
                     {discount}% OFF
                   </span>
@@ -301,7 +316,10 @@ export default function ProductDetailPage() {
                             key={size.slug}
                             type="button"
                             disabled={disabled}
-                            onClick={() => setSelectedSize(size.slug)}
+                            onClick={() => {
+                              setSelectedSize(size.slug);
+                              setQty(1);
+                            }}
                             className={`px-5 py-2 rounded-full border-2 text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed ${
                               isActive
                                 ? 'bg-primary border-primary text-white shadow-sm'
@@ -328,13 +346,19 @@ export default function ProductDetailPage() {
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Color</p>
                       <div className="flex flex-wrap gap-2">
                         {variants!.colors.map((color) => {
-                          const disabled = selectedPot ? Number(variants?.stock?.[`${color.slug}__${selectedPot}`] ?? 0) <= 0 : false;
+                          const colorCombo = selectedPot
+                            ? `${color.slug}__${selectedPot}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`
+                            : '';
+                          const disabled = colorCombo ? Number(variants?.stock?.[colorCombo] ?? 0) <= 0 : false;
                           return (
                             <button
                               key={color.slug}
                               type="button"
                               disabled={disabled}
-                              onClick={() => setSelectedColor(color.slug)}
+                              onClick={() => {
+                                setSelectedColor(color.slug);
+                                setQty(1);
+                              }}
                               className={`w-9 h-9 rounded-full border-2 transition disabled:opacity-30 disabled:cursor-not-allowed ${
                                 selectedColor === color.slug ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200'
                               }`}
@@ -351,13 +375,19 @@ export default function ProductDetailPage() {
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pot Type</p>
                       <div className="flex flex-wrap gap-2">
                         {variants!.pot_types.map((pot) => {
-                          const disabled = selectedColor ? Number(variants?.stock?.[`${selectedColor}__${pot.slug}`] ?? 0) <= 0 : false;
+                          const potCombo = selectedColor
+                            ? `${selectedColor}__${pot.slug}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`
+                            : '';
+                          const disabled = potCombo ? Number(variants?.stock?.[potCombo] ?? 0) <= 0 : false;
                           return (
                             <button
                               key={pot.slug}
                               type="button"
                               disabled={disabled}
-                              onClick={() => setSelectedPot(pot.slug)}
+                              onClick={() => {
+                                setSelectedPot(pot.slug);
+                                setQty(1);
+                              }}
                               className={`px-4 py-2 rounded-full border text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${
                                 selectedPot === pot.slug ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 hover:border-primary/40'
                               }`}
