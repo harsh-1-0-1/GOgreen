@@ -11,7 +11,9 @@ function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][n
     || item.selected_options.color;
   const pot = item.product.variants?.pot_types?.find((p) => p.slug === item.selected_options?.pot_type)?.name
     || item.selected_options.pot_type;
-  return [color && `Color: ${color}`, pot && `Pot: ${pot}`].filter(Boolean).join(' · ');
+  const size = item.product.variants?.sizes?.find((s) => s.slug === item.selected_options?.size)?.name
+    || item.selected_options.size;
+  return [color && `Color: ${color}`, pot && `Pot: ${pot}`, size && `Size: ${size}`].filter(Boolean).join(' · ');
 }
 
 export default function CartDrawer() {

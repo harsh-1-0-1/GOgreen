@@ -11,7 +11,10 @@ const SECONDARY = '#16A34A';
 function ProductTile({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
   const navigate = useNavigate();
-  const hasVariants = Boolean(product.variants?.colors?.length && product.variants?.pot_types?.length);
+  const hasVariants = Boolean(
+    (product.variants?.colors?.length && product.variants?.pot_types?.length)
+    || product.variants?.sizes?.length,
+  );
 
   const discount =
     product.original_price && product.original_price > product.price

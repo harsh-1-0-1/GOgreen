@@ -32,7 +32,11 @@ export default function RecommendationBar({ lastAddedProduct, cartItems }: Recom
   async function handleQuickAdd(e: React.MouseEvent, product: Product) {
     e.preventDefault();
     e.stopPropagation();
-    if (product.variants?.colors?.length && product.variants?.pot_types?.length) {
+    const hasVariants = Boolean(
+      (product.variants?.colors?.length && product.variants?.pot_types?.length)
+      || product.variants?.sizes?.length,
+    );
+    if (hasVariants) {
       navigate(`/products/${product.slug}`);
       return;
     }
@@ -100,7 +104,8 @@ export default function RecommendationBar({ lastAddedProduct, cartItems }: Recom
                 ) : (
                   <>
                     <Plus size={11} strokeWidth={2.5} />
-                    {product.variants?.colors?.length && product.variants?.pot_types?.length ? 'Options' : 'Add'}
+                    {(product.variants?.colors?.length && product.variants?.pot_types?.length)
+                      || product.variants?.sizes?.length ? 'Options' : 'Add'}
                   </>
                 )}
               </button>
