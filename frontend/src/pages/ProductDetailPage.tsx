@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/authStore';
 import ProductCard from '@/components/product/ProductCard';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
 import ProductReviews, { ProductRatingInline } from '@/components/product/ProductReviews';
+import PlantogaPromise from '@/components/product/PlantogaPromise';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 
@@ -489,6 +490,8 @@ export default function ProductDetailPage() {
             <CareTips tips={product.care_tips || []} />
           </div>
         </div>
+
+        <PlantogaPromise />
 
         <ProductReviews productId={product.id} />
 
