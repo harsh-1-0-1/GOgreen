@@ -29,6 +29,7 @@ export interface Product {
   images: string[];
   tags: string[];
   care_tips: string[];
+  how_to_guide: string | null;
   sunlight: string | null;
   watering: string | null;
   badge: string | null;

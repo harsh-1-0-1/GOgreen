@@ -72,6 +72,7 @@ class Product(Base):
     images: Mapped[list | None] = mapped_column(JSON, default=list)
     tags: Mapped[list | None] = mapped_column(JSON, default=list)
     care_tips: Mapped[list | None] = mapped_column(JSON, default=list)
+    how_to_guide: Mapped[str | None] = mapped_column(Text, nullable=True)
     sunlight: Mapped[str | None] = mapped_column(String(100), nullable=True)
     watering: Mapped[str | None] = mapped_column(String(100), nullable=True)
     badge: Mapped[str | None] = mapped_column(String(100), nullable=True)

@@ -35,6 +35,7 @@ const productSchema = z.object({
   badge: z.string().optional(),
   sunlight: z.string().optional(),
   watering: z.string().optional(),
+  how_to_guide: z.string().optional(),
   tags: z.array(z.object({ value: z.string() })).optional(),
   care_tips: z.array(z.object({ value: z.string() })).optional(),
 });
@@ -134,6 +135,7 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
       badge: product?.badge || '',
       sunlight: product?.sunlight || '',
       watering: product?.watering || '',
+      how_to_guide: product?.how_to_guide || '',
       tags: product?.tags?.length ? product.tags.map((value) => ({ value })) : [],
       care_tips: product?.care_tips?.length ? product.care_tips.map((value) => ({ value })) : [],
     },
@@ -233,6 +235,7 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
         badge: data.badge || null,
         sunlight: data.sunlight || null,
         watering: data.watering || null,
+        how_to_guide: data.how_to_guide?.trim() || null,
         tags: data.tags?.map((t) => t.value).filter(Boolean) || [],
         care_tips: data.care_tips?.map((t) => t.value).filter(Boolean) || [],
         variants,
@@ -260,6 +263,7 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
         if (payload.badge) fd.append('badge', payload.badge);
         if (payload.sunlight) fd.append('sunlight', payload.sunlight);
         if (payload.watering) fd.append('watering', payload.watering);
+        if (payload.how_to_guide) fd.append('how_to_guide', payload.how_to_guide);
         if (payload.variants) fd.append('variants', JSON.stringify(payload.variants));
 
         // Add file uploads
@@ -490,6 +494,19 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
                     />
                     <p className="text-[11px] text-gray-400 mt-1">How often the plant needs watering.</p>
                   </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">How to Guide</label>
+                  <textarea
+                    {...register('how_to_guide')}
+                    rows={4}
+                    placeholder="e.g. Use well-draining soil and keep it in a spot with soft, indirect light..."
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary resize-y"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Shown as a green card on the product page. Leave blank to auto-build from sunlight, watering, and care tips.
+                  </p>
                 </div>
 
                 <div>

@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Droplets, Minus, Plus, ShoppingCart, Sun } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProduct, useProducts } from '@/hooks/useProducts';
+import { useCategories } from '@/hooks/useCategories';
 import { useProductReviews } from '@/hooks/useReviews';
 import { useCartStore } from '@/store/cartStore';
 import { useAuthStore } from '@/store/authStore';
@@ -10,9 +11,30 @@ import ProductCard from '@/components/product/ProductCard';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
 import ProductReviews, { ProductRatingInline } from '@/components/product/ProductReviews';
 import PlantogaPromise from '@/components/product/PlantogaPromise';
+import HowToGuide from '@/components/product/HowToGuide';
+import ProductSpecification from '@/components/product/ProductSpecification';
+import { STORE_LEGAL } from '@/lib/branding';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
+import type { Category } from '@/types';
 
+
+function findCategoryName(categories: Category[] | undefined, categoryId: number): string {
+  if (!categories?.length) return 'PLANTS';
+
+  const search = (list: Category[]): string | null => {
+    for (const cat of list) {
+      if (cat.id === categoryId) return cat.name;
+      if (cat.children?.length) {
+        const match = search(cat.children);
+        if (match) return match;
+      }
+    }
+    return null;
+  };
+
+  return (search(categories) || 'Plants').toUpperCase();
+}
 
 function MobileGallery({ images }: { images: string[] }) {
   const [active, setActive] = useState(0);
@@ -114,6 +136,7 @@ function CareTips({ tips }: { tips: string[] }) {
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading, isError } = useProduct(slug!);
+  const { data: categories } = useCategories();
   const addItem = useCartStore((s) => s.addItem);
   const { user, openAuthModal } = useAuthStore();
   const navigate = useNavigate();
@@ -228,6 +251,16 @@ export default function ProductDetailPage() {
   }
 
   const similarProducts = similar?.items.filter((p) => p.id !== product.id).slice(0, 4) ?? [];
+  const mrp = displayOriginalPrice ?? displayPrice;
+  const productSpecs = [
+    { label: 'Name', value: product.name },
+    { label: 'Category', value: findCategoryName(categories, product.category_id) },
+    { label: 'Country of Origin', value: STORE_LEGAL.countryOfOrigin },
+    { label: 'Marketed by', value: STORE_LEGAL.marketedBy },
+    { label: 'MRP', value: `₹${mrp.toFixed(2)} (Incl. of all taxes)` },
+    { label: 'Net Quantity', value: '1' },
+    { label: 'Manufactured by', value: STORE_LEGAL.manufacturedBy },
+  ];
 
   return (
     <div className="pb-20 md:pb-0">
@@ -492,6 +525,10 @@ export default function ProductDetailPage() {
         </div>
 
         <PlantogaPromise />
+
+        <HowToGuide product={product} />
+
+        <ProductSpecification specs={productSpecs} />
 
         <ProductReviews productId={product.id} />
 

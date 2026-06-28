@@ -12,6 +12,7 @@ class ProductCreate(BaseModel):
     category_id: int
     tags: list[str] = []
     care_tips: list[str] = []
+    how_to_guide: str | None = None
     sunlight: str | None = None
     watering: str | None = None
     badge: str | None = None
@@ -29,6 +30,7 @@ class ProductUpdate(BaseModel):
     images: list[str] | None = None
     tags: list[str] | None = None
     care_tips: list[str] | None = None
+    how_to_guide: str | None = None
     sunlight: str | None = None
     watering: str | None = None
     badge: str | None = None
@@ -48,6 +50,7 @@ class ProductResponse(BaseModel):
     images: list[str]
     tags: list[str]
     care_tips: list[str]
+    how_to_guide: str | None
     sunlight: str | None
     watering: str | None
     badge: str | None
