@@ -159,7 +159,15 @@ def resolve_variant_details(
         price_modifier += float(size_by_slug[normalized[OPTION_SIZE_KEY]].get("price_modifier", 0) or 0)
 
     image_map = variants.get("image_map", {}) or {}
-    resolved_image = image_map.get(combo) or variants.get("default_image") or _primary_image(product)
+    selected_pot_image = None
+    if not is_size_only and normalized.get(OPTION_POT_KEY):
+        selected_pot_image = pot_by_slug[normalized[OPTION_POT_KEY]].get("image_url")
+    resolved_image = (
+        image_map.get(combo)
+        or selected_pot_image
+        or variants.get("default_image")
+        or _primary_image(product)
+    )
     return {
         "selected_options": normalized,
         "unit_price": round(product.price + price_modifier, 2),

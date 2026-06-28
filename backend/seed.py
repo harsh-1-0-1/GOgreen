@@ -23,6 +23,9 @@ from app.db.models import (
 def _resolve_database_url() -> str | None:
     url = os.environ.get("DATABASE_URL")
     if not url:
+        from app.core.config import settings
+        url = settings.DATABASE_URL
+    if not url or url.startswith("sqlite"):
         return None
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)

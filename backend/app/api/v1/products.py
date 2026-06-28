@@ -14,11 +14,14 @@ from app.schemas.product import (
 )
 from app.services import product_service
 from app.utils.cloudinary_helper import upload_image
+from app.utils.image_upload import handle_image_upload
 from app.utils.redis import cache_get, cache_set
 
 router = APIRouter(prefix="/products", tags=["products"])
 
 PRODUCT_TTL = 300  # 5 min
+MAX_VARIANT_IMAGE_SIZE = 5 * 1024 * 1024
+ALLOWED_VARIANT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 @router.get("", response_model=ProductListResponse)
@@ -63,6 +66,27 @@ async def list_products(
     return resp
 
 
+@router.post("/variant-image")
+async def upload_variant_image(
+    image: UploadFile = File(...),
+    _admin=Depends(require_admin),
+):
+    """Upload an image used by a product variant option."""
+    if image.content_type not in ALLOWED_VARIANT_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Variant image must be a JPG, PNG, or WEBP file",
+        )
+    if image.size is not None and image.size > MAX_VARIANT_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Variant image must be 5MB or smaller",
+        )
+
+    result = await handle_image_upload(image, folder="plantoga/product-variants")
+    return {"url": result["url"]}
+
+
 @router.get("/{slug}", response_model=ProductResponse)
 async def get_product(slug: str, db: AsyncSession = Depends(get_db)):
     cache_key = f"product:{slug}"
@@ -89,6 +113,7 @@ async def create_product(
     stock_qty: Annotated[int, Form()] = 0,
     tags: Annotated[str, Form()] = "[]",
     care_tips: Annotated[str, Form()] = "[]",
+    how_to_guide: Annotated[str | None, Form()] = None,
     sunlight: Annotated[str | None, Form()] = None,
     watering: Annotated[str | None, Form()] = None,
     badge: Annotated[str | None, Form()] = None,
@@ -112,6 +137,7 @@ async def create_product(
         category_id=category_id,
         tags=json.loads(tags),
         care_tips=json.loads(care_tips),
+        how_to_guide=how_to_guide,
         sunlight=sunlight,
         watering=watering,
         badge=badge,

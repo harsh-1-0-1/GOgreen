@@ -29,6 +29,7 @@ export interface Product {
   images: string[];
   tags: string[];
   care_tips: string[];
+  how_to_guide: string | null;
   sunlight: string | null;
   watering: string | null;
   badge: string | null;
@@ -47,6 +48,7 @@ export interface ProductVariantPotType {
   name: string;
   slug: string;
   price_modifier: number;
+  image_url?: string;
 }
 
 export interface ProductVariantSize {
