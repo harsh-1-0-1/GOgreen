@@ -100,6 +100,12 @@ const PLACEMENTS = [
     description: 'Promotional banner displayed on the corporate gifting page.',
     helpText: 'Recommended size: 1400x420px. Highlight bulk packages, gifting programs, or seasonal offers.',
   },
+  {
+    key: 'happy_planters',
+    label: 'Happy Planters Gallery',
+    description: 'Scrollable customer and plant photos shown on every product detail page.',
+    helpText: 'Upload portrait photos. Recommended size: 800x1000px (4:5). Drag images to change their display order.',
+  },
 ] as const;
 
 const bannerSchema = z
@@ -109,7 +115,7 @@ const bannerSchema = z
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
-    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'mobile_promo', 'menu_banner', 'mobile_category', 'cart_suggestions', 'corporate_gifting']),
+    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'mobile_promo', 'menu_banner', 'mobile_category', 'cart_suggestions', 'corporate_gifting', 'happy_planters']),
     target_path: z.string().max(255).optional().or(z.literal('')),
     bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #FFFFFF)'),
     text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #000000)'),

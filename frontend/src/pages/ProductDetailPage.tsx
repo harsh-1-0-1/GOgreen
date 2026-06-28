@@ -13,6 +13,8 @@ import ProductReviews, { ProductRatingInline } from '@/components/product/Produc
 import PlantogaPromise from '@/components/product/PlantogaPromise';
 import HowToGuide from '@/components/product/HowToGuide';
 import ProductSpecification from '@/components/product/ProductSpecification';
+import WhyPlantoga from '@/components/product/WhyPlantoga';
+import HappyPlanters from '@/components/product/HappyPlanters';
 import { STORE_LEGAL } from '@/lib/branding';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
@@ -529,6 +531,10 @@ export default function ProductDetailPage() {
         <HowToGuide product={product} />
 
         <ProductSpecification specs={productSpecs} />
+
+        <WhyPlantoga />
+
+        <HappyPlanters fallbackImages={galleryImages} />
 
         <ProductReviews productId={product.id} />
 
