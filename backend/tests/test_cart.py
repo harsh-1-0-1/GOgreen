@@ -19,7 +19,12 @@ VARIANTS = {
         {"name": "Sage Green", "hex": "#7A9E7E", "slug": "sage-green"},
     ],
     "pot_types": [
-        {"name": "Plastic", "slug": "plastic", "price_modifier": 0},
+        {
+            "name": "Plastic",
+            "slug": "plastic",
+            "price_modifier": 0,
+            "image_url": "https://example.com/plastic-pot.jpg",
+        },
         {"name": "Ceramic", "slug": "ceramic", "price_modifier": 150},
     ],
     "image_map": {
@@ -175,6 +180,20 @@ async def test_variant_cart_add_returns_computed_fields(client: AsyncClient):
     assert item["available_stock"] == 3
     assert item["stock_warning"] is False
     assert item["resolved_image_url"] == "https://example.com/sage-ceramic.jpg"
+
+
+async def test_variant_cart_uses_pot_image_when_combo_image_is_missing(client: AsyncClient):
+    admin = await _register_and_make_admin(client)
+    product = await _seed_variant_product(client, admin)
+
+    resp = await client.post("/api/v1/cart/items", json={
+        "product_id": product["id"],
+        "quantity": 1,
+        "selected_options": {"color": "sage-green", "pot_type": "plastic"},
+    })
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["items"][0]["resolved_image_url"] == "https://example.com/plastic-pot.jpg"
 
 
 async def test_variant_cart_rejects_invalid_or_sold_out_options(client: AsyncClient):

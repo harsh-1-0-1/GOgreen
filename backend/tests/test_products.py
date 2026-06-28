@@ -146,6 +146,28 @@ async def test_delete_product_requires_admin(client: AsyncClient):
     assert resp.status_code == 401
 
 
+@pytest.mark.asyncio
+async def test_variant_image_upload_requires_admin(client: AsyncClient):
+    resp = await client.post(
+        f"{PROD_URL}/variant-image",
+        files={"image": ("pot.png", b"fake-image", "image/png")},
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_variant_image_upload_rejects_unsupported_file(
+    client: AsyncClient, admin_token: str,
+):
+    resp = await client.post(
+        f"{PROD_URL}/variant-image",
+        files={"image": ("pot.svg", b"<svg></svg>", "image/svg+xml")},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 400
+    assert "JPG, PNG, or WEBP" in resp.json()["detail"]
+
+
 # ---- Soft delete -------------------------------------------------------
 
 @pytest.mark.asyncio

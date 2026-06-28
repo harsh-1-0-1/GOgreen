@@ -41,7 +41,7 @@ const productSchema = z.object({
 
 type ProductFormData = z.infer<typeof productSchema>;
 type VariantColorDraft = { name: string; hex: string };
-type VariantPotDraft = { name: string; price_modifier: number };
+type VariantPotDraft = { name: string; price_modifier: number; image_url: string };
 type VariantSizeDraft = { name: string; price_modifier: number; description: string };
 
 function slugify(s: string) {
@@ -106,8 +106,13 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
     product?.variants?.colors?.map(c => ({ name: c.name, hex: c.hex })) || []
   );
   const [pots, setPots] = useState<VariantPotDraft[]>(
-    product?.variants?.pot_types?.map(p => ({ name: p.name, price_modifier: p.price_modifier })) || []
+    product?.variants?.pot_types?.map(p => ({
+      name: p.name,
+      price_modifier: p.price_modifier,
+      image_url: p.image_url || '',
+    })) || []
   );
+  const [uploadingPotImage, setUploadingPotImage] = useState<number | null>(null);
   const [sizes, setSizes] = useState<VariantSizeDraft[]>(
     product?.variants?.sizes?.map(s => ({ name: s.name, price_modifier: s.price_modifier, description: s.description || '' })) || []
   );
@@ -150,7 +155,12 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
 
         const cleanPots = pots
           .filter((p) => p.name.trim())
-          .map(p => ({ name: p.name.trim(), slug: slugify(p.name), price_modifier: Number(p.price_modifier || 0) }));
+          .map(p => ({
+            name: p.name.trim(),
+            slug: slugify(p.name),
+            price_modifier: Number(p.price_modifier || 0),
+            image_url: p.image_url.trim(),
+          }));
 
         const cleanSizes = sizes
           .filter((s) => s.name.trim())
@@ -274,6 +284,24 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
   const activeColors = colors.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), slug: slugify(c.name) }));
   const activePots = pots.filter(p => p.name.trim()).map(p => ({ name: p.name.trim(), slug: slugify(p.name) }));
   const activeSizes = sizes.filter(s => s.name.trim()).map(s => ({ name: s.name.trim(), slug: slugify(s.name) }));
+
+  async function handlePotImageUpload(index: number, file?: File) {
+    if (!file) return;
+    setUploadingPotImage(index);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const { data } = await api.post<{ url: string }>('/products/variant-image', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setPots(current => current.map((pot, i) => i === index ? { ...pot, image_url: data.url } : pot));
+      toast.success('Pot image uploaded');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to upload pot image');
+    } finally {
+      setUploadingPotImage(null);
+    }
+  }
   
   // Build variant rows for the stock/image matrix
   let variantRows: { key: string; label: string }[] = [];
@@ -673,11 +701,11 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="text-xs font-semibold text-gray-700 block">2. Pot Types</span>
-                      <span className="text-[10px] text-gray-400">Add different pot options and price additions</span>
+                      <span className="text-[10px] text-gray-400">Add each pot's name, price, and customer-facing image</span>
                     </div>
                     <button
                       type="button"
-                      onClick={() => setPots([...pots, { name: '', price_modifier: 0 }])}
+                      onClick={() => setPots([...pots, { name: '', price_modifier: 0, image_url: '' }])}
                       className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
                     >
                       + Add Pot Option
@@ -685,30 +713,64 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
                   </div>
                   <div className="space-y-2">
                     {pots.map((pot, index) => (
-                      <div key={index} className="flex gap-2 items-center">
-                        <input
-                          value={pot.name}
-                          onChange={(e) => setPots(pots.map((p, i) => i === index ? { ...p, name: e.target.value } : p))}
-                          placeholder="Pot Type (e.g. Ceramic pot)"
-                          className={`${inputClass} flex-1`}
-                        />
-                        <div className="flex items-center gap-1.5 shrink-0 w-32">
-                          <span className="text-xs text-gray-500">₹</span>
+                      <div key={index} className="rounded-xl border border-gray-200 p-3 space-y-3 bg-gray-50/40">
+                        <div className="flex gap-2 items-center">
                           <input
-                            type="number"
-                            value={pot.price_modifier}
-                            onChange={(e) => setPots(pots.map((p, i) => i === index ? { ...p, price_modifier: Number(e.target.value) } : p))}
-                            placeholder="Price +/-"
-                            className={inputClass}
+                            value={pot.name}
+                            onChange={(e) => setPots(pots.map((p, i) => i === index ? { ...p, name: e.target.value } : p))}
+                            placeholder="Pot Type (e.g. Ceramic pot)"
+                            className={`${inputClass} flex-1 bg-white`}
                           />
+                          <div className="flex items-center gap-1.5 shrink-0 w-32">
+                            <span className="text-xs text-gray-500">₹</span>
+                            <input
+                              type="number"
+                              value={pot.price_modifier}
+                              onChange={(e) => setPots(pots.map((p, i) => i === index ? { ...p, price_modifier: Number(e.target.value) } : p))}
+                              placeholder="Price +/-"
+                              className={`${inputClass} bg-white`}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setPots(pots.filter((_, i) => i !== index))}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
+                            aria-label={`Remove ${pot.name || 'pot'} option`}
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setPots(pots.filter((_, i) => i !== index))}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        <div className="flex gap-3 items-center">
+                          <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
+                            {pot.image_url ? (
+                              <img src={pot.image_url} alt={`${pot.name || 'Pot'} preview`} className="h-full w-full object-contain" />
+                            ) : (
+                              <ImageIcon size={22} className="text-gray-300" />
+                            )}
+                          </div>
+                          <div className="flex-1 space-y-2">
+                            <input
+                              type="url"
+                              value={pot.image_url}
+                              onChange={(e) => setPots(pots.map((p, i) => i === index ? { ...p, image_url: e.target.value } : p))}
+                              placeholder="Pot image URL (https://...)"
+                              className={`${inputClass} bg-white`}
+                            />
+                            <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 ${uploadingPotImage === index ? 'opacity-60 pointer-events-none' : ''}`}>
+                              <Upload size={13} />
+                              {uploadingPotImage === index ? 'Uploading…' : 'Upload pot image'}
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                className="hidden"
+                                onChange={(e) => {
+                                  void handlePotImageUpload(index, e.target.files?.[0]);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
                       </div>
                     ))}
                     {pots.length === 0 && (
@@ -917,10 +979,14 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
           <button
             type="button"
             onClick={handleSubmit(onSubmit)}
-            disabled={submitting}
+            disabled={submitting || uploadingPotImage !== null}
             className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 transition"
           >
-            {submitting ? 'Saving Product...' : (product ? 'Save Changes' : 'Publish Product')}
+            {uploadingPotImage !== null
+              ? 'Uploading Pot Image...'
+              : submitting
+                ? 'Saving Product...'
+                : (product ? 'Save Changes' : 'Publish Product')}
           </button>
         </div>
 

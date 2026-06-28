@@ -47,6 +47,7 @@ export interface ProductVariantPotType {
   name: string;
   slug: string;
   price_modifier: number;
+  image_url?: string;
 }
 
 export interface ProductVariantSize {
