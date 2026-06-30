@@ -15,6 +15,7 @@ import HowToGuide from '@/components/product/HowToGuide';
 import ProductSpecification from '@/components/product/ProductSpecification';
 import WhyPlantoga from '@/components/product/WhyPlantoga';
 import HappyPlanters from '@/components/product/HappyPlanters';
+import ProductFaq from '@/components/product/ProductFaq';
 import { STORE_LEGAL } from '@/lib/branding';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
@@ -565,10 +566,6 @@ export default function ProductDetailPage() {
 
         <WhyPlantoga />
 
-        <HappyPlanters fallbackImages={galleryImages} />
-
-        <ProductReviews productId={product.id} />
-
         {/* Similar products */}
         {similarProducts.length > 0 && (
           <ErrorBoundary>
@@ -584,6 +581,12 @@ export default function ProductDetailPage() {
             </section>
           </ErrorBoundary>
         )}
+
+        <HappyPlanters fallbackImages={galleryImages} />
+
+        <ProductReviews productId={product.id} />
+
+        <ProductFaq />
       </div>
 
     </div>
