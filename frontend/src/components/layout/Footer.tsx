@@ -41,7 +41,7 @@ const LINK_COLUMNS = [
   {
     title: 'Help',
     links: [
-      { label: 'Blog & FAQs', to: '/blog' },
+      { label: 'FAQs', to: '/faqs' },
     ],
   },
 ];

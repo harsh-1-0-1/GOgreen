@@ -21,6 +21,7 @@ import BlogListPage from '@/pages/BlogListPage';
 import BlogDetailPage from '@/pages/BlogDetailPage';
 import CorporateGiftingPage from '@/pages/CorporateGiftingPage';
 import DamageReplacementPage from '@/pages/DamageReplacementPage';
+import FaqPage from '@/pages/FaqPage';
 
 import AdminLayout from '@/components/admin/AdminLayout';
 import DashboardPage from '@/pages/admin/DashboardPage';
@@ -105,6 +106,7 @@ export default function App() {
               <Route path="/blog/:slug" element={<BlogDetailPage />} />
               <Route path="/corporate-gifting" element={<CorporateGiftingPage />} />
               <Route path="/damage-replacement" element={<DamageReplacementPage />} />
+              <Route path="/faqs" element={<FaqPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route element={<Layout />}>
