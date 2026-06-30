@@ -1,6 +1,5 @@
 import { ArrowDown, Building2, CheckCircle2, Gift, Leaf, PackageCheck, ShieldCheck, Sparkles, Truck } from 'lucide-react';
 import CorporateGiftInquiryForm from '@/components/corporate/CorporateGiftInquiryForm';
-import FloatingWhatsAppButton from '@/components/corporate/FloatingWhatsAppButton';
 import { useBanners } from '@/hooks/useBanners';
 
 const TRUST_POINTS = [
@@ -230,8 +229,6 @@ export default function CorporateGiftingPage() {
           </h2>
         </div>
       </section>
-
-      <FloatingWhatsAppButton />
     </div>
   );
 }
