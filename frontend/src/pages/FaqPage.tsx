@@ -27,8 +27,8 @@ const FAQ_DATA: FAQItem[] = [
   // General Category
   {
     id: 1,
-    question: "What is GOgreen?",
-    answer: "GOgreen is India's premium online destination for fresh, nursery-grown plants, organic seeds, and designer pots. We handle everything from curation to door-step delivery, ensuring your green friends arrive healthy, stress-free, and thriving.",
+    question: "What is Plantoga?",
+    answer: "Plantoga is India's premium online destination for fresh, nursery-grown plants, organic seeds, and designer pots. We handle everything from curation to door-step delivery, ensuring your green friends arrive healthy, stress-free, and thriving.",
     category: "general"
   },
   {
@@ -39,7 +39,7 @@ const FAQ_DATA: FAQItem[] = [
   },
   {
     id: 3,
-    question: "What is the GOgreen quality guarantee?",
+    question: "What is the Plantoga quality guarantee?",
     answer: "We offer a 100% Thrive Guarantee. If any plant or pot arrives damaged, withered, or incorrect, simply submit our Damage Replacement form with a photo within 48 hours, and we'll ship a replacement immediately, completely free of charge. No return shipment required!",
     category: "general"
   },
