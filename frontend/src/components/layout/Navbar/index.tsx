@@ -27,7 +27,7 @@ import type { ProductListResponse } from '@/types';
 
 import { NAV_ITEMS, WHATSAPP_NUMBER } from './navData';
 import type { NavItemDef } from './navData';
-import { WhatsAppIcon } from './WhatsAppIcon';
+
 import { MobileCollectionList } from './MobileCollectionList';
 import { LOGO_PATH } from '@/lib/branding';
 
@@ -363,19 +363,6 @@ export default function Navbar() {
         <div className="flex items-center gap-1 ml-auto shrink-0">
 
 
-          {/* WhatsApp */}
-          <a
-            href={`https://wa.me/${WHATSAPP_NUMBER}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={clsx(
-              "items-center justify-center w-12 h-12 rounded-full text-green-600 hover:text-green-700 hover:bg-green-50 transition-all",
-              isHome ? "flex" : "hidden sm:flex"
-            )}
-            aria-label="WhatsApp"
-          >
-            <WhatsAppIcon size={40} />
-          </a>
 
           {/* Account */}
           {user ? (
