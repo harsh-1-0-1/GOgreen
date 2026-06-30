@@ -147,8 +147,39 @@ export default function ProductDetailPage() {
   const [selectedPot, setSelectedPot] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
 
+  const galleryRef = useRef<HTMLDivElement>(null);
+  const isInitialized = useRef(false);
+
   const { data: similar } = useProducts({ limit: 5 });
   const { data: reviewPreview } = useProductReviews(product?.id, { limit: 1 });
+
+  useEffect(() => {
+    isInitialized.current = false;
+  }, [slug]);
+
+  useEffect(() => {
+    if (!product) return;
+
+    const colors = product.variants?.colors || [];
+    const pots = product.variants?.pot_types || [];
+    const sizes = product.variants?.sizes || [];
+
+    const hasColors = colors.length > 0;
+    const hasPots = pots.length > 0;
+    const hasSizes = sizes.length > 0;
+
+    const colorOk = !hasColors || selectedColor !== null;
+    const potOk = !hasPots || selectedPot !== null;
+    const sizeOk = !hasSizes || selectedSize !== null;
+
+    if (colorOk && potOk && sizeOk) {
+      if (!isInitialized.current) {
+        isInitialized.current = true;
+      } else {
+        galleryRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  }, [selectedColor, selectedPot, selectedSize, product]);
 
   useEffect(() => {
     if (!product) return;
@@ -265,7 +296,7 @@ export default function ProductDetailPage() {
   ];
 
   return (
-    <div className="pb-20 md:pb-0">
+    <div ref={galleryRef} className="pb-20 md:pb-0 scroll-mt-[100px] sm:scroll-mt-[110px] lg:scroll-mt-[120px]">
       {/* Mobile image gallery */}
       <div className="md:hidden">
         <MobileGallery images={galleryImages} />
