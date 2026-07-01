@@ -177,13 +177,13 @@ export default function PlantCareGrid({
 
         <div className="mt-8 flex justify-center">
           <Link
-            to="/products"
+            to={`/products?category=plant-care&collection_title=${encodeURIComponent(title)}`}
             className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:text-white"
             style={{ borderColor: SECONDARY, color: SECONDARY }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY; }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
           >
-            View all →
+            View all {title} →
           </Link>
         </div>
       </div>
