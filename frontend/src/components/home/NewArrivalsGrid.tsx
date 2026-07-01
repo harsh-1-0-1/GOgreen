@@ -147,25 +147,16 @@ export default function NewArrivalsGrid({
   return (
     <section className="w-full py-8 sm:py-10 bg-white">
       <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 max-w-7xl">
-        <div className="mb-5 sm:mb-6 flex items-end justify-between gap-4">
-          <div>
-            <h2
-              className="text-xl sm:text-2xl lg:text-3xl font-bold"
-              style={{ color: SECONDARY }}
-            >
-              {title}
-            </h2>
-            {subtitle && (
-              <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
-            )}
-          </div>
-          <Link
-            to="/products"
-            className="text-xs sm:text-sm font-semibold hover:underline shrink-0"
-            style={{ color: SECONDARY }}
+        <div className="mb-5 sm:mb-6">
+          <h2
+            className="text-xl sm:text-2xl lg:text-3xl font-bold"
+            style={{ color: '#000000' }}
           >
-            Explore all plants →
-          </Link>
+            {title}
+          </h2>
+          {subtitle && (
+            <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
@@ -180,11 +171,26 @@ export default function NewArrivalsGrid({
           <div className="mt-8 flex justify-center">
             <button
               onClick={() => setShowAll(true)}
-              className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:bg-gray-50"
+              className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:text-white"
               style={{ borderColor: SECONDARY, color: SECONDARY }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
             >
               View all new arrivals
             </button>
+          </div>
+        )}
+        {(!isLoading && (products.length <= 6 || showAll)) && (
+          <div className="mt-8 flex justify-center">
+            <Link
+              to="/products"
+              className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:text-white"
+              style={{ borderColor: SECONDARY, color: SECONDARY }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+            >
+              View all →
+            </Link>
           </div>
         )}
       </div>
