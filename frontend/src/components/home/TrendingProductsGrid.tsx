@@ -142,6 +142,10 @@ export default function TrendingProductsGrid({
 
   if (!isLoading && products.length === 0) return null;
 
+  const viewAllHref = tags
+    ? `/products?tags=${encodeURIComponent(tags)}`
+    : '/products?sort_by=popular';
+
   return (
     <section className="w-full py-8 sm:py-10 bg-white">
       <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 max-w-7xl">
@@ -167,13 +171,13 @@ export default function TrendingProductsGrid({
 
         <div className="mt-8 flex justify-center">
           <Link
-            to="/products"
+            to={viewAllHref}
             className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:text-white"
             style={{ borderColor: SECONDARY, color: SECONDARY }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY; }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
           >
-            View all →
+            View all {title} →
           </Link>
         </div>
       </div>

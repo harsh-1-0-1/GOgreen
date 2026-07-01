@@ -346,6 +346,13 @@ export default function ProductsPage() {
     !minPrice &&
     !maxPrice &&
     selectedTags.length === 0;
+  const isNewestPage =
+    sort === 'newest' &&
+    !search &&
+    !category &&
+    !minPrice &&
+    !maxPrice &&
+    selectedTags.length === 0;
   const trendingBannerImages =
     data?.items.flatMap((product) => product.images ?? []).filter(Boolean) ??
     [];
@@ -353,13 +360,15 @@ export default function ProductsPage() {
     ? `Results for "${search}"`
     : isTrendingPage
       ? 'Price Drop!'
-      : category
-        ? formatSlugTitle(category)
-        : selectedTags.length === 1
-          ? formatSlugTitle(selectedTags[0])
-          : selectedTags.length > 1
-            ? selectedTags.map(formatSlugTitle).join(' + ')
-            : 'All Products';
+      : isNewestPage
+        ? 'New Arrivals'
+        : category
+          ? formatSlugTitle(category)
+          : selectedTags.length === 1
+            ? formatSlugTitle(selectedTags[0])
+            : selectedTags.length > 1
+              ? selectedTags.map(formatSlugTitle).join(' + ')
+              : 'All Products';
 
   const sidebar = (
     <FiltersSidebar
