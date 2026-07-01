@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronUp, Droplets, Minus, Plus, ShoppingCart, Sun } from 'lucide-react';
+import { ChevronDown, ChevronUp, Droplets, Minus, Plus, ShoppingCart, Sun, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProduct, useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
@@ -51,32 +51,58 @@ function MobileGallery({ images }: { images: string[] }) {
     setActive(idx);
   }
 
+  function scrollPrev() {
+    if (active > 0) {
+      scrollRef.current?.scrollBy({ left: -window.innerWidth, behavior: 'smooth' });
+    }
+  }
+
+  function scrollNext() {
+    if (active < list.length - 1) {
+      scrollRef.current?.scrollBy({ left: window.innerWidth, behavior: 'smooth' });
+    }
+  }
+
   return (
-    <div className="relative">
+    <div className="relative px-4">
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex overflow-x-auto snap-x-mandatory scrollbar-hide"
+        className="flex overflow-x-auto snap-x-mandatory scrollbar-hide gap-4"
       >
         {list.map((img, i) => (
           <img
             key={i}
             src={img}
             alt={`Product ${i + 1}`}
-            className="w-full shrink-0 snap-start aspect-square object-cover"
+            className="w-full shrink-0 snap-center aspect-square object-cover rounded-2xl"
             loading="lazy"
           />
         ))}
       </div>
+      
       {list.length > 1 && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-          {list.map((_, i) => (
-            <div
-              key={i}
-              className={`w-2 h-2 rounded-full transition-colors ${i === active ? 'bg-primary' : 'bg-white/70'}`}
-            />
-          ))}
-        </div>
+        <button 
+          onClick={scrollPrev}
+          disabled={active === 0}
+          className={`absolute top-1/2 -translate-y-1/2 left-0 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center -ml-2 z-10 touch-target text-gray-800 transition-opacity ${
+            active === 0 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
+          }`}
+        >
+          <ChevronLeft size={20} />
+        </button>
+      )}
+      
+      {list.length > 1 && (
+        <button 
+          onClick={scrollNext}
+          disabled={active === list.length - 1}
+          className={`absolute top-1/2 -translate-y-1/2 right-0 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center -mr-2 z-10 touch-target text-gray-800 transition-opacity ${
+            active === list.length - 1 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
+          }`}
+        >
+          <ChevronRight size={20} />
+        </button>
       )}
     </div>
   );
