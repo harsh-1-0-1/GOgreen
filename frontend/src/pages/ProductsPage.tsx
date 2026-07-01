@@ -291,6 +291,7 @@ export default function ProductsPage() {
 
   const category = searchParams.get('category') || searchParams.get('subcategory') || '';
   const search = searchParams.get('search') || '';
+  const collectionTitle = searchParams.get('collection_title') || '';
   const sort = searchParams.get('sort_by') || '';
   const page = Number(searchParams.get('page')) || 1;
   const [minPrice, setMinPrice] = useState(searchParams.get('min_price') || '');
@@ -358,7 +359,9 @@ export default function ProductsPage() {
     [];
   const pageTitle = search
     ? `Results for "${search}"`
-    : isTrendingPage
+    : collectionTitle
+      ? collectionTitle
+      : isTrendingPage
       ? 'Price Drop!'
       : isNewestPage
         ? 'New Arrivals'

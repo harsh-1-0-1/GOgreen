@@ -165,7 +165,7 @@ export default function DecorPotsGrid({
 
         <div className="mt-8 flex justify-center">
           <Link
-            to="/products?category=pots-planters"
+            to={`/products?category=pots-planters&collection_title=${encodeURIComponent(title)}`}
             className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:text-white"
             style={{ borderColor: SECONDARY, color: SECONDARY }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY; }}
