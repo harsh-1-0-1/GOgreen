@@ -5,6 +5,10 @@ import MobileCategoryNav from '@/components/home/MobileCategoryNav';
 import QuickAccessStrip from '@/components/home/QuickAccessStrip';
 import CategoryHighlightGrid from '@/components/home/CategoryHighlightGrid';
 import TrendingProductsGrid from '@/components/home/TrendingProductsGrid';
+import NewArrivalsGrid from '@/components/home/NewArrivalsGrid';
+import ExoticFindsGrid from '@/components/home/ExoticFindsGrid';
+import PlantCareGrid from '@/components/home/PlantCareGrid';
+import DecorPotsGrid from '@/components/home/DecorPotsGrid';
 import BlogSection from '@/components/home/BlogSection';
 import PromoCTASection from '@/components/home/PromoCTASection';
 import AboutSection from '@/components/home/AboutSection';
@@ -44,6 +48,22 @@ export default function HomePage() {
       <ErrorBoundary><CategoryHighlightGrid /></ErrorBoundary>
       <ErrorBoundary>
         <TrendingProductsGrid title="Trending Now" limit={8} />
+      </ErrorBoundary>
+      
+      <ErrorBoundary>
+        <NewArrivalsGrid />
+      </ErrorBoundary>
+
+      <ErrorBoundary>
+        <ExoticFindsGrid />
+      </ErrorBoundary>
+
+      <ErrorBoundary>
+        <PlantCareGrid />
+      </ErrorBoundary>
+
+      <ErrorBoundary>
+        <DecorPotsGrid />
       </ErrorBoundary>
 
       <FeatureStrip />
