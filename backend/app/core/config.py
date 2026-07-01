@@ -40,6 +40,7 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:5173"
     CORS_ORIGIN_REGEX: str = ""
+    REQUIRE_CLOUDFLARE: bool = False
 
     @field_validator("DEBUG", mode="before")
     @classmethod

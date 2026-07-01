@@ -16,6 +16,7 @@ from app.services import product_service
 from app.utils.cloudinary_helper import upload_image
 from app.utils.image_upload import handle_image_upload
 from app.utils.redis import cache_get, cache_set
+from app.api.middleware import cache_control
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -25,6 +26,7 @@ ALLOWED_VARIANT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 @router.get("", response_model=ProductListResponse)
+@cache_control()
 async def list_products(
     db: AsyncSession = Depends(get_db),
     category_slug: str | None = None,
@@ -88,6 +90,7 @@ async def upload_variant_image(
 
 
 @router.get("/{slug}", response_model=ProductResponse)
+@cache_control("public, max-age=60")
 async def get_product(slug: str, db: AsyncSession = Depends(get_db)):
     cache_key = f"product:{slug}"
     cached = await cache_get(cache_key)

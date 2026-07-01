@@ -12,6 +12,7 @@ from app.schemas.category import (
 from app.services import category_service
 from app.utils.cloudinary_helper import upload_image
 from app.utils.redis import cache_delete, cache_get, cache_set
+from app.api.middleware import cache_control
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -20,6 +21,7 @@ CATS_TTL = 600
 
 
 @router.get("", response_model=list[CategoryTree])
+@cache_control()
 async def list_categories(db: AsyncSession = Depends(get_db)):
     cached = await cache_get(CATS_ALL_KEY)
     if cached:
@@ -33,6 +35,7 @@ async def list_categories(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{slug}", response_model=CategoryTree)
+@cache_control("public, max-age=60")
 async def get_category(slug: str, db: AsyncSession = Depends(get_db)):
     cat = await category_service.get_category_by_slug(db, slug)
     if not cat:
