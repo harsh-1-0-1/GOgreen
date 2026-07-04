@@ -126,25 +126,31 @@ function GridSkeleton({ count = 8 }: { count?: number }) {
   );
 }
 
-export default function TrendingProductsGrid({
-  title = 'Trending Now',
+export default function PlantCareGrid({
+  title = 'Everything Your Plant Needs',
   subtitle,
-  tags,
   limit = 8,
 }: {
   title?: string;
   subtitle?: string;
-  tags?: string;
   limit?: number;
 }) {
-  const { data, isLoading } = useProducts({ tags, limit });
-  const products = data?.items ?? [];
+  const { data: careData, isLoading: isLoadingCare } = useProducts({ category_slug: 'plant-care', limit });
+  const { data: kitsData, isLoading: isLoadingKits } = useProducts({ category_slug: 'seeds-kits', limit });
+
+  const isLoading = isLoadingCare || isLoadingKits;
+
+  // Merge and deduplicate products
+  const productsMap = new Map();
+  if (careData?.items) {
+    careData.items.forEach(p => productsMap.set(p.id, p));
+  }
+  if (kitsData?.items) {
+    kitsData.items.forEach(p => productsMap.set(p.id, p));
+  }
+  const products = Array.from(productsMap.values()).slice(0, limit);
 
   if (!isLoading && products.length === 0) return null;
-
-  const viewAllHref = tags
-    ? `/products?tags=${encodeURIComponent(tags)}&collection_title=${encodeURIComponent(title)}`
-    : `/products?sort_by=popular&collection_title=${encodeURIComponent(title)}`;
 
   return (
     <section className="w-full py-8 sm:py-10 bg-white">
@@ -171,7 +177,7 @@ export default function TrendingProductsGrid({
 
         <div className="mt-8 flex justify-center">
           <Link
-            to={viewAllHref}
+            to={`/products?category=plant-care&collection_title=${encodeURIComponent(title)}`}
             className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:text-white"
             style={{ borderColor: SECONDARY, color: SECONDARY }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY; }}

@@ -291,6 +291,7 @@ export default function ProductsPage() {
 
   const category = searchParams.get('category') || searchParams.get('subcategory') || '';
   const search = searchParams.get('search') || '';
+  const collectionTitle = searchParams.get('collection_title') || '';
   const sort = searchParams.get('sort_by') || '';
   const page = Number(searchParams.get('page')) || 1;
   const [minPrice, setMinPrice] = useState(searchParams.get('min_price') || '');
@@ -346,20 +347,31 @@ export default function ProductsPage() {
     !minPrice &&
     !maxPrice &&
     selectedTags.length === 0;
+  const isNewestPage =
+    sort === 'newest' &&
+    !search &&
+    !category &&
+    !minPrice &&
+    !maxPrice &&
+    selectedTags.length === 0;
   const trendingBannerImages =
     data?.items.flatMap((product) => product.images ?? []).filter(Boolean) ??
     [];
   const pageTitle = search
     ? `Results for "${search}"`
-    : isTrendingPage
+    : collectionTitle
+      ? collectionTitle
+      : isTrendingPage
       ? 'Price Drop!'
-      : category
-        ? formatSlugTitle(category)
-        : selectedTags.length === 1
-          ? formatSlugTitle(selectedTags[0])
-          : selectedTags.length > 1
-            ? selectedTags.map(formatSlugTitle).join(' + ')
-            : 'All Products';
+      : isNewestPage
+        ? 'New Arrivals'
+        : category
+          ? formatSlugTitle(category)
+          : selectedTags.length === 1
+            ? formatSlugTitle(selectedTags[0])
+            : selectedTags.length > 1
+              ? selectedTags.map(formatSlugTitle).join(' + ')
+              : 'All Products';
 
   const sidebar = (
     <FiltersSidebar

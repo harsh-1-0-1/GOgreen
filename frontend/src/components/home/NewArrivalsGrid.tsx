@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -126,25 +127,22 @@ function GridSkeleton({ count = 8 }: { count?: number }) {
   );
 }
 
-export default function TrendingProductsGrid({
-  title = 'Trending Now',
+export default function NewArrivalsGrid({
+  title = 'New Arrivals',
   subtitle,
-  tags,
-  limit = 8,
+  limit = 15,
 }: {
   title?: string;
   subtitle?: string;
-  tags?: string;
   limit?: number;
 }) {
-  const { data, isLoading } = useProducts({ tags, limit });
+  const [showAll, setShowAll] = useState(false);
+  const { data, isLoading } = useProducts({ limit, sort_by: 'created_at' });
   const products = data?.items ?? [];
 
   if (!isLoading && products.length === 0) return null;
 
-  const viewAllHref = tags
-    ? `/products?tags=${encodeURIComponent(tags)}&collection_title=${encodeURIComponent(title)}`
-    : `/products?sort_by=popular&collection_title=${encodeURIComponent(title)}`;
+  const visibleProducts = showAll ? products : products.slice(0, 6);
 
   return (
     <section className="w-full py-8 sm:py-10 bg-white">
@@ -163,23 +161,38 @@ export default function TrendingProductsGrid({
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
           {isLoading ? (
-            <GridSkeleton count={limit} />
+            <GridSkeleton count={6} />
           ) : (
-            products.map((p) => <ProductTile key={p.id} product={p} />)
+            visibleProducts.map((p) => <ProductTile key={p.id} product={p} />)
           )}
         </div>
 
-        <div className="mt-8 flex justify-center">
-          <Link
-            to={viewAllHref}
-            className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:text-white"
-            style={{ borderColor: SECONDARY, color: SECONDARY }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
-          >
-            View all {title} →
-          </Link>
-        </div>
+        {!isLoading && products.length > 6 && !showAll && (
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={() => setShowAll(true)}
+              className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:text-white"
+              style={{ borderColor: SECONDARY, color: SECONDARY }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+            >
+              View all new arrivals
+            </button>
+          </div>
+        )}
+        {(!isLoading && (products.length <= 6 || showAll)) && (
+          <div className="mt-8 flex justify-center">
+            <Link
+              to={`/products?sort_by=newest&collection_title=${encodeURIComponent(title)}`}
+              className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:text-white"
+              style={{ borderColor: SECONDARY, color: SECONDARY }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+            >
+              View all {title} →
+            </Link>
+          </div>
+        )}
       </div>
     </section>
   );

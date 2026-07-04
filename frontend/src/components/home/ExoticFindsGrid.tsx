@@ -126,25 +126,19 @@ function GridSkeleton({ count = 8 }: { count?: number }) {
   );
 }
 
-export default function TrendingProductsGrid({
-  title = 'Trending Now',
+export default function ExoticFindsGrid({
+  title = 'Exotic Finds',
   subtitle,
-  tags,
   limit = 8,
 }: {
   title?: string;
   subtitle?: string;
-  tags?: string;
   limit?: number;
 }) {
-  const { data, isLoading } = useProducts({ tags, limit });
+  const { data, isLoading } = useProducts({ tags: 'exotic', limit });
   const products = data?.items ?? [];
 
   if (!isLoading && products.length === 0) return null;
-
-  const viewAllHref = tags
-    ? `/products?tags=${encodeURIComponent(tags)}&collection_title=${encodeURIComponent(title)}`
-    : `/products?sort_by=popular&collection_title=${encodeURIComponent(title)}`;
 
   return (
     <section className="w-full py-8 sm:py-10 bg-white">
@@ -171,7 +165,7 @@ export default function TrendingProductsGrid({
 
         <div className="mt-8 flex justify-center">
           <Link
-            to={viewAllHref}
+            to={`/products?tags=exotic&collection_title=${encodeURIComponent(title)}`}
             className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:text-white"
             style={{ borderColor: SECONDARY, color: SECONDARY }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY; }}
