@@ -1,5 +1,6 @@
 import uuid
 from pathlib import Path
+
 import boto3
 from botocore.exceptions import ClientError
 from fastapi import UploadFile
@@ -7,15 +8,21 @@ from fastapi.concurrency import run_in_threadpool
 from loguru import logger
 
 from app.core.config import settings
-from app.utils.cloudinary_helper import CLOUDINARY_ENABLED, upload_image, delete_image
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+STATIC_ROOT = Path("static")
 
-S3_ENABLED = bool(
-    settings.AWS_ACCESS_KEY_ID
-    and settings.AWS_SECRET_ACCESS_KEY
-    and settings.AWS_S3_BUCKET
-)
+
+class ImageStorageUnavailableError(RuntimeError):
+    """Raised when the configured image storage cannot safely accept uploads."""
+
+
+def _s3_enabled() -> bool:
+    return bool(
+        settings.AWS_ACCESS_KEY_ID
+        and settings.AWS_SECRET_ACCESS_KEY
+        and settings.AWS_S3_BUCKET
+    )
 
 
 def _get_s3_client():
@@ -56,7 +63,7 @@ def extract_relative_key(url: str | None) -> str | None:
 
     # Strip local static prefix
     if url.startswith("/static/"):
-        return url[len("/static/").lstrip("/"):]
+        return url[len("/static/"):]
 
     return url
 
@@ -113,14 +120,14 @@ def generate_image_key(folder: str, entity_id: str | int | None, filename: str) 
         ext = ".jpg"
 
     uuid_str = str(uuid.uuid4())
-    clean_folder = folder.replace("plantoga/", "").strip("/")
+    clean_folder = folder.removeprefix("plantoga/").strip("/")
+    if not clean_folder or any(part in {"", ".", ".."} for part in clean_folder.split("/")):
+        raise ValueError("Invalid image folder")
 
-    if clean_folder == "banners":
-        return f"plantoga/banners/{uuid_str}{ext}"
-    else:
-        # products, categories, blog, product-variants
-        eid = str(entity_id) if entity_id is not None else uuid_str
-        return f"plantoga/{clean_folder}/{eid}/{uuid_str}{ext}"
+    eid = str(entity_id) if entity_id is not None else uuid_str
+    if "/" in eid or "\\" in eid or eid in {".", ".."}:
+        raise ValueError("Invalid image entity id")
+    return f"plantoga/{clean_folder}/{eid}/{uuid_str}{ext}"
 
 
 def _upload_to_s3_sync(file_bytes: bytes, key: str, content_type: str) -> None:
@@ -144,46 +151,47 @@ async def upload_image_file(
     entity_id: str | int | None = None,
 ) -> str:
     is_prod = settings.ENVIRONMENT.lower() == "production"
-    if is_prod and not S3_ENABLED:
-        raise RuntimeError("Missing AWS S3 credentials in production environment")
+    s3_enabled = _s3_enabled()
+    if is_prod and not s3_enabled:
+        raise ImageStorageUnavailableError(
+            "Missing AWS S3 credentials in production environment"
+        )
 
     contents = await file.read()
     key = generate_image_key(folder, entity_id, file.filename or "")
 
-    if S3_ENABLED:
+    if s3_enabled:
         content_type = file.content_type or "image/jpeg"
         await run_in_threadpool(_upload_to_s3_sync, contents, key, content_type)
         logger.info("Image uploaded to S3: {}", key)
         return key
-    elif CLOUDINARY_ENABLED:
-        result = upload_image(contents, folder=folder)
-        logger.info("Image uploaded to Cloudinary: {}", result["url"])
-        return result["url"]
-    else:
-        dest = Path("static") / key
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        await run_in_threadpool(dest.write_bytes, contents)
-        logger.info("Image saved locally: {}", key)
-        return key
+    dest = STATIC_ROOT / key
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    await run_in_threadpool(dest.write_bytes, contents)
+    logger.info("Image saved locally: {}", key)
+    return key
 
 
 async def delete_image_file(key: str | None) -> None:
     if not key:
         return
 
-    if key.startswith("http"):
-        if "cloudinary.com" in key and CLOUDINARY_ENABLED:
-            pass
+    relative_key = extract_relative_key(key)
+    if not relative_key or relative_key.startswith(("http://", "https://", "/")):
         return
 
-    if S3_ENABLED:
+    if _s3_enabled():
         try:
-            await run_in_threadpool(_delete_from_s3_sync, key)
-            logger.info("Deleted S3 object: {}", key)
+            await run_in_threadpool(_delete_from_s3_sync, relative_key)
+            logger.info("Deleted S3 object: {}", relative_key)
         except ClientError as e:
             logger.error("Failed to delete S3 object {}: {}", key, e)
     else:
-        local_path = Path("static") / key
+        local_path = (STATIC_ROOT / relative_key).resolve()
+        static_root = STATIC_ROOT.resolve()
+        if static_root not in local_path.parents:
+            logger.warning("Refusing to delete image outside static root: {}", relative_key)
+            return
         if local_path.exists():
             try:
                 await run_in_threadpool(local_path.unlink)

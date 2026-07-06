@@ -10,7 +10,7 @@ from app.schemas.category import (
     CategoryUpdate,
 )
 from app.services import category_service
-from app.utils.image_upload import delete_image_file, upload_image_file
+from app.utils.image_upload import delete_image_file, extract_relative_key, upload_image_file
 from app.utils.redis import cache_delete, cache_get, cache_set
 
 router = APIRouter(prefix="/categories", tags=["categories"])
@@ -80,14 +80,13 @@ async def upload_category_image(
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
 
-    # Delete old image if replacing
-    if cat.image_url:
-        await delete_image_file(cat.image_url)
-
+    old_key = cat.image_url
     key = await upload_image_file(image, folder="categories", entity_id=category_id)
     cat.image_url = key
     await db.flush()
     await db.refresh(cat)
+    if old_key and old_key != key:
+        await delete_image_file(old_key)
     await cache_delete(CATS_ALL_KEY)
     return cat
 
@@ -102,6 +101,10 @@ async def update_category(
     cat = await category_service.get_category_by_id(db, category_id)
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
+    if body.image_url is not None:
+        body = body.model_copy(
+            update={"image_url": extract_relative_key(body.image_url)}
+        )
     cat = await category_service.update_category(db, cat, body)
     await cache_delete(CATS_ALL_KEY)
     return cat

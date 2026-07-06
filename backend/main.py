@@ -18,6 +18,7 @@ from app.api.middleware import CloudFrontGateMiddleware
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.rate_limit import limiter
+from app.utils.image_upload import ImageStorageUnavailableError
 from app.utils.redis import close_redis, init_redis
 
 
@@ -73,6 +74,17 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
+    )
+
+
+@app.exception_handler(ImageStorageUnavailableError)
+async def image_storage_unavailable_handler(
+    _request: Request, exc: ImageStorageUnavailableError
+) -> JSONResponse:
+    logger.error("Image storage unavailable: {}", exc)
+    return JSONResponse(
+        status_code=503,
+        content={"error": "Image upload service unavailable"},
     )
 
 

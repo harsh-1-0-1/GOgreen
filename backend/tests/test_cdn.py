@@ -55,7 +55,7 @@ def test_client_ip_ignores_cloudfront_header_when_enforcement_is_off():
 
 
 @pytest.mark.asyncio
-async def test_gate_blocks_direct_origin_but_exempts_health():
+async def test_gate_blocks_direct_origin_but_exempts_health(client):
     from main import app, limiter
 
     limiter.enabled = False
@@ -65,10 +65,10 @@ async def test_gate_blocks_direct_origin_but_exempts_health():
             patch("app.api.middleware.settings.REQUIRE_CLOUDFRONT", True),
             patch("app.api.middleware.settings.CLOUDFRONT_SECRET", "test-secret"),
         ):
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                blocked = await client.get("/api/v1/products")
-                health = await client.get("/api/v1/health")
-                allowed = await client.get(
+            async with AsyncClient(transport=transport, base_url="http://test") as direct_client:
+                blocked = await direct_client.get("/api/v1/products")
+                health = await direct_client.get("/api/v1/health")
+                allowed = await direct_client.get(
                     "/api/v1/products",
                     headers={
                         "X-Origin-Verify": "test-secret",

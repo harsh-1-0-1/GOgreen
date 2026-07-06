@@ -16,8 +16,8 @@ from app.services import product_service
 from app.utils.image_upload import (
     delete_image_file,
     extract_relative_key,
-    upload_image_file,
     resolve_image_url,
+    upload_image_file,
 )
 from app.utils.redis import cache_get, cache_set
 
