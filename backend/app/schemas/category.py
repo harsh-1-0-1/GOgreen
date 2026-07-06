@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 
 class CategoryCreate(BaseModel):
@@ -23,6 +23,12 @@ class CategoryResponse(BaseModel):
     is_active: bool
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("image_url")
+    def serialize_image_url(self, val: str | None) -> str | None:
+        from app.utils.image_upload import resolve_image_url
+        return resolve_image_url(val)
+
 
 
 class CategoryTree(CategoryResponse):

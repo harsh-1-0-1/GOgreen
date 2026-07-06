@@ -1,5 +1,5 @@
 import json
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +13,12 @@ from app.schemas.product import (
     ProductUpdate,
 )
 from app.services import product_service
-from app.utils.image_upload import handle_image_upload
+from app.utils.image_upload import (
+    delete_image_file,
+    extract_relative_key,
+    upload_image_file,
+    resolve_image_url,
+)
 from app.utils.redis import cache_get, cache_set
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -70,9 +75,16 @@ async def list_products(
 @router.post("/variant-image")
 async def upload_variant_image(
     image: UploadFile = File(...),
+    product_id: Optional[int] = Form(default=None),
     _admin=Depends(require_admin),
 ):
-    """Upload an image used by a product variant option."""
+    """Upload an image used by a product variant (pot type, combo, etc.).
+
+    When uploading during product creation (before product.id exists) product_id
+    is None; the utility generates a UUID staging folder. When editing an existing
+    product, product_id is provided so the image lands under
+    plantoga/product-variants/{productId}/{uuid}.{ext}.
+    """
     if image.content_type not in ALLOWED_PRODUCT_IMAGE_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -84,8 +96,8 @@ async def upload_variant_image(
             detail="Variant image must be 5MB or smaller",
         )
 
-    result = await handle_image_upload(image, folder="plantoga/product-variants")
-    return {"url": result["url"]}
+    key = await upload_image_file(image, folder="product-variants", entity_id=product_id)
+    return {"url": resolve_image_url(key)}
 
 
 @router.get("/{slug}", response_model=ProductResponse)
@@ -134,8 +146,12 @@ async def create_product(
     ):
         raise HTTPException(status_code=400, detail="Image URLs must be a valid JSON list")
 
-    product_image_urls = [url.strip() for url in submitted_image_urls if url.strip()][:5]
-    for img in images[: max(0, 5 - len(product_image_urls))]:
+    # Convert any submitted full URLs to relative keys for storage
+    product_image_keys = [extract_relative_key(url.strip()) for url in submitted_image_urls if url.strip()][:5]
+
+    # Validate uploaded files before touching the database
+    valid_images = images[: max(0, 5 - len(product_image_keys))]
+    for img in valid_images:
         if img.content_type not in ALLOWED_PRODUCT_IMAGE_TYPES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -146,8 +162,6 @@ async def create_product(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Each product image must be 5MB or smaller",
             )
-        result = await handle_image_upload(img, folder="plantoga/products")
-        product_image_urls.append(result["url"])
 
     payload = ProductCreate(
         name=name,
@@ -164,7 +178,17 @@ async def create_product(
         badge=badge,
         variants=json.loads(variants) if variants else None,
     )
-    product = await product_service.create_product(db, payload, image_urls=product_image_urls)
+
+    # Flush first to get product.id, then upload using that id as the folder namespace.
+    # If any upload fails, the get_db generator rolls back the transaction automatically.
+    product = await product_service.create_product(db, payload, image_urls=product_image_keys)
+
+    for img in valid_images:
+        key = await upload_image_file(img, folder="products", entity_id=product.id)
+        product.images = list(product.images or []) + [key]
+
+    await db.flush()
+    await db.refresh(product)
     return product
 
 
@@ -178,6 +202,16 @@ async def update_product(
     product = await product_service.get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+
+    # Delete images that were removed from the list
+    if body.images is not None:
+        new_keys = {extract_relative_key(url) for url in body.images if url}
+        old_keys = set(product.images or [])
+        for removed_key in old_keys - new_keys:
+            await delete_image_file(removed_key)
+        # Store relative keys in the DB
+        body = body.model_copy(update={"images": [extract_relative_key(u) for u in body.images if u]})
+
     product = await product_service.update_product(db, product, body)
     return product
 

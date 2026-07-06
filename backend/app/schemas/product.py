@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 class ProductCreate(BaseModel):
@@ -59,6 +59,17 @@ class ProductResponse(BaseModel):
     variants: dict | None = None
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("images")
+    def serialize_images(self, images: list[str]) -> list[str]:
+        from app.utils.image_upload import resolve_image_url
+        return [resolve_image_url(img) for img in images] if images else []
+
+    @field_serializer("variants")
+    def serialize_variants(self, variants: dict | None) -> dict | None:
+        from app.utils.image_upload import resolve_variants_images
+        return resolve_variants_images(variants)
+
 
 
 class ProductListResponse(BaseModel):

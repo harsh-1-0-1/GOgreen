@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Category, Product
 from app.schemas.product import ProductCreate, ProductUpdate
+from app.utils.image_upload import clean_variants_images
 from app.utils.redis import cache_delete, cache_delete_pattern
 
 
@@ -129,8 +130,12 @@ async def create_product(
     if existing.scalar_one_or_none():
         slug = f"{slug}-{func.count()}"
 
+    data = payload.model_dump()
+    if data.get("variants"):
+        data["variants"] = clean_variants_images(data["variants"])
+
     product = Product(
-        **payload.model_dump(),
+        **data,
         slug=slug,
         images=image_urls or [],
     )
@@ -148,6 +153,8 @@ async def update_product(
     data = payload.model_dump(exclude_unset=True)
     if "name" in data and data["name"]:
         data["slug"] = _slugify(data["name"])
+    if "variants" in data and data["variants"]:
+        data["variants"] = clean_variants_images(data["variants"])
     for field, value in data.items():
         setattr(product, field, value)
     await db.flush()

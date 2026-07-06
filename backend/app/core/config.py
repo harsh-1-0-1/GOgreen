@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     APP_NAME: str = "Plantoga"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
+    ENVIRONMENT: str = "development"
+
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = "us-east-1"
+    AWS_S3_BUCKET: str = ""
+    CDN_BASE_URL: str = ""
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./plantoga.db"
     REDIS_URL: str = "redis://localhost:6379"

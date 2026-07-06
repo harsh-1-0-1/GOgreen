@@ -10,8 +10,7 @@ from app.core.security import require_admin
 from app.db.models import Banner
 from app.db.session import get_db
 from app.schemas.banner import BannerOut, BannerReorderRequest
-from app.utils.cloudinary_helper import CLOUDINARY_ENABLED
-from app.utils.image_upload import handle_image_delete, handle_image_upload
+from app.utils.image_upload import delete_image_file, extract_relative_key, upload_image_file
 from app.utils.redis import cache_delete, cache_get, cache_set
 
 router = APIRouter(prefix="/banners", tags=["banners"])
@@ -110,11 +109,12 @@ async def create_banner(
     image_public_id = None
 
     if image and image.filename:
-        upload_result = await handle_image_upload(image, folder="plantoga/banners")
-        image_url = upload_result["url"]
-        image_public_id = upload_result["public_id"]
+        key = await upload_image_file(image, folder="banners")
+        image_url = key
+        image_public_id = key
     elif image_url_manual:
-        image_url = image_url_manual
+        image_url = extract_relative_key(image_url_manual)
+        image_public_id = None
 
     banner = Banner(
         title=title,
@@ -169,16 +169,19 @@ async def update_banner(
     old_placement = banner.placement
 
     if image and image.filename:
-        await handle_image_delete(banner.image_public_id)
-        upload_result = await handle_image_upload(image, folder="plantoga/banners")
-        banner.image_url = upload_result["url"]
-        banner.image_public_id = upload_result["public_id"]
+        # Delete old image before uploading replacement
+        await delete_image_file(banner.image_public_id)
+        key = await upload_image_file(image, folder="banners")
+        banner.image_url = key
+        banner.image_public_id = key
     elif image_url_manual is not None:
         if image_url_manual == "":
+            await delete_image_file(banner.image_public_id)
             banner.image_url = None
             banner.image_public_id = None
         else:
-            banner.image_url = image_url_manual
+            await delete_image_file(banner.image_public_id)
+            banner.image_url = extract_relative_key(image_url_manual)
             banner.image_public_id = None
 
     updatable = dict(
@@ -220,7 +223,7 @@ async def delete_banner(
     banner = await db.get(Banner, banner_id)
     if not banner:
         raise HTTPException(404, "Banner not found")
-    await handle_image_delete(banner.image_public_id)
+    await delete_image_file(banner.image_public_id)
     placement = banner.placement
     await db.delete(banner)
     await db.commit()
