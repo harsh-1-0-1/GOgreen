@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cdn import get_real_client_ip
 from app.core.security import get_current_active_user
 from app.db.models import User
 from app.db.session import get_db
@@ -30,7 +31,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_real_client_ip(request)
     if not await auth_service.check_rate_limit(client_ip):
         logger.warning("Rate limit exceeded for IP: {}", client_ip)
         raise HTTPException(
@@ -97,4 +98,3 @@ async def guest_login(body: GuestRequest, db: AsyncSession = Depends(get_db)):
         db, email=body.email, full_name=body.full_name, phone=body.phone
     )
     return await auth_service.issue_tokens(user)
-

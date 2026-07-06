@@ -3,6 +3,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.services import order_service
 from app.services.payu import verify_payu_hash
@@ -59,6 +60,7 @@ async def _handle_payu_response(
 
 
 @router.post("/payu/webhook")
+@limiter.exempt
 async def payu_webhook(
     status: str = Form(...),
     txnid: str = Form(...),
@@ -86,6 +88,7 @@ async def payu_webhook(
 
 
 @router.post("/payu/success")
+@limiter.exempt
 async def payu_success(
     status: str = Form(...),
     txnid: str = Form(...),
@@ -113,6 +116,7 @@ async def payu_success(
 
 
 @router.post("/payu/failure")
+@limiter.exempt
 async def payu_failure(
     status: str = Form(...),
     txnid: str = Form(...),

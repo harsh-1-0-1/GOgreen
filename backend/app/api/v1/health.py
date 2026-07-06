@@ -3,6 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.schemas.health import HealthResponse
 from app.utils.redis import ping_redis
@@ -11,6 +12,7 @@ router = APIRouter(tags=["health"])
 
 
 @router.get("/health", response_model=HealthResponse)
+@limiter.exempt
 async def health_check(db: AsyncSession = Depends(get_db)) -> HealthResponse:
     db_status = "ok"
     try:

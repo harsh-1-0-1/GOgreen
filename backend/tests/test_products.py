@@ -38,6 +38,7 @@ async def _bulk_seed(client: AsyncClient, admin_token: str, count: int = 5):
 async def test_list_products_empty(client: AsyncClient):
     resp = await client.get(PROD_URL)
     assert resp.status_code == 200
+    assert resp.headers["cache-control"] == "public, max-age=300, stale-while-revalidate=60"
     data = resp.json()
     assert data["items"] == []
     assert data["total"] == 0
@@ -107,6 +108,7 @@ async def test_get_product_by_slug(client: AsyncClient, admin_token: str):
     await _bulk_seed(client, admin_token, count=1)
     resp = await client.get(f"{PROD_URL}/plant-1")
     assert resp.status_code == 200
+    assert resp.headers["cache-control"] == "public, max-age=60"
     assert resp.json()["slug"] == "plant-1"
 
 
@@ -166,6 +168,57 @@ async def test_variant_image_upload_rejects_unsupported_file(
     )
     assert resp.status_code == 400
     assert "JPG, PNG, or WEBP" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_create_product_uses_shared_image_storage(
+    client: AsyncClient, admin_token: str, monkeypatch,
+):
+    category = await _seed_category(client, admin_token, "Upload Test Plants")
+    uploaded_filenames: list[str] = []
+
+    async def fake_handle_image_upload(image, folder: str):
+        uploaded_filenames.append(image.filename)
+        assert folder == "plantoga/products"
+        return {"url": f"/static/products/{image.filename}", "public_id": None}
+
+    monkeypatch.setattr(
+        "app.api.v1.products.handle_image_upload", fake_handle_image_upload,
+    )
+    resp = await client.post(
+        PROD_URL,
+        data={
+            "name": "Uploaded Plant",
+            "price": "499",
+            "category_id": str(category["id"]),
+        },
+        files={"images": ("plant.webp", b"fake-image", "image/webp")},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert uploaded_filenames == ["plant.webp"]
+    assert resp.json()["images"] == ["/static/products/plant.webp"]
+
+
+@pytest.mark.asyncio
+async def test_create_product_keeps_submitted_image_urls(
+    client: AsyncClient, admin_token: str,
+):
+    category = await _seed_category(client, admin_token, "URL Test Plants")
+    resp = await client.post(
+        PROD_URL,
+        data={
+            "name": "Linked Plant",
+            "price": "299",
+            "category_id": str(category["id"]),
+            "image_urls": '["https://example.com/plant.jpg"]',
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["images"] == ["https://example.com/plant.jpg"]
 
 
 # ---- Soft delete -------------------------------------------------------

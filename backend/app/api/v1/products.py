@@ -1,7 +1,7 @@
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
@@ -13,21 +13,19 @@ from app.schemas.product import (
     ProductUpdate,
 )
 from app.services import product_service
-from app.utils.cloudinary_helper import upload_image
 from app.utils.image_upload import handle_image_upload
 from app.utils.redis import cache_get, cache_set
-from app.api.middleware import cache_control
 
 router = APIRouter(prefix="/products", tags=["products"])
 
 PRODUCT_TTL = 300  # 5 min
-MAX_VARIANT_IMAGE_SIZE = 5 * 1024 * 1024
-ALLOWED_VARIANT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_PRODUCT_IMAGE_SIZE = 5 * 1024 * 1024
+ALLOWED_PRODUCT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 @router.get("", response_model=ProductListResponse)
-@cache_control()
 async def list_products(
+    response: Response,
     db: AsyncSession = Depends(get_db),
     category_slug: str | None = None,
     search: str | None = None,
@@ -38,6 +36,7 @@ async def list_products(
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ):
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=60"
     cache_key = product_service.make_list_cache_key(
         category_slug, search, min_price, max_price, tags, sort_by, page, limit,
     )
@@ -74,12 +73,12 @@ async def upload_variant_image(
     _admin=Depends(require_admin),
 ):
     """Upload an image used by a product variant option."""
-    if image.content_type not in ALLOWED_VARIANT_IMAGE_TYPES:
+    if image.content_type not in ALLOWED_PRODUCT_IMAGE_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Variant image must be a JPG, PNG, or WEBP file",
         )
-    if image.size is not None and image.size > MAX_VARIANT_IMAGE_SIZE:
+    if image.size is not None and image.size > MAX_PRODUCT_IMAGE_SIZE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Variant image must be 5MB or smaller",
@@ -90,8 +89,8 @@ async def upload_variant_image(
 
 
 @router.get("/{slug}", response_model=ProductResponse)
-@cache_control("public, max-age=60")
-async def get_product(slug: str, db: AsyncSession = Depends(get_db)):
+async def get_product(slug: str, response: Response, db: AsyncSession = Depends(get_db)):
+    response.headers["Cache-Control"] = "public, max-age=60"
     cache_key = f"product:{slug}"
     cached = await cache_get(cache_key)
     if cached:
@@ -121,15 +120,34 @@ async def create_product(
     watering: Annotated[str | None, Form()] = None,
     badge: Annotated[str | None, Form()] = None,
     variants: Annotated[str | None, Form()] = None,
+    image_urls: Annotated[str, Form()] = "[]",
     images: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
-    image_urls: list[str] = []
-    for img in images[:5]:
-        data = await img.read()
-        result = upload_image(data, folder="plantoga/products")
-        image_urls.append(result["url"])
+    try:
+        submitted_image_urls = json.loads(image_urls)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Image URLs must be a valid JSON list") from exc
+    if not isinstance(submitted_image_urls, list) or not all(
+        isinstance(url, str) for url in submitted_image_urls
+    ):
+        raise HTTPException(status_code=400, detail="Image URLs must be a valid JSON list")
+
+    product_image_urls = [url.strip() for url in submitted_image_urls if url.strip()][:5]
+    for img in images[: max(0, 5 - len(product_image_urls))]:
+        if img.content_type not in ALLOWED_PRODUCT_IMAGE_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Product images must be JPG, PNG, or WEBP files",
+            )
+        if img.size is not None and img.size > MAX_PRODUCT_IMAGE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Each product image must be 5MB or smaller",
+            )
+        result = await handle_image_upload(img, folder="plantoga/products")
+        product_image_urls.append(result["url"])
 
     payload = ProductCreate(
         name=name,
@@ -146,7 +164,7 @@ async def create_product(
         badge=badge,
         variants=json.loads(variants) if variants else None,
     )
-    product = await product_service.create_product(db, payload, image_urls=image_urls)
+    product = await product_service.create_product(db, payload, image_urls=product_image_urls)
     return product
 
 

@@ -265,13 +265,14 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
         if (payload.watering) fd.append('watering', payload.watering);
         if (payload.how_to_guide) fd.append('how_to_guide', payload.how_to_guide);
         if (payload.variants) fd.append('variants', JSON.stringify(payload.variants));
+        fd.append('image_urls', JSON.stringify(productImages));
 
         // Add file uploads
         for (const file of uploadedFiles) {
           fd.append('images', file);
         }
 
-        await api.post('/products', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await api.post('/products', fd);
         toast.success('Product created successfully!');
       }
       qc.invalidateQueries({ queryKey: ['products'] });
@@ -295,9 +296,7 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
     try {
       const fd = new FormData();
       fd.append('image', file);
-      const { data } = await api.post<{ url: string }>('/products/variant-image', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const { data } = await api.post<{ url: string }>('/products/variant-image', fd);
       setPots(current => current.map((pot, i) => i === index ? { ...pot, image_url: data.url } : pot));
       toast.success('Pot image uploaded');
     } catch (err: any) {

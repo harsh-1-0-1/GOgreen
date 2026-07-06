@@ -13,7 +13,7 @@ async def handle_image_upload(file: UploadFile, folder: str) -> dict:
         logger.info("Image uploaded to Cloudinary: {}", result["public_id"])
         return result
 
-    result = await save_local_image(file)
+    result = await save_local_image(file, folder=folder)
     logger.info("Image saved locally: {}", result["url"])
     return result
 

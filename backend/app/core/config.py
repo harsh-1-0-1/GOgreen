@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,7 +40,8 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:5173"
     CORS_ORIGIN_REGEX: str = ""
-    REQUIRE_CLOUDFLARE: bool = False
+    REQUIRE_CLOUDFRONT: bool = False
+    CLOUDFRONT_SECRET: str = ""
 
     @field_validator("DEBUG", mode="before")
     @classmethod
@@ -69,6 +70,14 @@ class Settings(BaseSettings):
         if isinstance(v, list):
             return ",".join(v)
         return v or ""
+
+    @model_validator(mode="after")
+    def validate_cloudfront_secret(self) -> "Settings":
+        if self.REQUIRE_CLOUDFRONT and not self.CLOUDFRONT_SECRET.strip():
+            raise ValueError(
+                "CLOUDFRONT_SECRET must be set when REQUIRE_CLOUDFRONT=true"
+            )
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:
