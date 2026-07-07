@@ -177,13 +177,14 @@ async def test_create_product_uses_shared_image_storage(
     category = await _seed_category(client, admin_token, "Upload Test Plants")
     uploaded_filenames: list[str] = []
 
-    async def fake_handle_image_upload(image, folder: str):
+    async def fake_upload_image_file(image, folder: str, entity_id=None):
         uploaded_filenames.append(image.filename)
-        assert folder == "plantoga/products"
-        return {"url": f"/static/products/{image.filename}", "public_id": None}
+        assert folder == "products"
+        assert entity_id is not None
+        return f"plantoga/products/{entity_id}/{image.filename}"
 
     monkeypatch.setattr(
-        "app.api.v1.products.handle_image_upload", fake_handle_image_upload,
+        "app.api.v1.products.upload_image_file", fake_upload_image_file,
     )
     resp = await client.post(
         PROD_URL,
@@ -198,7 +199,9 @@ async def test_create_product_uses_shared_image_storage(
 
     assert resp.status_code == 201, resp.text
     assert uploaded_filenames == ["plant.webp"]
-    assert resp.json()["images"] == ["/static/products/plant.webp"]
+    assert resp.json()["images"] == [
+        f"http://localhost:8000/static/plantoga/products/{resp.json()['id']}/plant.webp"
+    ]
 
 
 @pytest.mark.asyncio

@@ -10,8 +10,7 @@ from app.core.security import require_admin
 from app.db.models import Banner
 from app.db.session import get_db
 from app.schemas.banner import BannerOut, BannerReorderRequest
-from app.utils.cloudinary_helper import CLOUDINARY_ENABLED
-from app.utils.image_upload import handle_image_delete, handle_image_upload
+from app.utils.image_upload import delete_image_file, extract_relative_key, upload_image_file
 from app.utils.redis import cache_delete, cache_get, cache_set
 
 router = APIRouter(prefix="/banners", tags=["banners"])
@@ -55,7 +54,7 @@ async def get_banners(
 
 @router.get("/config")
 async def get_banner_config(_admin=Depends(require_admin)):
-    return {"cloudinary_enabled": CLOUDINARY_ENABLED}
+    return {"cloudinary_enabled": False}
 
 
 # ── ADMIN ───────────────────────────────────────────────────────────────────
@@ -106,16 +105,6 @@ async def create_banner(
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
-    image_url = None
-    image_public_id = None
-
-    if image and image.filename:
-        upload_result = await handle_image_upload(image, folder="plantoga/banners")
-        image_url = upload_result["url"]
-        image_public_id = upload_result["public_id"]
-    elif image_url_manual:
-        image_url = image_url_manual
-
     banner = Banner(
         title=title,
         subtitle=subtitle,
@@ -128,13 +117,18 @@ async def create_banner(
         placement=placement,
         target_path=target_path,
         is_active=is_active,
-        image_url=image_url,
-        image_public_id=image_public_id,
+        image_url=extract_relative_key(image_url_manual) if image_url_manual else None,
+        image_public_id=None,
         valid_from=datetime.fromisoformat(valid_from) if valid_from else None,
         valid_until=datetime.fromisoformat(valid_until) if valid_until else None,
     )
     db.add(banner)
-    await db.commit()
+    await db.flush()
+    if image and image.filename:
+        key = await upload_image_file(image, folder="banners", entity_id=banner.id)
+        banner.image_url = key
+        banner.image_public_id = key
+        await db.flush()
     await db.refresh(banner)
     await _invalidate_banner_cache(placement)
     logger.info("Banner created id={} placement={}", banner.id, placement)
@@ -169,17 +163,22 @@ async def update_banner(
     old_placement = banner.placement
 
     if image and image.filename:
-        await handle_image_delete(banner.image_public_id)
-        upload_result = await handle_image_upload(image, folder="plantoga/banners")
-        banner.image_url = upload_result["url"]
-        banner.image_public_id = upload_result["public_id"]
+        old_key = banner.image_public_id or banner.image_url
+        key = await upload_image_file(image, folder="banners", entity_id=banner_id)
+        banner.image_url = key
+        banner.image_public_id = key
+        if old_key != key:
+            await delete_image_file(old_key)
     elif image_url_manual is not None:
+        old_key = banner.image_public_id or banner.image_url
         if image_url_manual == "":
             banner.image_url = None
             banner.image_public_id = None
         else:
-            banner.image_url = image_url_manual
+            banner.image_url = extract_relative_key(image_url_manual)
             banner.image_public_id = None
+        if old_key != banner.image_url:
+            await delete_image_file(old_key)
 
     updatable = dict(
         title=title,
@@ -203,7 +202,7 @@ async def update_banner(
     if valid_until is not None:
         banner.valid_until = datetime.fromisoformat(valid_until)
 
-    await db.commit()
+    await db.flush()
     await db.refresh(banner)
     await _invalidate_banner_cache(old_placement)
     if banner.placement != old_placement:
@@ -220,10 +219,10 @@ async def delete_banner(
     banner = await db.get(Banner, banner_id)
     if not banner:
         raise HTTPException(404, "Banner not found")
-    await handle_image_delete(banner.image_public_id)
+    await delete_image_file(banner.image_public_id)
     placement = banner.placement
     await db.delete(banner)
-    await db.commit()
+    await db.flush()
     await _invalidate_banner_cache(placement)
     logger.info("Banner deleted id={}", banner_id)
     return {"ok": True}
@@ -239,7 +238,7 @@ async def toggle_banner(
     if not banner:
         raise HTTPException(404, "Banner not found")
     banner.is_active = not banner.is_active
-    await db.commit()
+    await db.flush()
     await db.refresh(banner)
     await _invalidate_banner_cache(banner.placement)
     return banner
@@ -257,7 +256,7 @@ async def reorder_banners(
         if banner:
             banner.position = item.position
             placements_affected.add(banner.placement)
-    await db.commit()
+    await db.flush()
     for p in placements_affected:
         await _invalidate_banner_cache(p)
     return {"ok": True}

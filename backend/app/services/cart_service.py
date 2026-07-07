@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import Cart, CartItem, Product
 from app.schemas.cart import CartItemProduct, CartItemResponse, CartResponse
+from app.utils.image_upload import resolve_image_url
 
 
 OPTION_COLOR_KEY = "color"
@@ -102,7 +103,7 @@ def resolve_variant_details(
         return {
             "selected_options": None,
             "unit_price": product.price,
-            "resolved_image_url": _primary_image(product),
+            "resolved_image_url": resolve_image_url(_primary_image(product)),
             "available_stock": available_stock,
             "combo_key": None,
         }
@@ -171,7 +172,7 @@ def resolve_variant_details(
     return {
         "selected_options": normalized,
         "unit_price": round(product.price + price_modifier, 2),
-        "resolved_image_url": resolved_image,
+        "resolved_image_url": resolve_image_url(resolved_image),
         "available_stock": available_stock,
         "combo_key": combo,
     }

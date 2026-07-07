@@ -296,6 +296,9 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
     try {
       const fd = new FormData();
       fd.append('image', file);
+      if (product?.id) {
+        fd.append('product_id', String(product.id));
+      }
       const { data } = await api.post<{ url: string }>('/products/variant-image', fd);
       setPots(current => current.map((pot, i) => i === index ? { ...pot, image_url: data.url } : pot));
       toast.success('Pot image uploaded');
