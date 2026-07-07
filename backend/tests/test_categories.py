@@ -10,6 +10,7 @@ CAT_URL = "/api/v1/categories"
 async def test_list_categories_empty(client: AsyncClient):
     resp = await client.get(CAT_URL)
     assert resp.status_code == 200
+    assert resp.headers["cache-control"] == "public, max-age=300, stale-while-revalidate=60"
     assert resp.json() == []
 
 

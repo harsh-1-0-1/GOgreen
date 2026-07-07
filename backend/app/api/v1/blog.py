@@ -13,7 +13,7 @@ from app.schemas.blog import (
     BlogPostUpdate,
 )
 from app.services import blog_service
-from app.utils.cloudinary_helper import upload_image
+from app.utils.image_upload import delete_image_file, extract_relative_key, upload_image_file
 from app.utils.redis import cache_get, cache_set
 
 router = APIRouter(prefix="/blog", tags=["blog"])
@@ -76,12 +76,6 @@ async def create_post(
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
-    cover_url = None
-    if cover_image:
-        data = await cover_image.read()
-        result = upload_image(data, folder="plantoga/blog")
-        cover_url = result["url"]
-
     payload = BlogPostCreate(
         title=title,
         excerpt=excerpt,
@@ -90,7 +84,13 @@ async def create_post(
         author_name=author_name,
         is_published=is_published,
     )
-    post = await blog_service.create_post(db, payload, cover_url=cover_url)
+    post = await blog_service.create_post(db, payload)
+    if cover_image and cover_image.filename:
+        post.cover_image_url = await upload_image_file(
+            cover_image, folder="blog", entity_id=post.id
+        )
+        await db.flush()
+        await db.refresh(post)
     return post
 
 
@@ -104,6 +104,11 @@ async def update_post(
     post = await blog_service.get_post_by_slug(db, slug)
     if not post:
         raise HTTPException(status_code=404, detail="Blog post not found")
+    if body.cover_image_url is not None:
+        new_key = extract_relative_key(body.cover_image_url)
+        if new_key != post.cover_image_url:
+            await delete_image_file(post.cover_image_url)
+        body = body.model_copy(update={"cover_image_url": new_key})
     post = await blog_service.update_post(db, post, body)
     return post
 
