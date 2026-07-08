@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -17,13 +17,13 @@ import {
   Check
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useProducts } from '@/hooks/useProducts';
+import { useProduct, useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useDeleteProduct } from '@/hooks/useAdmin';
 import api from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import type { Product, ProductVariants } from '@/types';
+import type { Product, ProductListResponse, ProductVariants } from '@/types';
 
 const productSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -49,12 +49,15 @@ function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-function ProductModal({ onClose, product }: { onClose: () => void; product?: Product | null }) {
+function ProductModal({ onClose, editProduct }: { onClose: () => void; editProduct?: Product | null }) {
+  const isEdit = !!editProduct;
+  const { data: freshProduct, isLoading: isLoadingProduct } = useProduct(editProduct?.slug ?? '');
   const { data: categories } = useCategories();
   const qc = useQueryClient();
   const allCats = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
   const [submitting, setSubmitting] = useState(false);
   const [variantError, setVariantError] = useState<string | null>(null);
+  const [formInitialized, setFormInitialized] = useState(!isEdit);
 
   // Form Collapsible Sections
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -71,7 +74,7 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
   };
 
   // Image Management
-  const [productImages, setProductImages] = useState<string[]>(product?.images || []);
+  const [productImages, setProductImages] = useState<string[]>([]);
   const [newImageUrl, setNewImageUrl] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<string[]>([]);
@@ -103,45 +106,84 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
   };
 
   // Variant States
-  const [colors, setColors] = useState<VariantColorDraft[]>(
-    product?.variants?.colors?.map(c => ({ name: c.name, hex: c.hex })) || []
-  );
-  const [pots, setPots] = useState<VariantPotDraft[]>(
-    product?.variants?.pot_types?.map(p => ({
-      name: p.name,
-      price_modifier: p.price_modifier,
-      image_url: p.image_url || '',
-    })) || []
-  );
+  const [colors, setColors] = useState<VariantColorDraft[]>([]);
+  const [pots, setPots] = useState<VariantPotDraft[]>([]);
   const [uploadingPotImage, setUploadingPotImage] = useState<number | null>(null);
-  const [sizes, setSizes] = useState<VariantSizeDraft[]>(
-    product?.variants?.sizes?.map(s => ({ name: s.name, price_modifier: s.price_modifier, description: s.description || '' })) || []
-  );
-  const [defaultImage, setDefaultImage] = useState(product?.variants?.default_image || '');
-  const [stockByKey, setStockByKey] = useState<Record<string, number>>(product?.variants?.stock || {});
-  const [imageByKey, setImageByKey] = useState<Record<string, string>>(product?.variants?.image_map || {});
+  const [sizes, setSizes] = useState<VariantSizeDraft[]>([]);
+  const [defaultImage, setDefaultImage] = useState('');
+  const [stockByKey, setStockByKey] = useState<Record<string, number>>({});
+  const [imageByKey, setImageByKey] = useState<Record<string, string>>({});
 
   useBodyScrollLock(true);
 
-  const { register, handleSubmit, control, formState: { errors } } = useForm<ProductFormData>({
+  const { register, handleSubmit, control, reset, formState: { errors } } = useForm<ProductFormData>({
     resolver: zodResolver(productSchema) as any,
     defaultValues: {
-      name: product?.name || '',
-      description: product?.description || '',
-      price: product?.price || 0,
-      original_price: product?.original_price || undefined,
-      stock_qty: product?.stock_qty || 0,
-      category_id: product?.category_id || undefined,
-      badge: product?.badge || '',
-      sunlight: product?.sunlight || '',
-      watering: product?.watering || '',
-      how_to_guide: product?.how_to_guide || '',
-      tags: product?.tags?.length ? product.tags.map((value) => ({ value })) : [],
-      care_tips: product?.care_tips?.length ? product.care_tips.map((value) => ({ value })) : [],
+      name: '',
+      description: '',
+      price: 0,
+      original_price: undefined,
+      stock_qty: 0,
+      category_id: undefined,
+      badge: '',
+      sunlight: '',
+      watering: '',
+      how_to_guide: '',
+      tags: [],
+      care_tips: [],
     },
   });
   const { fields: tagFields, append: addTag, remove: removeTag } = useFieldArray({ control, name: 'tags' });
   const { fields: tipFields, append: addTip, remove: removeTip } = useFieldArray({ control, name: 'care_tips' });
+
+  const applyProductToForm = useCallback((p: Product) => {
+    reset({
+      name: p.name || '',
+      description: p.description || '',
+      price: p.price || 0,
+      original_price: p.original_price || undefined,
+      stock_qty: p.stock_qty ?? 0,
+      category_id: p.category_id,
+      badge: p.badge || '',
+      sunlight: p.sunlight || '',
+      watering: p.watering || '',
+      how_to_guide: p.how_to_guide || '',
+      tags: p.tags?.length ? p.tags.map((value) => ({ value })) : [],
+      care_tips: p.care_tips?.length ? p.care_tips.map((value) => ({ value })) : [],
+    });
+    setProductImages(p.images || []);
+    setNewImageUrl('');
+    setUploadedFiles([]);
+    setFilePreviews([]);
+    setColors(p.variants?.colors?.map((c) => ({ name: c.name, hex: c.hex })) || []);
+    setPots(
+      p.variants?.pot_types?.map((pot) => ({
+        name: pot.name,
+        price_modifier: pot.price_modifier,
+        image_url: pot.image_url || '',
+      })) || [],
+    );
+    setSizes(
+      p.variants?.sizes?.map((s) => ({
+        name: s.name,
+        price_modifier: s.price_modifier,
+        description: s.description || '',
+      })) || [],
+    );
+    setDefaultImage(p.variants?.default_image || '');
+    setStockByKey(p.variants?.stock || {});
+    setImageByKey(p.variants?.image_map || {});
+    setVariantError(null);
+  }, [reset]);
+
+  useEffect(() => {
+    if (!isEdit) return;
+    const source = freshProduct ?? editProduct;
+    if (source && !formInitialized) {
+      applyProductToForm(source);
+      setFormInitialized(true);
+    }
+  }, [isEdit, freshProduct, editProduct, formInitialized, applyProductToForm]);
 
   async function onSubmit(data: ProductFormData) {
     setSubmitting(true);
@@ -241,14 +283,43 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
         variants,
       };
 
-      if (product) {
+      if (editProduct) {
+        // Upload any newly selected files first
+        const uploadedUrls: string[] = [];
+        for (const file of uploadedFiles) {
+          const fd = new FormData();
+          fd.append('image', file);
+          fd.append('product_id', String(editProduct.id));
+          const { data: uploadResult } = await api.post<{ url: string }>('/products/upload-image', fd);
+          uploadedUrls.push(uploadResult.url);
+        }
+
+        const finalImages = [...productImages, ...uploadedUrls];
+
         // Edit page updates via JSON PUT (including product images URL list)
         const updatePayload = {
           ...payload,
-          images: productImages,
+          images: finalImages,
         };
-        await api.put(`/products/${product.id}`, updatePayload);
+        const { data: updatedProduct } = await api.put<Product>(`/products/${editProduct.id}`, updatePayload);
         toast.success('Product updated successfully!');
+
+        // Update the product detail cache immediately
+        qc.setQueryData(['product', updatedProduct.slug], updatedProduct);
+
+        // Patch every cached products-list page that contains this product so
+        // the admin list reflects the new stock/images without waiting for a refetch
+        qc.setQueriesData<ProductListResponse>({ queryKey: ['products'] }, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            items: old.items.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)),
+          };
+        });
+
+        // Still invalidate so stale data is refreshed in the background
+        qc.invalidateQueries({ queryKey: ['products'] });
+        qc.invalidateQueries({ queryKey: ['product', updatedProduct.slug] });
       } else {
         // New creation uses FormData to support file uploads
         const fd = new FormData();
@@ -274,8 +345,10 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
 
         await api.post('/products', fd);
         toast.success('Product created successfully!');
+        await qc.invalidateQueries({ queryKey: ['products'] });
       }
-      qc.invalidateQueries({ queryKey: ['products'] });
+      setUploadedFiles([]);
+      setFilePreviews([]);
       onClose();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to save product');
@@ -296,8 +369,8 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
     try {
       const fd = new FormData();
       fd.append('image', file);
-      if (product?.id) {
-        fd.append('product_id', String(product.id));
+      if (editProduct?.id) {
+        fd.append('product_id', String(editProduct.id));
       }
       const { data } = await api.post<{ url: string }>('/products/variant-image', fd);
       setPots(current => current.map((pot, i) => i === index ? { ...pot, image_url: data.url } : pot));
@@ -332,6 +405,19 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
     variantRows = activeSizes.map(size => ({ key: size.slug, label: size.name }));
   }
 
+  const hasVariants = colors.length > 0 || pots.length > 0 || sizes.length > 0 || defaultImage.trim().length > 0;
+
+  if (isEdit && (isLoadingProduct || !formInitialized)) {
+    return (
+      <>
+        <div className="fixed inset-0 bg-black/55 z-50 transition-opacity" onClick={onClose} />
+        <div className="fixed inset-y-0 right-0 w-full sm:max-w-2xl bg-[#FAFAF8] shadow-2xl z-50 flex flex-col items-center justify-center">
+          <p className="text-sm text-gray-500">Loading product details...</p>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="fixed inset-0 bg-black/55 z-50 transition-opacity" onClick={onClose} />
@@ -340,7 +426,7 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b bg-white shrink-0">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">{product ? 'Edit Product' : 'Add New Product'}</h2>
+            <h2 className="text-lg font-bold text-gray-900">{isEdit ? 'Edit Product' : 'Add New Product'}</h2>
             <p className="text-xs text-gray-500 mt-0.5">Fill out product details to display on your website</p>
           </div>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
@@ -456,8 +542,13 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
                       {...register('stock_qty')}
                       className={inputClass}
                       placeholder="10"
+                      disabled={hasVariants}
                     />
-                    <p className="text-[11px] text-gray-400 mt-1">If variants exist, total stock is auto-calculated.</p>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      {hasVariants
+                        ? 'Stock is managed per variant combination below.'
+                        : 'Total units available for this product.'}
+                    </p>
                     {errors.stock_qty && <p className="text-xs text-red-500 mt-1">{errors.stock_qty.message}</p>}
                   </div>
                 </div>
@@ -564,41 +655,39 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
             {openSections.images && (
               <div className="p-5 border-t border-gray-100 space-y-4 bg-white">
                 
-                {/* For New Product Creation */}
-                {!product && (
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1.5 block">Upload Images (Files)</label>
-                    <div className="border-2 border-dashed border-gray-200 hover:border-primary/50 rounded-xl p-6 text-center transition-colors cursor-pointer relative">
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        onChange={handleFileChange}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
-                      <Upload size={28} className="mx-auto text-gray-400 mb-2" />
-                      <p className="text-xs font-medium text-gray-700">Click or drag images here to upload</p>
-                      <p className="text-[10px] text-gray-400 mt-1">Supports JPG, PNG, WEBP. Max 5MB per file.</p>
-                    </div>
-
-                    {filePreviews.length > 0 && (
-                      <div className="grid grid-cols-4 gap-3 mt-4">
-                        {filePreviews.map((preview, idx) => (
-                          <div key={idx} className="relative aspect-square border rounded-lg overflow-hidden group">
-                            <img src={preview} alt="Upload preview" className="w-full h-full object-cover" />
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveFile(idx)}
-                              className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 shadow transition opacity-90"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1.5 block">Upload Images (Files)</label>
+                  <div className="border-2 border-dashed border-gray-200 hover:border-primary/50 rounded-xl p-6 text-center transition-colors cursor-pointer relative">
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <Upload size={28} className="mx-auto text-gray-400 mb-2" />
+                    <p className="text-xs font-medium text-gray-700">Click or drag images here to upload</p>
+                    <p className="text-[10px] text-gray-400 mt-1">Supports JPG, PNG, WEBP. Max 5MB per file.</p>
                   </div>
-                )}
+
+                  {filePreviews.length > 0 && (
+                    <div className="grid grid-cols-4 gap-3 mt-4">
+                      {filePreviews.map((preview, idx) => (
+                        <div key={idx} className="relative aspect-square border rounded-lg overflow-hidden group">
+                          <img src={preview} alt="Upload preview" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFile(idx)}
+                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 shadow transition opacity-90"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
 
                 {/* Manage URLs for both New and Existing */}
                 <div>
@@ -1005,7 +1094,7 @@ function ProductModal({ onClose, product }: { onClose: () => void; product?: Pro
               ? 'Uploading Pot Image...'
               : submitting
                 ? 'Saving Product...'
-                : (product ? 'Save Changes' : 'Publish Product')}
+                : (isEdit ? 'Save Changes' : 'Publish Product')}
           </button>
         </div>
 
@@ -1256,7 +1345,13 @@ export default function ProductsAdminPage() {
       )}
 
       {/* Add/Edit Modal */}
-      {showModal && <ProductModal product={editingProduct} onClose={() => { setShowModal(false); setEditingProduct(null); }} />}
+      {showModal && (
+        <ProductModal
+          key={editingProduct?.id ?? 'new'}
+          editProduct={editingProduct}
+          onClose={() => { setShowModal(false); setEditingProduct(null); }}
+        />
+      )}
     </div>
   );
 }
