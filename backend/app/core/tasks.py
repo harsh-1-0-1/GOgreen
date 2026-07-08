@@ -5,9 +5,38 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+import uuid
+
 from app.db.models import Order, OrderItem, OrderStatus
 from app.db.session import async_session_factory
 from app.utils.redis import redis_client
+
+
+async def _extend_lock(lock_key: str, lock_token: str, lock_expiry: int, stop_event: asyncio.Event):
+    """Periodically extend the Redis lock lease while the task runs."""
+    while not stop_event.is_set():
+        try:
+            # Sleep for a fraction of the expiry time
+            await asyncio.sleep(lock_expiry / 3)
+            if stop_event.is_set():
+                break
+
+            # Lua script ensures we only extend if the key still matches our token
+            lua_extend = """
+            if redis.call('get', KEYS[1]) == ARGV[1] then
+                return redis.call('expire', KEYS[1], ARGV[2])
+            else
+                return 0
+            end
+            """
+            if redis_client:
+                res = await redis_client.eval(lua_extend, 1, lock_key, lock_token, str(lock_expiry))
+                if not res or int(res) == 0:
+                    logger.warning("Failed to extend Redis lock {}; key expired or ownership lost", lock_key)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.warning("Error extending Redis lock: {}", e)
 
 
 async def cleanup_abandoned_orders():
@@ -21,15 +50,26 @@ async def cleanup_abandoned_orders():
 
             # 1. Try process-level serialization via Redis lock
             lock_acquired = False
+            lock_token = str(uuid.uuid4())
+            lock_key = "lock:cleanup_abandoned_orders"
+            lock_expiry = 30  # seconds
+
             if redis_client:
                 try:
                     lock_acquired = await redis_client.set(
-                        "lock:cleanup_abandoned_orders", "1", ex=50, nx=True
+                        lock_key, lock_token, ex=lock_expiry, nx=True
                     )
                     if not lock_acquired:
                         continue
                 except Exception as e:
                     logger.warning("Redis lock acquisition failed: {}", e)
+
+            extend_task = None
+            stop_extend = asyncio.Event()
+            if lock_acquired and redis_client:
+                extend_task = asyncio.create_task(
+                    _extend_lock(lock_key, lock_token, lock_expiry, stop_extend)
+                )
 
             try:
                 async with async_session_factory() as db:
@@ -89,9 +129,24 @@ async def cleanup_abandoned_orders():
 
                         logger.info("Successfully cancelled {} abandoned orders.", len(abandoned_orders))
             finally:
+                if extend_task:
+                    stop_extend.set()
+                    extend_task.cancel()
+                    try:
+                        await extend_task
+                    except asyncio.CancelledError:
+                        pass
+
                 if lock_acquired and redis_client:
                     try:
-                        await redis_client.delete("lock:cleanup_abandoned_orders")
+                        lua_release = """
+                        if redis.call('get', KEYS[1]) == ARGV[1] then
+                            return redis.call('del', KEYS[1])
+                        else
+                            return 0
+                        end
+                        """
+                        await redis_client.eval(lua_release, 1, lock_key, lock_token)
                     except Exception as e:
                         logger.warning("Failed to release Redis lock: {}", e)
 

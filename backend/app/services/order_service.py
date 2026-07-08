@@ -90,7 +90,10 @@ async def _reserve_product_for_order(
             raise ValueError(
                 f"Insufficient stock for '{product.name}': requested {quantity}"
             )
-        product.stock_qty -= quantity
+        # Refresh ORM object from DB to sync with the atomic SQL update.
+        # Manually adjusting the attribute would use a stale base value,
+        # causing SQLAlchemy to overwrite the correct DB value on next flush.
+        await db.refresh(product, ["stock_qty"])
 
     return {
         "product_id": product.id,
@@ -318,16 +321,27 @@ async def record_refund(
 
     refund_amount_rupees = refund_amount_paise / 100.0
 
+    # Prevent total refunded amount from exceeding order total_amount
+    remaining_refundable = round(order.total_amount - (order.partial_refund_amount or 0.0), 2)
+    if remaining_refundable <= 0:
+        logger.warning(
+            "Order {} is already fully refunded. Ignoring new refund {} of ₹{}.",
+            order_id, refund_id, refund_amount_rupees
+        )
+        return order
+
+    actual_refund_amount = min(refund_amount_rupees, remaining_refundable)
+
     # Insert the individual refund record
     db.add(Refund(
         order_id=order_id,
         razorpay_refund_id=refund_id,
-        amount=refund_amount_rupees,
+        amount=actual_refund_amount,
     ))
 
     # Accumulate the running total on the order
     order.partial_refund_amount = round(
-        (order.partial_refund_amount or 0.0) + refund_amount_rupees, 2
+        (order.partial_refund_amount or 0.0) + actual_refund_amount, 2
     )
 
     # Determine the correct status
