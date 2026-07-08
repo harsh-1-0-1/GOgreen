@@ -62,7 +62,6 @@ class OrderResponse(BaseModel):
 
 class CheckoutResponse(BaseModel):
     order_id: int
-    payu_form_data: dict | None = None
     razorpay_order_data: RazorpayOrderData | None = None
 
 

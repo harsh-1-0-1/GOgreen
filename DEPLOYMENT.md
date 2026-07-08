@@ -15,7 +15,7 @@ Create the service from `render.yaml`, or configure the same settings in the Ren
 - Docker build context: `backend`
 - Health check path: `/api/v1/health`
 
-Set the database, Redis, authentication, Cloudinary, Google, PayU, and CORS variables from `.env.example`. Keep CloudFront enforcement off during the first deployment:
+Set the database, Redis, authentication, Cloudinary, Google, Razorpay, and CORS variables from `.env.example`. Keep CloudFront enforcement off during the first deployment:
 
 ```env
 REQUIRE_CLOUDFRONT=false
@@ -25,6 +25,44 @@ CORS_ORIGINS=https://your-frontend.vercel.app
 CORS_ORIGIN_REGEX=
 DEBUG=false
 LOG_JSON=true
+```
+
+`CORS_ORIGINS` is the main control for which frontend sites can call the backend. It can be a single URL, comma-separated URLs, or a JSON array string. These are all valid:
+
+```env
+CORS_ORIGINS=https://your-vercel-frontend-domain
+CORS_ORIGINS=https://first.vercel.app,https://second.vercel.app
+CORS_ORIGINS=["https://your-vercel-frontend-domain"]
+```
+
+For Vercel preview deployments, you can either add each preview URL to `CORS_ORIGINS`, or use:
+
+```env
+CORS_ORIGIN_REGEX=https://.*\.vercel\.app
+```
+
+For the tightest production setup, keep `CORS_ORIGIN_REGEX` empty and list only your real production frontend URL in `CORS_ORIGINS`.
+
+Optional variables:
+
+```env
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=https://your-railway-backend-domain/api/v1/auth/google/callback
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+RAZORPAY_WEBHOOK_SECRET=
+```
+
+Do not put `uv run alembic upgrade head` in Railway's Start Command. It is a one-off migration command and exits immediately, which prevents the HTTP server from starting.
+
+Optional sample data:
+
+```bash
+uv run python seed.py
 ```
 
 Confirm these requests work before creating the distribution:
@@ -89,7 +127,7 @@ BACKEND_PUBLIC_URL=https://d1234abc.cloudfront.net
 GOOGLE_REDIRECT_URI=https://d1234abc.cloudfront.net/api/v1/auth/google/callback
 ```
 
-The application refuses to start if enforcement is enabled without a secret. `BACKEND_PUBLIC_URL` must use CloudFront because it is used to generate PayU callback URLs.
+The application refuses to start if enforcement is enabled without a secret. `BACKEND_PUBLIC_URL` must use CloudFront because it is used to generate Google OAuth callback URLs.
 
 ## 4. Deploy the frontend to Vercel
 
@@ -109,7 +147,7 @@ Redeploy the Vercel project after changing this build-time variable.
 - Raw Render `/api/v1/health` returns `200` for Render health checks.
 - Cart, address, order, authentication, and admin GET responses are not cached.
 - Admin product and category writes work through CloudFront.
-- PayU callbacks and Google OAuth redirects use the CloudFront hostname.
+- Google OAuth redirects use the CloudFront hostname.
 
 CloudFront responses can remain stale for up to their configured TTL after an admin mutation. This version intentionally relies on the short TTL instead of issuing CloudFront invalidations.
 

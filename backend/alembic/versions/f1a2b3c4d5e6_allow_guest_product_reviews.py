@@ -18,11 +18,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column('product_reviews', sa.Column('guest_name', sa.String(length=255), nullable=True))
-    op.alter_column('product_reviews', 'user_id', existing_type=sa.Integer(), nullable=True)
+    with op.batch_alter_table('product_reviews') as batch_op:
+        batch_op.add_column(sa.Column('guest_name', sa.String(length=255), nullable=True))
+        batch_op.alter_column('user_id', existing_type=sa.Integer(), nullable=True)
 
 
 def downgrade() -> None:
     op.execute("DELETE FROM product_reviews WHERE user_id IS NULL")
-    op.alter_column('product_reviews', 'user_id', existing_type=sa.Integer(), nullable=False)
-    op.drop_column('product_reviews', 'guest_name')
+    with op.batch_alter_table('product_reviews') as batch_op:
+        batch_op.alter_column('user_id', existing_type=sa.Integer(), nullable=False)
+        batch_op.drop_column('guest_name')

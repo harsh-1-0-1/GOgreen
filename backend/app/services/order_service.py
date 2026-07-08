@@ -1,10 +1,10 @@
 
-from loguru import logger
 import httpx
-from sqlalchemy import func, select
+from loguru import logger
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
 from app.db.models import (
@@ -16,9 +16,9 @@ from app.db.models import (
     OrderStatus,
     PaymentStatus,
     Product,
+    Refund,
 )
 from app.schemas.order import DirectCheckoutItem
-from app.services.payu import get_payu_form_data
 from app.services.cart_service import resolve_variant_details
 
 
@@ -79,11 +79,21 @@ async def _reserve_product_for_order(
         product.stock_qty = sum(int(v or 0) for v in variants.get("stock", {}).values())
         flag_modified(product, "variants")
     else:
-        if product.stock_qty < quantity:
+        # Atomic SQL update for simple products
+        update_stmt = (
+            update(Product)
+            .where(Product.id == product_id, Product.stock_qty >= quantity)
+            .values(stock_qty=Product.stock_qty - quantity)
+        )
+        res = await db.execute(update_stmt)
+        if res.rowcount == 0:
             raise ValueError(
-                f"Insufficient stock for '{product.name}': requested {quantity}, available {product.stock_qty}"
+                f"Insufficient stock for '{product.name}': requested {quantity}"
             )
-        product.stock_qty -= quantity
+        # Refresh ORM object from DB to sync with the atomic SQL update.
+        # Manually adjusting the attribute would use a stale base value,
+        # causing SQLAlchemy to overwrite the correct DB value on next flush.
+        await db.refresh(product, ["stock_qty"])
 
     return {
         "product_id": product.id,
@@ -103,7 +113,7 @@ async def checkout(
     2. Create order & order items (snapshot prices)
     3. Decrement stock with row-level locking
     4. Clear cart
-    5. Generate PayU form data
+    5. Create Razorpay order
     """
     address = await db.execute(
         select(Address).where(Address.id == address_id, Address.user_id == user_id)
@@ -153,16 +163,18 @@ async def checkout(
         await db.delete(ci)
     await db.flush()
 
-    payu_data = get_payu_form_data(
-        order_id=order.id,
-        amount=total_amount,
-        firstname=full_name,
-        email=email,
-        phone=phone or "",
-    )
+    try:
+        razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+    except Exception as e:
+        logger.error("Razorpay order creation failed during checkout for order {}: {}", order.id, e)
+        await db.rollback()
+        raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
+
+    order.razorpay_order_id = razorpay_data.get("order_id")
+    await db.flush()
 
     logger.info("Checkout complete: order_id={} amount={}", order.id, total_amount)
-    return order, payu_data
+    return order, razorpay_data
 
 
 async def direct_checkout(
@@ -204,7 +216,16 @@ async def direct_checkout(
         db.add(OrderItem(order_id=order.id, **oi_data))
     await db.flush()
 
-    razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+    try:
+        razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+    except Exception as e:
+        logger.error("Razorpay order creation failed during direct checkout for order {}: {}", order.id, e)
+        await db.rollback()
+        raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
+
+    order.razorpay_order_id = razorpay_data.get("order_id")
+    await db.flush()
+
     logger.info("Direct checkout complete: order_id={} amount={}", order.id, order.total_amount)
     return order, razorpay_data
 
@@ -232,12 +253,25 @@ async def get_order(db: AsyncSession, order_id: int, user_id: int) -> Order | No
     return result.scalar_one_or_none()
 
 
-async def mark_paid(db: AsyncSession, order_id: int, payment_id: str) -> Order | None:
-    """Mark order as paid from PayU webhook."""
+async def mark_paid(db: AsyncSession, order_id: int, payment_id: str, amount_paid_paise: int) -> Order | None:
+    """Mark order as paid from Razorpay webhook, with amount verification and idempotency."""
     result = await db.execute(select(Order).where(Order.id == order_id))
     order = result.scalar_one_or_none()
     if not order:
         return None
+
+    if order.payment_status == PaymentStatus.PAID:
+        logger.info("Idempotency guard: Order {} is already PAID. Ignoring.", order_id)
+        return order
+
+    expected_paise = int(round(order.total_amount * 100))
+    if amount_paid_paise != expected_paise:
+        logger.critical(
+            "Amount mismatch for order_id={}. Expected: {} paise, Received: {} paise. Flagging for manual review.",
+            order_id, expected_paise, amount_paid_paise
+        )
+        return order
+
     order.payment_status = PaymentStatus.PAID
     order.status = OrderStatus.CONFIRMED
     order.payment_id = payment_id
@@ -251,8 +285,78 @@ async def mark_failed(db: AsyncSession, order_id: int) -> Order | None:
     order = result.scalar_one_or_none()
     if not order:
         return None
+
+    if order.status == OrderStatus.CANCELLED:
+        return order
+
     order.payment_status = PaymentStatus.FAILED
     order.status = OrderStatus.CANCELLED
     await db.flush()
     logger.info("Order {} marked FAILED", order_id)
+    return order
+
+
+async def record_refund(
+    db: AsyncSession,
+    order_id: int,
+    refund_id: str,
+    refund_amount_paise: int,
+) -> Order | None:
+    """
+    Record a (potentially partial) refund for an order.
+    - Creates a Refund row for every individual refund event.
+    - Accumulates partial_refund_amount on the Order.
+    - Sets payment_status to PARTIALLY_REFUNDED or REFUNDED based on total.
+    """
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if not order:
+        return None
+
+    # Idempotency: skip if this exact Razorpay refund_id was already recorded
+    existing = await db.execute(select(Refund).where(Refund.razorpay_refund_id == refund_id))
+    if existing.scalar_one_or_none():
+        logger.info("Refund {} already recorded for order {}. Ignoring.", refund_id, order_id)
+        return order
+
+    refund_amount_rupees = refund_amount_paise / 100.0
+
+    # Prevent total refunded amount from exceeding order total_amount
+    remaining_refundable = round(order.total_amount - (order.partial_refund_amount or 0.0), 2)
+    if remaining_refundable <= 0:
+        logger.warning(
+            "Order {} is already fully refunded. Ignoring new refund {} of ₹{}.",
+            order_id, refund_id, refund_amount_rupees
+        )
+        return order
+
+    actual_refund_amount = min(refund_amount_rupees, remaining_refundable)
+
+    # Insert the individual refund record
+    db.add(Refund(
+        order_id=order_id,
+        razorpay_refund_id=refund_id,
+        amount=actual_refund_amount,
+    ))
+
+    # Accumulate the running total on the order
+    order.partial_refund_amount = round(
+        (order.partial_refund_amount or 0.0) + actual_refund_amount, 2
+    )
+
+    # Determine the correct status
+    if order.partial_refund_amount >= order.total_amount:
+        order.payment_status = PaymentStatus.REFUNDED
+        logger.info(
+            "Order {} fully refunded. Total refunded: {}",
+            order_id, order.partial_refund_amount
+        )
+    else:
+        order.payment_status = PaymentStatus.PARTIALLY_REFUNDED
+        logger.info(
+            "Order {} partially refunded. Refunded so far: {} / {}",
+            order_id, order.partial_refund_amount, order.total_amount
+        )
+
+    await db.flush()
     return order

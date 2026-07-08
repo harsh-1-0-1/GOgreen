@@ -43,8 +43,11 @@ class FakeRedis:
     async def get(self, key: str) -> str | None:
         return self._store.get(key)
 
-    async def set(self, key: str, value: str, ex: int | None = None) -> None:
+    async def set(self, key: str, value: str, ex: int | None = None, nx: bool = False) -> bool | None:
+        if nx and key in self._store:
+            return None
         self._store[key] = value
+        return True
 
     async def delete(self, *keys: str) -> None:
         for k in keys:
@@ -57,6 +60,21 @@ class FakeRedis:
 
     async def expire(self, key: str, seconds: int) -> None:
         pass
+
+    async def eval(self, script: str, numkeys: int, *args) -> int:
+        # Minimal Lua parser for task lock/extend/release scripts
+        key = args[0]
+        token = args[1]
+        if "expire" in script:
+            if self._store.get(key) == token:
+                return 1
+            return 0
+        elif "del" in script:
+            if self._store.get(key) == token:
+                self._store.pop(key, None)
+                return 1
+            return 0
+        return 0
 
     async def scan(self, cursor: int = 0, match: str = "*", count: int = 100) -> tuple[int, list[str]]:
         matched = [k for k in self._store if fnmatch.fnmatch(k, match)]
@@ -74,6 +92,7 @@ def _patch_redis(monkeypatch):
     import app.services.category_service as cat_mod
     import app.services.product_service as prod_mod
     import app.utils.redis as redis_mod
+    import app.core.tasks as tasks_mod
 
     fake = FakeRedis()
     monkeypatch.setattr(redis_mod, "redis_client", fake)
@@ -81,6 +100,8 @@ def _patch_redis(monkeypatch):
         monkeypatch.setattr(cat_mod, "redis_client", fake)
     if hasattr(prod_mod, "redis_client"):
         monkeypatch.setattr(prod_mod, "redis_client", fake)
+    if hasattr(tasks_mod, "redis_client"):
+        monkeypatch.setattr(tasks_mod, "redis_client", fake)
 
 
 @pytest.fixture(autouse=True)

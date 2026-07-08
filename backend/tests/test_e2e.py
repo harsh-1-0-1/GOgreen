@@ -1,9 +1,11 @@
 """
 Full happy-path end-to-end test:
-register → browse products → add to cart → checkout → PayU webhook → verify order CONFIRMED
+register → browse products → add to cart → checkout → Razorpay webhook → verify order CONFIRMED
 """
 
 import hashlib
+import hmac
+import json
 
 import pytest
 from httpx import AsyncClient
@@ -19,11 +21,22 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_full_happy_path(client: AsyncClient, monkeypatch):
-    # -- Config stubs for PayU hash verification --
-    monkeypatch.setattr("app.core.config.settings.PAYU_KEY", "testkey")
-    monkeypatch.setattr("app.core.config.settings.PAYU_SALT", "testsalt")
-    monkeypatch.setattr("app.services.payu.settings.PAYU_KEY", "testkey")
-    monkeypatch.setattr("app.services.payu.settings.PAYU_SALT", "testsalt")
+    # -- Config stubs for Razorpay webhook signature verification --
+    monkeypatch.setattr("app.core.config.settings.RAZORPAY_KEY_ID", "rzp_test_key")
+    monkeypatch.setattr("app.core.config.settings.RAZORPAY_KEY_SECRET", "rzp_test_secret")
+    monkeypatch.setattr("app.core.config.settings.RAZORPAY_WEBHOOK_SECRET", "webhook_secret")
+
+    # Mock the Razorpay order creation HTTP call so we don't need real credentials
+    import httpx
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mock_razorpay_response = MagicMock()
+    mock_razorpay_response.json.return_value = {
+        "id": "order_test_razorpay_123",
+        "amount": 0,
+        "currency": "INR",
+    }
+    mock_razorpay_response.raise_for_status = MagicMock()
 
     # ── 1. Admin seeds a product ──────────────────────────────
     admin_token = await _register_and_make_admin(client)
@@ -65,17 +78,23 @@ async def test_full_happy_path(client: AsyncClient, monkeypatch):
     addr = await _seed_address(client, user_token)
     assert addr["id"] > 0
 
-    # ── 6. Checkout ───────────────────────────────────────────
-    checkout_resp = await client.post(
-        "/api/v1/orders/checkout",
-        json={"address_id": addr["id"], "cart_id": cart_id},
-        headers=headers,
-    )
+    # ── 6. Checkout (mocking the Razorpay API call) ──────────
+    mock_client = AsyncMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_client.post = AsyncMock(return_value=mock_razorpay_response)
+
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        checkout_resp = await client.post(
+            "/api/v1/orders/checkout",
+            json={"address_id": addr["id"], "cart_id": cart_id},
+            headers=headers,
+        )
     assert checkout_resp.status_code == 201
     checkout_data = checkout_resp.json()
     order_id = checkout_data["order_id"]
-    payu_data = checkout_data["payu_form_data"]
-    assert payu_data["txnid"] == f"ORDER-{order_id}"
+    razorpay_data = checkout_data["razorpay_order_data"]
+    assert razorpay_data is not None
 
     # Verify cart is now empty
     empty_cart = await client.get("/api/v1/cart", headers=headers)
@@ -94,32 +113,35 @@ async def test_full_happy_path(client: AsyncClient, monkeypatch):
     assert order_resp.json()["status"] == "pending"
     assert order_resp.json()["payment_status"] == "pending"
 
-    # ── 8. Simulate PayU success webhook ──────────────────────
-    txnid = payu_data["txnid"]
-    amount = payu_data["amount"]
-    firstname = payu_data["firstname"]
-    email = payu_data["email"]
-    mihpayid = "PAY-TEST-12345"
+    # ── 8. Simulate Razorpay payment.captured webhook ─────────
+    razorpay_payment_id = "pay_test_razorpay_12345"
+    webhook_payload = {
+        "event": "payment.captured",
+        "payload": {
+            "payment": {
+                "entity": {
+                    "id": razorpay_payment_id,
+                    "notes": {
+                        "order_id": str(order_id),
+                        "source": "checkout",
+                    },
+                }
+            }
+        },
+    }
+    payload_bytes = json.dumps(webhook_payload).encode()
 
-    # Build reverse hash: salt|status||||||udf5|...|udf1|email|firstname|productinfo|amount|txnid|key
-    reverse_str = (
-        f"testsalt|success||||||"
-        f"|||||{email}|"
-        f"{firstname}|Plantoga Order|{amount}|{txnid}|testkey"
-    )
-    expected_hash = hashlib.sha512(reverse_str.encode()).hexdigest()
+    # Build the HMAC-SHA256 signature (same as Razorpay would send)
+    expected_signature = hmac.new(
+        "webhook_secret".encode(), payload_bytes, hashlib.sha256
+    ).hexdigest()
 
     webhook_resp = await client.post(
-        "/api/v1/payments/payu/webhook",
-        data={
-            "status": "success",
-            "txnid": txnid,
-            "amount": amount,
-            "productinfo": "Plantoga Order",
-            "firstname": firstname,
-            "email": email,
-            "mihpayid": mihpayid,
-            "hash": expected_hash,
+        "/api/v1/payments/razorpay/webhook",
+        content=payload_bytes,
+        headers={
+            "Content-Type": "application/json",
+            "X-Razorpay-Signature": expected_signature,
         },
     )
     assert webhook_resp.status_code == 200, webhook_resp.text
@@ -130,7 +152,7 @@ async def test_full_happy_path(client: AsyncClient, monkeypatch):
     assert final_order.status_code == 200
     assert final_order.json()["status"] == "confirmed"
     assert final_order.json()["payment_status"] == "paid"
-    assert final_order.json()["payment_id"] == mihpayid
+    assert final_order.json()["payment_id"] == razorpay_payment_id
 
     # ── 10. Admin can see stats ───────────────────────────────
     stats_resp = await client.get(

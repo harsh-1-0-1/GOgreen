@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 from collections.abc import AsyncGenerator
@@ -18,6 +19,7 @@ from app.api.middleware import CloudFrontGateMiddleware
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.rate_limit import limiter
+from app.core.tasks import cleanup_abandoned_orders
 from app.utils.image_upload import ImageStorageUnavailableError
 from app.utils.redis import close_redis, init_redis
 
@@ -26,8 +28,19 @@ from app.utils.redis import close_redis, init_redis
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Starting up {}", settings.APP_NAME)
     await init_redis()
+
+    # Start background tasks
+    cleanup_task = asyncio.create_task(cleanup_abandoned_orders())
+
     yield
+
     logger.info("Shutting down {}", settings.APP_NAME)
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+
     await close_redis()
 
 

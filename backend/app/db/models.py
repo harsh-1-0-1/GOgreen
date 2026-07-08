@@ -161,6 +161,7 @@ class PaymentStatus(str, enum.Enum):
     PAID = "paid"
     FAILED = "failed"
     REFUNDED = "refunded"
+    PARTIALLY_REFUNDED = "partially_refunded"
 
 
 class Order(Base):
@@ -171,15 +172,18 @@ class Order(Base):
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.PENDING)
     total_amount: Mapped[float] = mapped_column(Float, nullable=False)
     payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    razorpay_order_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     payment_status: Mapped[PaymentStatus] = mapped_column(
         Enum(PaymentStatus), default=PaymentStatus.PENDING
     )
+    partial_refund_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     address_id: Mapped[int] = mapped_column(Integer, ForeignKey("addresses.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     user: Mapped["User"] = relationship(back_populates="orders")
     address: Mapped["Address"] = relationship()
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
+    refunds: Mapped[list["Refund"]] = relationship(back_populates="order", cascade="all, delete-orphan")
 
 
 class OrderItem(Base):
@@ -195,6 +199,19 @@ class OrderItem(Base):
 
     order: Mapped["Order"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship()
+
+
+class Refund(Base):
+    """Tracks each individual refund event from Razorpay (supports partial refunds)."""
+    __tablename__ = "refunds"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    order_id: Mapped[int] = mapped_column(Integer, ForeignKey("orders.id"), nullable=False)
+    razorpay_refund_id: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)  # in rupees
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    order: Mapped["Order"] = relationship(back_populates="refunds")
 
 
 class Address(Base):
@@ -260,6 +277,15 @@ class Banner(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=_utcnow, nullable=True
     )
+
+
+class WebhookEvent(Base):
+    __tablename__ = "webhook_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    razorpay_event_id: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 # Event listeners for Product model

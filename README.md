@@ -11,7 +11,7 @@ Plantoga is designed to be the one-stop shop for everything green — from indoo
 - **Redis** running on `localhost:6379` (or set `REDIS_URL`)
 - (Optional) **Cloudinary** account for image uploads
 - (Optional) **Google OAuth** credentials for social login
-- (Optional) **PayU** test credentials for payments
+- (Optional) **Razorpay** test credentials for payments
 
 ## Quick Start
 

@@ -19,7 +19,7 @@ async def checkout(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        order, payu_data = await order_service.checkout(
+        order, razorpay_data = await order_service.checkout(
             db,
             user_id=user.id,
             address_id=body.address_id,
@@ -30,7 +30,7 @@ async def checkout(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return CheckoutResponse(order_id=order.id, payu_form_data=payu_data)
+    return CheckoutResponse(order_id=order.id, razorpay_order_data=razorpay_data)
 
 
 @router.post("/direct-checkout", response_model=CheckoutResponse, status_code=201)
