@@ -245,7 +245,7 @@ export default function Footer() {
               <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">VISA</span>
               <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">MASTERCARD</span>
               <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">UPI</span>
-              <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">PayU</span>
+              <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">Razorpay</span>
             </div>
           </div>
         </div>

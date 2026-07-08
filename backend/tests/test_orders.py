@@ -76,8 +76,8 @@ async def test_checkout_success(client: AsyncClient):
     assert resp.status_code == 201
     data = resp.json()
     assert data["order_id"] > 0
-    assert "payu_form_data" in data
-    assert data["payu_form_data"]["txnid"] == f"ORDER-{data['order_id']}"
+    assert "razorpay_order_data" in data
+    assert data["razorpay_order_data"] is not None
 
 
 async def test_checkout_clears_cart(client: AsyncClient):

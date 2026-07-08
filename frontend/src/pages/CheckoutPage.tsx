@@ -193,7 +193,6 @@ function DesktopSummary({ items, subtotal, shipping, total }: { items: CheckoutI
 export default function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const formRef = useRef<HTMLFormElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
   const { user, openAuthModal } = useAuthStore();
   const cart = useCartStore();
@@ -205,7 +204,6 @@ export default function CheckoutPage() {
   const [shippingMethod, setShippingMethod] = useState<'standard' | 'express'>('standard');
   const [billingMode, setBillingMode] = useState<'same' | 'different'>('same');
   const [paying, setPaying] = useState(false);
-  const [payuData, setPayuData] = useState<Record<string, string> | null>(null);
 
   const isBuyNow = new URLSearchParams(location.search).get('mode') === 'buy-now';
   const directSession = useMemo(() => readDirectCheckoutSession(), [location.search]);
@@ -221,8 +219,8 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (isBuyNow && !directSession) navigate('/cart', { replace: true });
-    if (!isBuyNow && cart.items.length === 0 && !payuData) navigate('/cart', { replace: true });
-  }, [cart.items.length, directSession, isBuyNow, navigate, payuData]);
+    if (!isBuyNow && cart.items.length === 0) navigate('/cart', { replace: true });
+  }, [cart.items.length, directSession, isBuyNow, navigate]);
 
   useEffect(() => {
     if (user) {
@@ -236,9 +234,7 @@ export default function CheckoutPage() {
     }
   }, [user]);
 
-  useEffect(() => {
-    if (payuData && formRef.current) formRef.current.submit();
-  }, [payuData]);
+
 
   function set(field: keyof AddressFormState, value: string | boolean) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -262,8 +258,8 @@ export default function CheckoutPage() {
   async function openRazorpay(response: CheckoutResponse) {
     const data = response.razorpay_order_data;
     if (!data) return;
-    if (!data.key_id || !data.order_id) {
-      toast.error('Razorpay is not configured yet. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.');
+    if (!(import.meta.env.VITE_RAZORPAY_KEY_ID || data.key_id) || !data.order_id) {
+      toast.error('Razorpay is not configured yet. Add VITE_RAZORPAY_KEY_ID in frontend or RAZORPAY_KEY_ID in backend.');
       navigate(`/orders/${response.order_id}`);
       return;
     }
@@ -273,7 +269,7 @@ export default function CheckoutPage() {
       return;
     }
     new window.Razorpay({
-      key: data.key_id,
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID || data.key_id,
       amount: data.amount,
       currency: data.currency,
       name: data.name,
@@ -334,8 +330,7 @@ export default function CheckoutPage() {
         if (!currentCartId) throw new Error('Cart not found');
         const { data } = await api.post<CheckoutResponse>('/orders/checkout', { address_id: savedAddress.id, cart_id: currentCartId });
         cart.clearLocal();
-        if (data.payu_form_data) setPayuData(data.payu_form_data);
-        toast.success('Order placed! Redirecting to payment...');
+        await openRazorpay(data);
       }
     } catch (err: any) {
       toast.error(err.response?.data?.detail || err.message || 'Checkout failed');
@@ -475,11 +470,7 @@ export default function CheckoutPage() {
             </div>
           </section>
 
-          {payuData && (
-            <form ref={formRef} method="POST" action={payuData.action} className="hidden">
-              {Object.entries(payuData).filter(([k]) => k !== 'action').map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-            </form>
-          )}
+
         </form>
 
         <div className="hidden lg:block">

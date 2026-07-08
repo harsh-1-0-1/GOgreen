@@ -18,7 +18,7 @@ from app.db.models import (
     Product,
 )
 from app.schemas.order import DirectCheckoutItem
-from app.services.payu import get_payu_form_data
+
 from app.services.cart_service import resolve_variant_details
 
 
@@ -103,7 +103,7 @@ async def checkout(
     2. Create order & order items (snapshot prices)
     3. Decrement stock with row-level locking
     4. Clear cart
-    5. Generate PayU form data
+    5. Create Razorpay order
     """
     address = await db.execute(
         select(Address).where(Address.id == address_id, Address.user_id == user_id)
@@ -151,16 +151,10 @@ async def checkout(
         await db.delete(ci)
     await db.flush()
 
-    payu_data = get_payu_form_data(
-        order_id=order.id,
-        amount=total_amount,
-        firstname=full_name,
-        email=email,
-        phone=phone or "",
-    )
+    razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
 
     logger.info("Checkout complete: order_id={} amount={}", order.id, total_amount)
-    return order, payu_data
+    return order, razorpay_data
 
 
 async def direct_checkout(
@@ -228,7 +222,7 @@ async def get_order(db: AsyncSession, order_id: int, user_id: int) -> Order | No
 
 
 async def mark_paid(db: AsyncSession, order_id: int, payment_id: str) -> Order | None:
-    """Mark order as paid from PayU webhook."""
+    """Mark order as paid from Razorpay webhook."""
     result = await db.execute(select(Order).where(Order.id == order_id))
     order = result.scalar_one_or_none()
     if not order:

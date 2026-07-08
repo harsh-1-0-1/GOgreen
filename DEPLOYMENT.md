@@ -65,8 +65,9 @@ CLOUDINARY_API_SECRET=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=https://your-railway-backend-domain/api/v1/auth/google/callback
-PAYU_KEY=
-PAYU_SALT=
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+RAZORPAY_WEBHOOK_SECRET=
 ```
 
 Do not put `uv run alembic upgrade head` in Railway's Start Command. It is a one-off migration command and exits immediately, which prevents the HTTP server from starting.
