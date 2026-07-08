@@ -91,29 +91,6 @@ def resolve_variants_images(variants: dict | None) -> dict | None:
     return resolved
 
 
-def clean_variants_images(variants: dict | None) -> dict | None:
-    if not variants:
-        return variants
-
-    cleaned = dict(variants)
-
-    if "default_image" in cleaned and cleaned["default_image"]:
-        cleaned["default_image"] = extract_relative_key(cleaned["default_image"])
-
-    if "image_map" in cleaned and isinstance(cleaned["image_map"], dict):
-        cleaned["image_map"] = {
-            k: extract_relative_key(v) for k, v in cleaned["image_map"].items()
-        }
-
-    if "pot_types" in cleaned and isinstance(cleaned["pot_types"], list):
-        cleaned["pot_types"] = [
-            {**pt, "image_url": extract_relative_key(pt.get("image_url"))} if "image_url" in pt else pt
-            for pt in cleaned["pot_types"]
-        ]
-
-    return cleaned
-
-
 def generate_image_key(folder: str, entity_id: str | int | None, filename: str) -> str:
     ext = Path(filename).suffix.lower() if filename else ".jpg"
     if ext not in ALLOWED_EXTENSIONS:

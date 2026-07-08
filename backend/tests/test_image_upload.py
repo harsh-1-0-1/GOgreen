@@ -40,19 +40,19 @@ def test_url_resolution_and_extraction_round_trip(monkeypatch):
     )
 
 
-def test_variant_images_are_cleaned_and_resolved(monkeypatch):
+def test_variant_images_are_resolved(monkeypatch):
+    """resolve_variants_images should convert relative keys to full URLs."""
     monkeypatch.setattr(settings, "CDN_BASE_URL", "https://cdn.test")
     variants = {
-        "default_image": "https://cdn.test/plantoga/default.jpg",
-        "image_map": {"green": "https://cdn.test/plantoga/green.jpg"},
-        "pot_types": [{"name": "Clay", "image_url": "https://cdn.test/plantoga/clay.jpg"}],
+        "default_image": "plantoga/default.jpg",
+        "image_map": {"green": "plantoga/green.jpg"},
+        "pot_types": [{"name": "Clay", "image_url": "plantoga/clay.jpg"}],
     }
 
-    cleaned = image_upload.clean_variants_images(variants)
-    assert cleaned["default_image"] == "plantoga/default.jpg"
-    assert cleaned["image_map"]["green"] == "plantoga/green.jpg"
-    assert cleaned["pot_types"][0]["image_url"] == "plantoga/clay.jpg"
-    assert image_upload.resolve_variants_images(cleaned) == variants
+    resolved = image_upload.resolve_variants_images(variants)
+    assert resolved["default_image"] == "https://cdn.test/plantoga/default.jpg"
+    assert resolved["image_map"]["green"] == "https://cdn.test/plantoga/green.jpg"
+    assert resolved["pot_types"][0]["image_url"] == "https://cdn.test/plantoga/clay.jpg"
 
 
 @pytest.mark.asyncio

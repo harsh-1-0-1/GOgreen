@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Category, Product
 from app.schemas.product import ProductCreate, ProductUpdate
-from app.utils.image_upload import clean_variants_images
 from app.utils.redis import cache_delete, cache_delete_pattern
 
 
@@ -17,6 +16,29 @@ def _slugify(text: str) -> str:
     slug = re.sub(r"[^\w\s-]", "", slug)
     slug = re.sub(r"[\s_]+", "-", slug)
     return re.sub(r"-+", "-", slug).strip("-")
+
+
+def _assert_relative_keys(variants: dict | None) -> None:
+    """Guard against full URLs leaking into variant image fields.
+    
+    Variants should only contain relative keys like 'plantoga/products/42/abc.webp'.
+    If a full URL (http://... or https://...) is detected, it means the payload
+    wasn't built correctly or a bulk import bypassed the proper flow.
+    
+    Raises ValueError if any image field contains a full URL.
+    """
+    if not variants:
+        return
+    
+    suspects = [
+        variants.get("default_image"),
+        *variants.get("image_map", {}).values(),
+        *[p.get("image_url") for p in variants.get("pot_types", [])],
+    ]
+    
+    bad = [s for s in suspects if s and (s.startswith("http://") or s.startswith("https://"))]
+    if bad:
+        raise ValueError(f"variants contains full URL(s), expected relative keys: {bad}")
 
 
 def make_list_cache_key(
@@ -132,7 +154,7 @@ async def create_product(
 
     data = payload.model_dump()
     if data.get("variants"):
-        data["variants"] = clean_variants_images(data["variants"])
+        _assert_relative_keys(data["variants"])
 
     product = Product(
         **data,
@@ -154,7 +176,10 @@ async def update_product(
     if "name" in data and data["name"]:
         data["slug"] = _slugify(data["name"])
     if "variants" in data and data["variants"]:
-        data["variants"] = clean_variants_images(data["variants"])
+        _assert_relative_keys(data["variants"])
+    
+    # Full dict reassignment triggers SQLAlchemy dirty tracking for JSON columns.
+    # Do NOT refactor to in-place mutation without calling flag_modified(product, "variants").
     for field, value in data.items():
         setattr(product, field, value)
     await db.flush()
