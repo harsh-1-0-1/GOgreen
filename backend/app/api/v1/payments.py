@@ -16,8 +16,8 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 
 def _verify_razorpay_signature(body: bytes, signature: str, secret: str) -> bool:
     """Verify Razorpay webhook signature using HMAC-SHA256."""
-    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature)
+    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected.encode("utf-8"), signature.encode("utf-8"))
 
 
 @router.post("/razorpay/webhook")
@@ -59,86 +59,90 @@ async def razorpay_webhook(
     if not razorpay_event_id:
         raise HTTPException(status_code=400, detail="Missing webhook event ID")
 
-    # Idempotency check: see if we've processed this exact Razorpay event already
     from sqlalchemy import select
-    existing_event = await db.execute(
-        select(WebhookEvent).where(WebhookEvent.razorpay_event_id == razorpay_event_id)
-    )
-    if existing_event.scalar_one_or_none():
-        logger.info("Webhook event {} already processed, returning 200 early.", razorpay_event_id)
-        return {"status": "ok", "message": "already processed"}
+    from sqlalchemy.exc import IntegrityError
 
-    # Insert the event into DB to prevent future duplicate processing
-    new_event = WebhookEvent(
-        razorpay_event_id=razorpay_event_id,
-        event_type=payload.get("event", "unknown")
-    )
-    db.add(new_event)
-    # We don't flush yet — we want the event insertion to commit in the same
-    # transaction as the order status update.
-
-    event = payload.get("event", "")
-    payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
-    refund_entity = payload.get("payload", {}).get("refund", {}).get("entity", {})
-
-    # Extract data depending on event
-    payment_id = payment_entity.get("id", "") or refund_entity.get("payment_id", "")
-    notes = payment_entity.get("notes", {}) or refund_entity.get("notes", {})
-    amount_paid_paise = payment_entity.get("amount", 0)
-
-    # Extract order_id from notes (set when creating the Razorpay order)
-    raw_order_id = notes.get("order_id") or ""
     try:
-        order_id = int(raw_order_id)
-    except (ValueError, TypeError) as exc:
-        logger.error("Razorpay webhook: could not parse order_id from notes: {}", notes)
-        raise HTTPException(status_code=400, detail="Invalid order_id in payment notes") from exc
+        # ── Idempotency: bail early if this exact event was already handled ──
+        existing = await db.execute(
+            select(WebhookEvent).where(WebhookEvent.razorpay_event_id == razorpay_event_id)
+        )
+        if existing.scalar_one_or_none():
+            logger.info("Webhook event {} already processed, returning 200 early.", razorpay_event_id)
+            return {"status": "ok", "message": "already processed"}
 
-    logger.info(
-        "Razorpay webhook: event={} payment_id={} order_id={}", event, payment_id, order_id
-    )
+        # ── Record the event now (inside the same transaction as the order update) ──
+        db.add(WebhookEvent(
+            razorpay_event_id=razorpay_event_id,
+            event_type=payload.get("event", "unknown"),
+        ))
 
-    if event == "payment.captured":
-        order = await order_service.mark_paid(db, order_id, payment_id, amount_paid_paise)
-        if not order:
-            raise HTTPException(status_code=404, detail="Order not found")
-        await db.commit() # Commit order + webhook event
-        return {
-            "status": "ok",
-            "event": event,
-            "order_id": order_id,
-            "payment_status": order.payment_status.value,
-        }
+        event = payload.get("event", "")
+        payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
+        refund_entity  = payload.get("payload", {}).get("refund",  {}).get("entity", {})
 
-    if event == "payment.failed":
-        order = await order_service.mark_failed(db, order_id)
-        if not order:
-            raise HTTPException(status_code=404, detail="Order not found")
-        await db.commit()
-        return {
-            "status": "ok",
-            "event": event,
-            "order_id": order_id,
-            "payment_status": order.payment_status.value,
-        }
+        payment_id       = payment_entity.get("id", "") or refund_entity.get("payment_id", "")
+        notes            = payment_entity.get("notes", {}) or refund_entity.get("notes", {})
+        amount_paid_paise = payment_entity.get("amount", 0)
 
-    if event in ("refund.processed", "refund.failed"):
-        refund_id = refund_entity.get("id", "")
-        # For simplicity, we just mark the DB as refunded on processed.
-        # In a real app, you might want to handle failures specifically.
-        if event == "refund.processed":
-            order = await order_service.mark_refunded(db, order_id, refund_id)
+        raw_order_id = notes.get("order_id") or ""
+        try:
+            order_id = int(raw_order_id)
+        except (ValueError, TypeError) as exc:
+            logger.error("Razorpay webhook: could not parse order_id from notes: {}", notes)
+            raise HTTPException(status_code=400, detail="Invalid order_id in payment notes") from exc
+
+        logger.info("Razorpay webhook: event={} payment_id={} order_id={}", event, payment_id, order_id)
+
+        order     = None
+        refund_id = ""
+
+        if event == "payment.captured":
+            order = await order_service.mark_paid(db, order_id, payment_id, amount_paid_paise)
             if not order:
                 raise HTTPException(status_code=404, detail="Order not found")
-        await db.commit()
-        return {
-            "status": "ok",
-            "event": event,
-            "order_id": order_id,
-            "refund_id": refund_id,
-        }
 
-    # Acknowledge other events gracefully
-    logger.debug("Razorpay webhook: unhandled event '{}' — ignoring", event)
-    await db.commit()
-    return {"status": "ignored", "event": event}
+        elif event == "payment.failed":
+            order = await order_service.mark_failed(db, order_id)
+            if not order:
+                raise HTTPException(status_code=404, detail="Order not found")
+
+        elif event == "refund.processed":
+            refund_id     = refund_entity.get("id", "")
+            refund_amount = refund_entity.get("amount", 0)          # paise
+            order = await order_service.record_refund(
+                db, order_id, refund_id, refund_amount
+            )
+            if not order:
+                raise HTTPException(status_code=404, detail="Order not found")
+
+        elif event == "refund.failed":
+            refund_id = refund_entity.get("id", "")
+            logger.warning("Refund {} failed for order_id={}", refund_id, order_id)
+
+        else:
+            logger.debug("Razorpay webhook: unhandled event '{}' — ignoring", event)
+
+        # ── Single commit: WebhookEvent insert + any order mutation go together ──
+        await db.commit()
+
+        if refund_id:
+            return {"status": "ok", "event": event, "order_id": order_id, "refund_id": refund_id}
+        if order:
+            return {"status": "ok", "event": event, "order_id": order_id,
+                    "payment_status": order.payment_status.value}
+        return {"status": "ignored", "event": event}
+
+    except HTTPException:
+        await db.rollback()
+        raise
+    except IntegrityError:
+        # A concurrent worker already inserted this event_id — treat as duplicate
+        await db.rollback()
+        logger.info("Concurrent duplicate webhook event {} — returning 200.", razorpay_event_id)
+        return {"status": "ok", "message": "already processed"}
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Unexpected error processing webhook: {}", exc)
+        raise HTTPException(status_code=500, detail="Internal server error")
+

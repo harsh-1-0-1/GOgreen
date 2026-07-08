@@ -16,6 +16,7 @@ from app.db.models import (
     OrderStatus,
     PaymentStatus,
     Product,
+    Refund,
 )
 from app.schemas.order import DirectCheckoutItem
 from app.services.cart_service import resolve_variant_details
@@ -159,7 +160,12 @@ async def checkout(
         await db.delete(ci)
     await db.flush()
 
-    razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+    try:
+        razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+    except Exception as e:
+        logger.error("Razorpay order creation failed during checkout for order {}: {}", order.id, e)
+        await db.rollback()
+        raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
 
     order.razorpay_order_id = razorpay_data.get("order_id")
     await db.flush()
@@ -207,7 +213,12 @@ async def direct_checkout(
         db.add(OrderItem(order_id=order.id, **oi_data))
     await db.flush()
 
-    razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+    try:
+        razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+    except Exception as e:
+        logger.error("Razorpay order creation failed during direct checkout for order {}: {}", order.id, e)
+        await db.rollback()
+        raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
 
     order.razorpay_order_id = razorpay_data.get("order_id")
     await db.flush()
@@ -282,16 +293,56 @@ async def mark_failed(db: AsyncSession, order_id: int) -> Order | None:
     return order
 
 
-async def mark_refunded(db: AsyncSession, order_id: int, refund_id: str) -> Order | None:
+async def record_refund(
+    db: AsyncSession,
+    order_id: int,
+    refund_id: str,
+    refund_amount_paise: int,
+) -> Order | None:
+    """
+    Record a (potentially partial) refund for an order.
+    - Creates a Refund row for every individual refund event.
+    - Accumulates partial_refund_amount on the Order.
+    - Sets payment_status to PARTIALLY_REFUNDED or REFUNDED based on total.
+    """
     result = await db.execute(select(Order).where(Order.id == order_id))
     order = result.scalar_one_or_none()
     if not order:
         return None
 
-    if order.payment_status == PaymentStatus.REFUNDED:
+    # Idempotency: skip if this exact Razorpay refund_id was already recorded
+    existing = await db.execute(select(Refund).where(Refund.razorpay_refund_id == refund_id))
+    if existing.scalar_one_or_none():
+        logger.info("Refund {} already recorded for order {}. Ignoring.", refund_id, order_id)
         return order
 
-    order.payment_status = PaymentStatus.REFUNDED
+    refund_amount_rupees = refund_amount_paise / 100.0
+
+    # Insert the individual refund record
+    db.add(Refund(
+        order_id=order_id,
+        razorpay_refund_id=refund_id,
+        amount=refund_amount_rupees,
+    ))
+
+    # Accumulate the running total on the order
+    order.partial_refund_amount = round(
+        (order.partial_refund_amount or 0.0) + refund_amount_rupees, 2
+    )
+
+    # Determine the correct status
+    if order.partial_refund_amount >= order.total_amount:
+        order.payment_status = PaymentStatus.REFUNDED
+        logger.info(
+            "Order {} fully refunded. Total refunded: {}",
+            order_id, order.partial_refund_amount
+        )
+    else:
+        order.payment_status = PaymentStatus.PARTIALLY_REFUNDED
+        logger.info(
+            "Order {} partially refunded. Refunded so far: {} / {}",
+            order_id, order.partial_refund_amount, order.total_amount
+        )
+
     await db.flush()
-    logger.info("Order {} marked REFUNDED, refund_id={}", order_id, refund_id)
     return order
