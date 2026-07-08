@@ -41,7 +41,7 @@ async def list_products(
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ):
-    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=60"
+    response.headers["Cache-Control"] = "no-cache"
     cache_key = product_service.make_list_cache_key(
         category_slug, search, min_price, max_price, tags, sort_by, page, limit,
     )
@@ -100,9 +100,36 @@ async def upload_variant_image(
     return {"url": resolve_image_url(key)}
 
 
+@router.post("/upload-image")
+async def upload_product_image(
+    image: UploadFile = File(...),
+    product_id: Optional[int] = Form(default=None),
+    _admin=Depends(require_admin),
+):
+    """Upload a product image.
+    
+    When uploading during product creation or editing, product_id can be provided
+    so the image lands under plantoga/products/{productId}/{uuid}.{ext}.
+    """
+    if image.content_type not in ALLOWED_PRODUCT_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Product image must be a JPG, PNG, or WEBP file",
+        )
+    if image.size is not None and image.size > MAX_PRODUCT_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Product image must be 5MB or smaller",
+        )
+
+    key = await upload_image_file(image, folder="products", entity_id=product_id)
+    return {"url": resolve_image_url(key)}
+
+
+
 @router.get("/{slug}", response_model=ProductResponse)
 async def get_product(slug: str, response: Response, db: AsyncSession = Depends(get_db)):
-    response.headers["Cache-Control"] = "public, max-age=60"
+    response.headers["Cache-Control"] = "no-cache"
     cache_key = f"product:{slug}"
     cached = await cache_get(cache_key)
     if cached:

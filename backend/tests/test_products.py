@@ -38,7 +38,7 @@ async def _bulk_seed(client: AsyncClient, admin_token: str, count: int = 5):
 async def test_list_products_empty(client: AsyncClient):
     resp = await client.get(PROD_URL)
     assert resp.status_code == 200
-    assert resp.headers["cache-control"] == "public, max-age=300, stale-while-revalidate=60"
+    assert resp.headers["cache-control"] == "no-cache"
     data = resp.json()
     assert data["items"] == []
     assert data["total"] == 0
@@ -246,3 +246,45 @@ async def test_soft_delete(client: AsyncClient, admin_token: str):
     # Slug lookup should 404
     slug_resp = await client.get(f"{PROD_URL}/plant-1")
     assert slug_resp.status_code == 404
+
+
+# ---- Update & Image Upload --------------------------------------------
+
+@pytest.mark.asyncio
+async def test_upload_product_image_success(client: AsyncClient, admin_token: str):
+    resp = await client.post(
+        f"{PROD_URL}/upload-image",
+        files={"image": ("plant.png", b"fake-image", "image/png")},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert "url" in resp.json()
+    assert "plantoga/products/" in resp.json()["url"]
+
+
+
+@pytest.mark.asyncio
+async def test_update_product_success(client: AsyncClient, admin_token: str):
+    await _bulk_seed(client, admin_token, count=1)
+    
+    # Get product
+    resp = await client.get(f"{PROD_URL}/plant-1")
+    product = resp.json()
+    pid = product["id"]
+
+    # Update product
+    update_resp = await client.put(
+        f"{PROD_URL}/{pid}",
+        json={
+            "name": "Updated Plant 1",
+            "stock_qty": 99,
+            "images": ["https://example.com/new-image.jpg"]
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert update_resp.status_code == 200, update_resp.text
+    data = update_resp.json()
+    assert data["name"] == "Updated Plant 1"
+    assert data["stock_qty"] == 99
+    assert data["images"] == ["https://example.com/new-image.jpg"]
+
