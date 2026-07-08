@@ -171,6 +171,7 @@ class Order(Base):
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.PENDING)
     total_amount: Mapped[float] = mapped_column(Float, nullable=False)
     payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    razorpay_order_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     payment_status: Mapped[PaymentStatus] = mapped_column(
         Enum(PaymentStatus), default=PaymentStatus.PENDING
     )
@@ -260,6 +261,15 @@ class Banner(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=_utcnow, nullable=True
     )
+
+
+class WebhookEvent(Base):
+    __tablename__ = "webhook_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    razorpay_event_id: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 # Event listeners for Product model

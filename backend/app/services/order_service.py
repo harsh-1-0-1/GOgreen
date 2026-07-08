@@ -1,10 +1,10 @@
 
-from loguru import logger
 import httpx
-from sqlalchemy import func, select
+from loguru import logger
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
 from app.db.models import (
@@ -18,7 +18,6 @@ from app.db.models import (
     Product,
 )
 from app.schemas.order import DirectCheckoutItem
-
 from app.services.cart_service import resolve_variant_details
 
 
@@ -79,9 +78,16 @@ async def _reserve_product_for_order(
         product.stock_qty = sum(int(v or 0) for v in variants.get("stock", {}).values())
         flag_modified(product, "variants")
     else:
-        if product.stock_qty < quantity:
+        # Atomic SQL update for simple products
+        update_stmt = (
+            update(Product)
+            .where(Product.id == product_id, Product.stock_qty >= quantity)
+            .values(stock_qty=Product.stock_qty - quantity)
+        )
+        res = await db.execute(update_stmt)
+        if res.rowcount == 0:
             raise ValueError(
-                f"Insufficient stock for '{product.name}': requested {quantity}, available {product.stock_qty}"
+                f"Insufficient stock for '{product.name}': requested {quantity}"
             )
         product.stock_qty -= quantity
 
@@ -155,6 +161,9 @@ async def checkout(
 
     razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
 
+    order.razorpay_order_id = razorpay_data.get("order_id")
+    await db.flush()
+
     logger.info("Checkout complete: order_id={} amount={}", order.id, total_amount)
     return order, razorpay_data
 
@@ -199,6 +208,10 @@ async def direct_checkout(
     await db.flush()
 
     razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+
+    order.razorpay_order_id = razorpay_data.get("order_id")
+    await db.flush()
+
     logger.info("Direct checkout complete: order_id={} amount={}", order.id, order.total_amount)
     return order, razorpay_data
 
@@ -226,12 +239,25 @@ async def get_order(db: AsyncSession, order_id: int, user_id: int) -> Order | No
     return result.scalar_one_or_none()
 
 
-async def mark_paid(db: AsyncSession, order_id: int, payment_id: str) -> Order | None:
-    """Mark order as paid from Razorpay webhook."""
+async def mark_paid(db: AsyncSession, order_id: int, payment_id: str, amount_paid_paise: int) -> Order | None:
+    """Mark order as paid from Razorpay webhook, with amount verification and idempotency."""
     result = await db.execute(select(Order).where(Order.id == order_id))
     order = result.scalar_one_or_none()
     if not order:
         return None
+
+    if order.payment_status == PaymentStatus.PAID:
+        logger.info("Idempotency guard: Order {} is already PAID. Ignoring.", order_id)
+        return order
+
+    expected_paise = int(round(order.total_amount * 100))
+    if amount_paid_paise != expected_paise:
+        logger.critical(
+            "Amount mismatch for order_id={}. Expected: {} paise, Received: {} paise. Flagging for manual review.",
+            order_id, expected_paise, amount_paid_paise
+        )
+        return order
+
     order.payment_status = PaymentStatus.PAID
     order.status = OrderStatus.CONFIRMED
     order.payment_id = payment_id
@@ -245,8 +271,27 @@ async def mark_failed(db: AsyncSession, order_id: int) -> Order | None:
     order = result.scalar_one_or_none()
     if not order:
         return None
+
+    if order.status == OrderStatus.CANCELLED:
+        return order
+
     order.payment_status = PaymentStatus.FAILED
     order.status = OrderStatus.CANCELLED
     await db.flush()
     logger.info("Order {} marked FAILED", order_id)
+    return order
+
+
+async def mark_refunded(db: AsyncSession, order_id: int, refund_id: str) -> Order | None:
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if not order:
+        return None
+
+    if order.payment_status == PaymentStatus.REFUNDED:
+        return order
+
+    order.payment_status = PaymentStatus.REFUNDED
+    await db.flush()
+    logger.info("Order {} marked REFUNDED, refund_id={}", order_id, refund_id)
     return order
