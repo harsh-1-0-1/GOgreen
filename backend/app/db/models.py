@@ -8,10 +8,12 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -116,6 +118,14 @@ class ProductReview(Base):
 
 class Cart(Base):
     __tablename__ = "carts"
+    __table_args__ = (
+        # Partial unique indexes matching migration a2b3c4d5e6f7.
+        # One active cart per user and one per guest session.
+        Index("ix_carts_user_id_unique", "user_id", unique=True,
+              postgresql_where="user_id IS NOT NULL"),
+        Index("ix_carts_session_id_unique", "session_id", unique=True,
+              postgresql_where="session_id IS NOT NULL"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
@@ -250,3 +260,19 @@ class Banner(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=_utcnow, nullable=True
     )
+
+
+# Event listeners for Product model
+@event.listens_for(Product, "before_insert")
+@event.listens_for(Product, "before_update")
+def sync_stock_qty(mapper, connection, target):
+    """Derive stock_qty from variants.stock before every write.
+    
+    This ensures stock_qty is always the sum of variant stocks, even if
+    the client sends an incorrect value or the DB is edited directly via ORM.
+    
+    Only applies when variants are present and have a stock dict.
+    For non-variant products, the client-sent stock_qty is used as-is.
+    """
+    if target.variants and "stock" in target.variants:
+        target.stock_qty = sum(int(v or 0) for v in target.variants["stock"].values())

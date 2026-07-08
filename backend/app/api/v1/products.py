@@ -80,10 +80,8 @@ async def upload_variant_image(
 ):
     """Upload an image used by a product variant (pot type, combo, etc.).
 
-    When uploading during product creation (before product.id exists) product_id
-    is None; the utility generates a UUID staging folder. When editing an existing
-    product, product_id is provided so the image lands under
-    plantoga/product-variants/{productId}/{uuid}.{ext}.
+    Returns both the relative storage key and the resolved full URL.
+    The key should be stored in the database; the URL is for display only.
     """
     if image.content_type not in ALLOWED_PRODUCT_IMAGE_TYPES:
         raise HTTPException(
@@ -97,7 +95,7 @@ async def upload_variant_image(
         )
 
     key = await upload_image_file(image, folder="product-variants", entity_id=product_id)
-    return {"url": resolve_image_url(key)}
+    return {"key": key, "url": resolve_image_url(key)}
 
 
 @router.post("/upload-image")
@@ -108,8 +106,8 @@ async def upload_product_image(
 ):
     """Upload a product image.
     
-    When uploading during product creation or editing, product_id can be provided
-    so the image lands under plantoga/products/{productId}/{uuid}.{ext}.
+    Returns both the relative storage key and the resolved full URL.
+    The key should be stored in the database; the URL is for display only.
     """
     if image.content_type not in ALLOWED_PRODUCT_IMAGE_TYPES:
         raise HTTPException(
@@ -123,8 +121,48 @@ async def upload_product_image(
         )
 
     key = await upload_image_file(image, folder="products", entity_id=product_id)
-    return {"url": resolve_image_url(key)}
+    return {"key": key, "url": resolve_image_url(key)}
 
+
+
+@router.get("/admin/{product_id}/raw")
+async def get_product_raw(
+    product_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Return product raw data for admin editing.
+    
+    Returns relative image keys exactly as stored in DB, not resolved URLs.
+    Used by admin edit form to seed state without URL→key round-trip.
+    
+    ⚠️ Keep field list in sync with Product model when schema changes.
+    """
+    product = await product_service.get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Explicit dict to avoid SQLAlchemy __dict__ leakage and datetime encoding issues
+    return {
+        "id": product.id,
+        "name": product.name,
+        "slug": product.slug,
+        "description": product.description,
+        "price": product.price,
+        "original_price": product.original_price,
+        "stock_qty": product.stock_qty,
+        "category_id": product.category_id,
+        "images": product.images or [],  # relative keys, not resolved URLs
+        "tags": product.tags or [],
+        "care_tips": product.care_tips or [],
+        "how_to_guide": product.how_to_guide,
+        "sunlight": product.sunlight,
+        "watering": product.watering,
+        "badge": product.badge,
+        "is_active": product.is_active,
+        "variants": product.variants,  # raw dict with relative keys in image fields
+        "created_at": product.created_at.isoformat() if product.created_at else None,
+    }
 
 
 @router.get("/{slug}", response_model=ProductResponse)
@@ -210,23 +248,26 @@ async def create_product(
     # Track every uploaded key so we can clean up orphaned files if a later upload
     # or the final DB flush fails (get_db rolls back the transaction, but S3/disk
     # writes are not transactional).
-    product = await product_service.create_product(db, payload, image_urls=product_image_keys)
-
-    uploaded_keys: list[str] = []
     try:
-        for img in valid_images:
-            key = await upload_image_file(img, folder="products", entity_id=product.id)
-            uploaded_keys.append(key)
-            product.images = list(product.images or []) + [key]
+        product = await product_service.create_product(db, payload, image_urls=product_image_keys)
 
-        await db.flush()
-        await db.refresh(product)
-        return product
-    except Exception:
-        # Clean up any files that were written before the failure
-        for key in uploaded_keys:
-            await delete_image_file(key)
-        raise
+        uploaded_keys: list[str] = []
+        try:
+            for img in valid_images:
+                key = await upload_image_file(img, folder="products", entity_id=product.id)
+                uploaded_keys.append(key)
+                product.images = list(product.images or []) + [key]
+
+            await db.flush()
+            await db.refresh(product)
+            return product
+        except Exception:
+            # Clean up any files that were written before the failure
+            for key in uploaded_keys:
+                await delete_image_file(key)
+            raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.put("/{product_id}", response_model=ProductResponse)
@@ -251,7 +292,10 @@ async def update_product(
         # Store relative keys in the DB
         body = body.model_copy(update={"images": [extract_relative_key(u) for u in body.images if u]})
 
-    product = await product_service.update_product(db, product, body)
+    try:
+        product = await product_service.update_product(db, product, body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     # DB flush has succeeded — now safe to delete the removed images
     for removed_key in keys_to_delete:
