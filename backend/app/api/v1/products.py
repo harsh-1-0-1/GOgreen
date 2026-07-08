@@ -207,16 +207,26 @@ async def create_product(
     )
 
     # Flush first to get product.id, then upload using that id as the folder namespace.
-    # If any upload fails, the get_db generator rolls back the transaction automatically.
+    # Track every uploaded key so we can clean up orphaned files if a later upload
+    # or the final DB flush fails (get_db rolls back the transaction, but S3/disk
+    # writes are not transactional).
     product = await product_service.create_product(db, payload, image_urls=product_image_keys)
 
-    for img in valid_images:
-        key = await upload_image_file(img, folder="products", entity_id=product.id)
-        product.images = list(product.images or []) + [key]
+    uploaded_keys: list[str] = []
+    try:
+        for img in valid_images:
+            key = await upload_image_file(img, folder="products", entity_id=product.id)
+            uploaded_keys.append(key)
+            product.images = list(product.images or []) + [key]
 
-    await db.flush()
-    await db.refresh(product)
-    return product
+        await db.flush()
+        await db.refresh(product)
+        return product
+    except Exception:
+        # Clean up any files that were written before the failure
+        for key in uploaded_keys:
+            await delete_image_file(key)
+        raise
 
 
 @router.put("/{product_id}", response_model=ProductResponse)
@@ -230,16 +240,23 @@ async def update_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    # Delete images that were removed from the list
+    # Capture the set of keys to delete *before* the update, but only
+    # delete them *after* the DB flush succeeds — so a DB failure never
+    # leaves the product referencing images that no longer exist.
+    keys_to_delete: set[str] = set()
     if body.images is not None:
         new_keys = {extract_relative_key(url) for url in body.images if url}
         old_keys = set(product.images or [])
-        for removed_key in old_keys - new_keys:
-            await delete_image_file(removed_key)
+        keys_to_delete = old_keys - new_keys
         # Store relative keys in the DB
         body = body.model_copy(update={"images": [extract_relative_key(u) for u in body.images if u]})
 
     product = await product_service.update_product(db, product, body)
+
+    # DB flush has succeeded — now safe to delete the removed images
+    for removed_key in keys_to_delete:
+        await delete_image_file(removed_key)
+
     return product
 
 
