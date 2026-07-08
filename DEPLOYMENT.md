@@ -15,7 +15,7 @@ Create the service from `render.yaml`, or configure the same settings in the Ren
 - Docker build context: `backend`
 - Health check path: `/api/v1/health`
 
-Set the database, Redis, authentication, Cloudinary, Google, PayU, and CORS variables from `.env.example`. Keep CloudFront enforcement off during the first deployment:
+Set the database, Redis, authentication, Cloudinary, Google, Razorpay, and CORS variables from `.env.example`. Keep CloudFront enforcement off during the first deployment:
 
 ```env
 REQUIRE_CLOUDFRONT=false
@@ -127,7 +127,7 @@ BACKEND_PUBLIC_URL=https://d1234abc.cloudfront.net
 GOOGLE_REDIRECT_URI=https://d1234abc.cloudfront.net/api/v1/auth/google/callback
 ```
 
-The application refuses to start if enforcement is enabled without a secret. `BACKEND_PUBLIC_URL` must use CloudFront because it is used to generate PayU callback URLs.
+The application refuses to start if enforcement is enabled without a secret. `BACKEND_PUBLIC_URL` must use CloudFront because it is used to generate Google OAuth callback URLs.
 
 ## 4. Deploy the frontend to Vercel
 
@@ -147,7 +147,7 @@ Redeploy the Vercel project after changing this build-time variable.
 - Raw Render `/api/v1/health` returns `200` for Render health checks.
 - Cart, address, order, authentication, and admin GET responses are not cached.
 - Admin product and category writes work through CloudFront.
-- PayU callbacks and Google OAuth redirects use the CloudFront hostname.
+- Google OAuth redirects use the CloudFront hostname.
 
 CloudFront responses can remain stale for up to their configured TTL after an admin mutation. This version intentionally relies on the short TTL instead of issuing CloudFront invalidations.
 
