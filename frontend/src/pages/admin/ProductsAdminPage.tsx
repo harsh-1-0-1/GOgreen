@@ -109,6 +109,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const [colors, setColors] = useState<VariantColorDraft[]>([]);
   const [pots, setPots] = useState<VariantPotDraft[]>([]);
   const [uploadingPotImage, setUploadingPotImage] = useState<number | null>(null);
+  const [uploadingDefaultImage, setUploadingDefaultImage] = useState(false);
+  const [uploadingComboImage, setUploadingComboImage] = useState<string | null>(null);
   const [sizes, setSizes] = useState<VariantSizeDraft[]>([]);
   const [defaultImage, setDefaultImage] = useState('');
   const [stockByKey, setStockByKey] = useState<Record<string, number>>({});
@@ -379,6 +381,44 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       toast.error(err.response?.data?.detail || 'Failed to upload pot image');
     } finally {
       setUploadingPotImage(null);
+    }
+  }
+
+  async function handleDefaultImageUpload(file?: File) {
+    if (!file) return;
+    setUploadingDefaultImage(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      if (editProduct?.id) {
+        fd.append('product_id', String(editProduct.id));
+      }
+      const { data } = await api.post<{ url: string }>('/products/upload-image', fd);
+      setDefaultImage(data.url);
+      toast.success('Default image uploaded');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to upload default image');
+    } finally {
+      setUploadingDefaultImage(false);
+    }
+  }
+
+  async function handleComboImageUpload(comboKey: string, file?: File) {
+    if (!file) return;
+    setUploadingComboImage(comboKey);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      if (editProduct?.id) {
+        fd.append('product_id', String(editProduct.id));
+      }
+      const { data } = await api.post<{ url: string }>('/products/upload-image', fd);
+      setImageByKey({ ...imageByKey, [comboKey]: data.url });
+      toast.success('Combination image uploaded');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to upload combination image');
+    } finally {
+      setUploadingComboImage(null);
     }
   }
   
@@ -856,17 +896,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                               <ImageIcon size={22} className="text-gray-300" />
                             )}
                           </div>
-                          <div className="flex-1 space-y-2">
-                            <input
-                              type="url"
-                              value={pot.image_url}
-                              onChange={(e) => setPots(pots.map((p, i) => i === index ? { ...p, image_url: e.target.value } : p))}
-                              placeholder="Pot image URL (https://...)"
-                              className={`${inputClass} bg-white`}
-                            />
-                            <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 ${uploadingPotImage === index ? 'opacity-60 pointer-events-none' : ''}`}>
-                              <Upload size={13} />
-                              {uploadingPotImage === index ? 'Uploading…' : 'Upload pot image'}
+                          <div className="flex-1">
+                            <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingPotImage === index ? 'opacity-60 pointer-events-none' : ''}`}>
+                              <Upload size={14} />
+                              {uploadingPotImage === index ? 'Uploading…' : pot.image_url ? 'Change pot image' : 'Upload pot image'}
                               <input
                                 type="file"
                                 accept="image/jpeg,image/png,image/webp"
@@ -877,6 +910,15 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                                 }}
                               />
                             </label>
+                            {pot.image_url && (
+                              <button
+                                type="button"
+                                onClick={() => setPots(pots.map((p, i) => i === index ? { ...p, image_url: '' } : p))}
+                                className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium"
+                              >
+                                Remove image
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -892,7 +934,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="text-xs font-semibold text-gray-700 block">3. Plant Sizes</span>
-                      <span className="text-[10px] text-gray-400">Add size options (e.g. Small, Medium, Large) with optional price difference</span>
+                      <span className="text-[10px] text-gray-400">Add size options (Small, Medium, Large) with optional price difference</span>
                     </div>
                     <button
                       type="button"
@@ -905,17 +947,22 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                   <div className="space-y-2">
                     {sizes.map((size, index) => (
                       <div key={index} className="flex gap-2 items-center">
-                        <input
+                        <select
                           value={size.name}
                           onChange={(e) => setSizes(sizes.map((s, i) => i === index ? { ...s, name: e.target.value } : s))}
-                          placeholder="Size name (e.g. Small, Medium, Large)"
                           className={`${inputClass} flex-1`}
-                        />
+                        >
+                          <option value="">Select Size</option>
+                          <option value="Small">Small</option>
+                          <option value="Medium">Medium</option>
+                          <option value="Large">Large</option>
+                          <option value="Extra Large">Extra Large</option>
+                        </select>
                         <input
                           value={size.description}
                           onChange={(e) => setSizes(sizes.map((s, i) => i === index ? { ...s, description: e.target.value } : s))}
                           placeholder="Hint (e.g. 6–12 in)"
-                          className={`${inputClass} w-28`}
+                          className={`${inputClass} w-40`}
                         />
                         <div className="flex items-center gap-1.5 shrink-0 w-28">
                           <span className="text-xs text-gray-500">₹</span>
@@ -952,21 +999,43 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                   )}
                 </div>
 
-                {/* Default Fallback Image URL */}
-                <div className="border-t pt-4 space-y-1">
-                  <label className="text-xs font-semibold text-gray-700 block">4. Default Variant Image URL</label>
-                  <input
-                    value={defaultImage}
-                    onChange={(e) => setDefaultImage(e.target.value)}
-                    className={inputClass}
-                    placeholder="https://..."
-                  />
+                {/* Default Fallback Image */}
+                <div className="border-t pt-4 space-y-2">
+                  <label className="text-xs font-semibold text-gray-700 block">4. Default Variant Image</label>
                   <p className="text-[10px] text-gray-400">This image is loaded if a specific combination lacks its own image.</p>
-                  {defaultImage && (
-                    <div className="mt-2 h-14 w-14 rounded-lg border overflow-hidden bg-gray-50">
-                      <img src={defaultImage} alt="Default variant preview" className="h-full w-full object-cover" />
+                  <div className="flex gap-3 items-center">
+                    <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
+                      {defaultImage ? (
+                        <img src={defaultImage} alt="Default variant preview" className="h-full w-full object-cover" />
+                      ) : (
+                        <ImageIcon size={22} className="text-gray-300" />
+                      )}
                     </div>
-                  )}
+                    <div className="flex-1">
+                      <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingDefaultImage ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <Upload size={14} />
+                        {uploadingDefaultImage ? 'Uploading…' : defaultImage ? 'Change default image' : 'Upload default image'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            void handleDefaultImageUpload(e.target.files?.[0]);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                      {defaultImage && (
+                        <button
+                          type="button"
+                          onClick={() => setDefaultImage('')}
+                          className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium"
+                        >
+                          Remove image
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Combinations Matrix */}
@@ -997,16 +1066,32 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                               </td>
                               <td className="p-3">
                                 <div className="flex gap-2 items-center">
-                                  <input
-                                    value={imageByKey[row.key] || ''}
-                                    onChange={(e) => setImageByKey({ ...imageByKey, [row.key]: e.target.value })}
-                                    className="flex-1 px-2 py-1.5 border rounded-lg text-xs"
-                                    placeholder="https://..."
-                                  />
                                   {imageByKey[row.key] && (
-                                    <div className="h-7 w-7 rounded border overflow-hidden bg-gray-50 shrink-0">
+                                    <div className="h-9 w-9 rounded border overflow-hidden bg-gray-50 shrink-0">
                                       <img src={imageByKey[row.key]} alt="" className="h-full w-full object-cover" />
                                     </div>
+                                  )}
+                                  <label className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 ${uploadingComboImage === row.key ? 'opacity-60 pointer-events-none' : ''}`}>
+                                    <Upload size={12} />
+                                    {uploadingComboImage === row.key ? 'Uploading…' : imageByKey[row.key] ? 'Change' : 'Upload'}
+                                    <input
+                                      type="file"
+                                      accept="image/jpeg,image/png,image/webp"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        void handleComboImageUpload(row.key, e.target.files?.[0]);
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </label>
+                                  {imageByKey[row.key] && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setImageByKey({ ...imageByKey, [row.key]: '' })}
+                                      className="text-xs text-red-500 hover:text-red-600 font-medium"
+                                    >
+                                      ✕
+                                    </button>
                                   )}
                                 </div>
                               </td>
@@ -1087,14 +1172,18 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           <button
             type="button"
             onClick={handleSubmit(onSubmit)}
-            disabled={submitting || uploadingPotImage !== null}
+            disabled={submitting || uploadingPotImage !== null || uploadingDefaultImage || uploadingComboImage !== null}
             className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 transition"
           >
             {uploadingPotImage !== null
               ? 'Uploading Pot Image...'
-              : submitting
-                ? 'Saving Product...'
-                : (isEdit ? 'Save Changes' : 'Publish Product')}
+              : uploadingDefaultImage
+                ? 'Uploading Default Image...'
+                : uploadingComboImage !== null
+                  ? 'Uploading Combo Image...'
+                  : submitting
+                    ? 'Saving Product...'
+                    : (isEdit ? 'Save Changes' : 'Publish Product')}
           </button>
         </div>
 
