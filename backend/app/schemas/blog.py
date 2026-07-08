@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 class BlogPostCreate(BaseModel):
@@ -19,6 +19,7 @@ class BlogPostUpdate(BaseModel):
     category: str | None = None
     author_name: str | None = None
     is_published: bool | None = None
+    cover_image_url: str | None = None
 
 
 class BlogPostResponse(BaseModel):
@@ -35,6 +36,11 @@ class BlogPostResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("cover_image_url")
+    def serialize_cover_image_url(self, val: str | None) -> str | None:
+        from app.utils.image_upload import resolve_image_url
+        return resolve_image_url(val)
 
 
 class BlogListResponse(BaseModel):

@@ -175,7 +175,11 @@ export default function CartDrawer() {
                         <Minus size={14} />
                       </button>
                       <span className="px-2.5 text-sm font-medium">{item.quantity}</span>
-                      <button onClick={() => handleUpdate(item.id, item.quantity + 1)} className="p-1.5 hover:bg-gray-100 touch-target">
+                      <button
+                        onClick={() => handleUpdate(item.id, item.quantity + 1)}
+                        disabled={item.quantity >= item.available_stock}
+                        className="p-1.5 hover:bg-gray-100 touch-target disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
                         <Plus size={14} />
                       </button>
                     </div>

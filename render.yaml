@@ -1,0 +1,7 @@
+services:
+  - type: web
+    runtime: docker
+    name: plantoga-api
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health

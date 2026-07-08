@@ -36,3 +36,14 @@ export function useProduct(slug: string) {
     enabled: !!slug,
   });
 }
+
+export function useProductRaw(productId: number | null) {
+  return useQuery({
+    queryKey: ['product-raw', productId],
+    queryFn: async () => {
+      const { data } = await api.get(`/products/admin/${productId}/raw`);
+      return data as Product;  // same shape as Product but image fields are relative keys
+    },
+    enabled: !!productId,
+  });
+}

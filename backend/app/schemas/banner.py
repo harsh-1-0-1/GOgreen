@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 class BannerBase(BaseModel):
@@ -40,6 +40,11 @@ class BannerOut(BannerBase):
     image_url: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+    @field_serializer("image_url")
+    def serialize_image_url(self, val: Optional[str]) -> Optional[str]:
+        from app.utils.image_upload import resolve_image_url
+        return resolve_image_url(val)
 
 
 class BannerReorderItem(BaseModel):

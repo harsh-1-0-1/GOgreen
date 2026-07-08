@@ -123,7 +123,9 @@ async def checkout(
     total_amount = 0.0
     order_items_data: list[dict] = []
 
-    for ci in cart.items:
+    # Sort by product_id to guarantee a consistent lock-acquisition order across
+    # concurrent checkouts and prevent deadlocks on the FOR UPDATE rows.
+    for ci in sorted(cart.items, key=lambda ci: ci.product_id):
         item_data = await _reserve_product_for_order(
             db, ci.product_id, ci.quantity, ci.selected_options,
         )
@@ -172,7 +174,10 @@ async def direct_checkout(
 
     total_amount = 0.0
     order_items_data: list[dict] = []
-    for item in items:
+
+    # Sort by product_id to guarantee a consistent lock-acquisition order across
+    # concurrent checkouts and prevent deadlocks on the FOR UPDATE rows.
+    for item in sorted(items, key=lambda i: i.product_id):
         item_data = await _reserve_product_for_order(
             db, item.product_id, item.quantity, item.selected_options,
         )

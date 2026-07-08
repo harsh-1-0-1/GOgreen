@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 
 class CheckoutRequest(BaseModel):
@@ -39,6 +39,11 @@ class OrderItemResponse(BaseModel):
     resolved_image_url: str | None = None
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("resolved_image_url")
+    def serialize_resolved_image_url(self, val: str | None) -> str | None:
+        from app.utils.image_upload import resolve_image_url
+        return resolve_image_url(val)
 
 
 class OrderResponse(BaseModel):

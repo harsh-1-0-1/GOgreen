@@ -18,6 +18,29 @@ def _slugify(text: str) -> str:
     return re.sub(r"-+", "-", slug).strip("-")
 
 
+def _assert_relative_keys(variants: dict | None) -> None:
+    """Guard against full URLs leaking into variant image fields.
+    
+    Variants should only contain relative keys like 'plantoga/products/42/abc.webp'.
+    If a full URL (http://... or https://...) is detected, it means the payload
+    wasn't built correctly or a bulk import bypassed the proper flow.
+    
+    Raises ValueError if any image field contains a full URL.
+    """
+    if not variants:
+        return
+    
+    suspects = [
+        variants.get("default_image"),
+        *variants.get("image_map", {}).values(),
+        *[p.get("image_url") for p in variants.get("pot_types", [])],
+    ]
+    
+    bad = [s for s in suspects if s and (s.startswith("http://") or s.startswith("https://"))]
+    if bad:
+        raise ValueError(f"variants contains full URL(s), expected relative keys: {bad}")
+
+
 def make_list_cache_key(
     category_slug: str | None,
     search: str | None,
@@ -129,8 +152,12 @@ async def create_product(
     if existing.scalar_one_or_none():
         slug = f"{slug}-{func.count()}"
 
+    data = payload.model_dump()
+    if data.get("variants"):
+        _assert_relative_keys(data["variants"])
+
     product = Product(
-        **payload.model_dump(),
+        **data,
         slug=slug,
         images=image_urls or [],
     )
@@ -148,6 +175,11 @@ async def update_product(
     data = payload.model_dump(exclude_unset=True)
     if "name" in data and data["name"]:
         data["slug"] = _slugify(data["name"])
+    if "variants" in data and data["variants"]:
+        _assert_relative_keys(data["variants"])
+    
+    # Full dict reassignment triggers SQLAlchemy dirty tracking for JSON columns.
+    # Do NOT refactor to in-place mutation without calling flag_modified(product, "variants").
     for field, value in data.items():
         setattr(product, field, value)
     await db.flush()

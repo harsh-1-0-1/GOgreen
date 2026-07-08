@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 class ProductCreate(BaseModel):
@@ -57,8 +57,24 @@ class ProductResponse(BaseModel):
     is_active: bool
     created_at: datetime
     variants: dict | None = None
+    # ⚠️ NOTE on variants field image storage:
+    # Despite field names like "image_url", variants store RELATIVE KEYS in the database
+    # (e.g. "plantoga/product-variants/42/abc.webp"), NOT full URLs.
+    # The serializer below resolves them to full URLs in API responses.
+    # Applies to: variants.default_image, variants.image_map[*], variants.pot_types[*].image_url
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("images")
+    def serialize_images(self, images: list[str]) -> list[str]:
+        from app.utils.image_upload import resolve_image_url
+        return [resolve_image_url(img) for img in images] if images else []
+
+    @field_serializer("variants")
+    def serialize_variants(self, variants: dict | None) -> dict | None:
+        from app.utils.image_upload import resolve_variants_images
+        return resolve_variants_images(variants)
+
 
 
 class ProductListResponse(BaseModel):

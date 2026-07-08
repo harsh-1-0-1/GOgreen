@@ -9,16 +9,17 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
+from slowapi.middleware import SlowAPIMiddleware
 
 import app.core.logging as _  # noqa: F401 – initialise loguru sinks
+from app.api.middleware import CloudFrontGateMiddleware
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.rate_limit import limiter
+from app.utils.image_upload import ImageStorageUnavailableError
 from app.utils.redis import close_redis, init_redis
-
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 
 @asynccontextmanager
@@ -40,6 +41,8 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(CloudFrontGateMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -71,6 +74,17 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
+    )
+
+
+@app.exception_handler(ImageStorageUnavailableError)
+async def image_storage_unavailable_handler(
+    _request: Request, exc: ImageStorageUnavailableError
+) -> JSONResponse:
+    logger.error("Image storage unavailable: {}", exc)
+    return JSONResponse(
+        status_code=503,
+        content={"error": "Image upload service unavailable"},
     )
 
 

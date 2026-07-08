@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     APP_NAME: str = "Plantoga"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
+    ENVIRONMENT: str = "development"
+
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = "us-east-1"
+    AWS_S3_BUCKET: str = ""
+    CDN_BASE_URL: str = ""
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./plantoga.db"
     REDIS_URL: str = "redis://localhost:6379"
@@ -39,6 +46,8 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:5173"
     CORS_ORIGIN_REGEX: str = ""
+    REQUIRE_CLOUDFRONT: bool = False
+    CLOUDFRONT_SECRET: str = ""
 
     @field_validator("DEBUG", mode="before")
     @classmethod
@@ -67,6 +76,14 @@ class Settings(BaseSettings):
         if isinstance(v, list):
             return ",".join(v)
         return v or ""
+
+    @model_validator(mode="after")
+    def validate_cloudfront_secret(self) -> "Settings":
+        if self.REQUIRE_CLOUDFRONT and not self.CLOUDFRONT_SECRET.strip():
+            raise ValueError(
+                "CLOUDFRONT_SECRET must be set when REQUIRE_CLOUDFRONT=true"
+            )
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:
