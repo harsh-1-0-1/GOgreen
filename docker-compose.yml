@@ -1,42 +1,53 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: plantoga_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-plantoga}
       POSTGRES_USER: ${POSTGRES_USER:-plantoga}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plantoga}
-    ports:
-      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Not published to the host at all - only reachable by other
+    # containers on this compose's internal network (via service name "postgres").
+    # If you ever need to psql in manually from the VPS shell, use:
+    #   docker exec -it plantoga_postgres psql -U $POSTGRES_USER -d $POSTGRES_DB
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 3s
       retries: 5
+    mem_limit: 512m
+    cpus: 0.5
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    container_name: plantoga_redis
+    restart: unless-stopped
     volumes:
       - redis_data:/data
+    # Also not published - internal only, reached via service name "redis"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
+    mem_limit: 256m
+    cpus: 0.25
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: plantoga_backend
+    restart: unless-stopped
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-plantoga}:${POSTGRES_PASSWORD:-plantoga}@postgres:5432/${POSTGRES_DB:-plantoga}
       REDIS_URL: redis://redis:6379
-      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-http://localhost}
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-https://plantoga.com}
       SECRET_KEY: ${SECRET_KEY:-change-me-to-a-random-secret-key}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
@@ -44,7 +55,7 @@ services:
       DEBUG: ${DEBUG:-false}
       LOG_JSON: ${LOG_JSON:-true}
       SLOW_QUERY_MS: ${SLOW_QUERY_MS:-100}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:8080,http://localhost:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://plantoga.com,https://www.plantoga.com}
       CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-}
       REQUIRE_CLOUDFRONT: ${REQUIRE_CLOUDFRONT:-false}
       CLOUDFRONT_SECRET: ${CLOUDFRONT_SECRET:-}
@@ -58,7 +69,7 @@ services:
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost/api/v1/auth/google/callback}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://plantoga.com/api/v1/auth/google/callback}
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
@@ -74,6 +85,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    mem_limit: 512m
+    cpus: 0.75
 
   frontend:
     build:
@@ -84,12 +97,18 @@ services:
         VITE_RAZORPAY_KEY_ID: ${VITE_RAZORPAY_KEY_ID:-}
         VITE_CDN_BASE_URL: ${VITE_CDN_BASE_URL:-}
         VITE_CORPORATE_INQUIRY_ENDPOINT: ${VITE_CORPORATE_INQUIRY_ENDPOINT:-}
+    container_name: plantoga_frontend
+    restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-80}:80"
+      # NOT port 80 - that's already owned by Hestia's nginx for all domains
+      # on this shared VPS. This container serves on 8090 internally, and
+      # Hestia's nginx vhost for plantoga.com proxies public traffic to it.
+      - "127.0.0.1:${FRONTEND_PORT:-8090}:80"
     depends_on:
       backend:
         condition: service_healthy
-    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
 
   seed:
     build:
