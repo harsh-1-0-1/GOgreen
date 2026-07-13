@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: plantoga
-      POSTGRES_USER: plantoga
-      POSTGRES_PASSWORD: plantoga
+      POSTGRES_DB: ${POSTGRES_DB:-plantoga}
+      POSTGRES_USER: ${POSTGRES_USER:-plantoga}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plantoga}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U plantoga -d plantoga"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -18,7 +18,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -32,26 +32,64 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
-    env_file:
-      - .env
+      - "${BACKEND_PORT:-8000}:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://plantoga:plantoga@postgres:5432/plantoga
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-plantoga}:${POSTGRES_PASSWORD:-plantoga}@postgres:5432/${POSTGRES_DB:-plantoga}
       REDIS_URL: redis://redis:6379
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-http://localhost}
+      SECRET_KEY: ${SECRET_KEY:-change-me-to-a-random-secret-key}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
+      LOG_JSON: ${LOG_JSON:-true}
+      SLOW_QUERY_MS: ${SLOW_QUERY_MS:-100}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:8080,http://localhost:5173}
+      CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-}
+      REQUIRE_CLOUDFRONT: ${REQUIRE_CLOUDFRONT:-false}
+      CLOUDFRONT_SECRET: ${CLOUDFRONT_SECRET:-}
+      CDN_BASE_URL: ${CDN_BASE_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost/api/v1/auth/google/callback}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
     volumes:
-      - ./backend:/app
-      - backend_venv:/app/.venv
+      - backend_static:/app/static
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')\""]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        VITE_RAZORPAY_KEY_ID: ${VITE_RAZORPAY_KEY_ID:-}
+        VITE_CDN_BASE_URL: ${VITE_CDN_BASE_URL:-}
+        VITE_CORPORATE_INQUIRY_ENDPOINT: ${VITE_CORPORATE_INQUIRY_ENDPOINT:-}
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
 
   seed:
     build:
@@ -59,14 +97,11 @@ services:
       dockerfile: Dockerfile
     profiles:
       - seed
-    env_file:
-      - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://plantoga:plantoga@postgres:5432/plantoga
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-plantoga}:${POSTGRES_PASSWORD:-plantoga}@postgres:5432/${POSTGRES_DB:-plantoga}
       REDIS_URL: redis://redis:6379
     volumes:
-      - ./backend:/app
-      - backend_venv:/app/.venv
+      - backend_static:/app/static
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,4 +115,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  backend_venv:
+  backend_static:
