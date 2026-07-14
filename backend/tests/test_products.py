@@ -108,7 +108,7 @@ async def test_get_product_by_slug(client: AsyncClient, admin_token: str):
     await _bulk_seed(client, admin_token, count=1)
     resp = await client.get(f"{PROD_URL}/plant-1")
     assert resp.status_code == 200
-    assert resp.headers["cache-control"] == "public, max-age=60"
+    assert resp.headers["cache-control"] == "no-cache"
     assert resp.json()["slug"] == "plant-1"
 
 

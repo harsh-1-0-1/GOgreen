@@ -160,11 +160,19 @@ def resolve_variant_details(
         price_modifier += float(size_by_slug[normalized[OPTION_SIZE_KEY]].get("price_modifier", 0) or 0)
 
     image_map = variants.get("image_map", {}) or {}
+    combo_img_val = image_map.get(combo)
+    combo_img = None
+    if combo_img_val:
+        if isinstance(combo_img_val, list):
+            combo_img = combo_img_val[0] if combo_img_val else None
+        else:
+            combo_img = combo_img_val
+
     selected_pot_image = None
     if not is_size_only and normalized.get(OPTION_POT_KEY):
         selected_pot_image = pot_by_slug[normalized[OPTION_POT_KEY]].get("image_url")
     resolved_image = (
-        image_map.get(combo)
+        combo_img
         or selected_pot_image
         or variants.get("default_image")
         or _primary_image(product)

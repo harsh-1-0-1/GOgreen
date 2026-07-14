@@ -79,7 +79,8 @@ def resolve_variants_images(variants: dict | None) -> dict | None:
 
     if "image_map" in resolved and isinstance(resolved["image_map"], dict):
         resolved["image_map"] = {
-            k: resolve_image_url(v) for k, v in resolved["image_map"].items()
+            k: [resolve_image_url(img) for img in v] if isinstance(v, list) else []
+            for k, v in resolved["image_map"].items()
         }
 
     if "pot_types" in resolved and isinstance(resolved["pot_types"], list):

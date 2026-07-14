@@ -62,7 +62,7 @@ export interface ProductVariants {
   colors: ProductVariantColor[];
   pot_types: ProductVariantPotType[];
   sizes?: ProductVariantSize[];
-  image_map: Record<string, string>;
+  image_map: Record<string, string[]>;
   default_image: string;
   stock: Record<string, number>;
 }
