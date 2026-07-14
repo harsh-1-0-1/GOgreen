@@ -94,6 +94,7 @@ export default function ProductCard({ product }: { product: Product }) {
             className="font-semibold sm:font-bold text-base sm:text-base"
             style={{ color: SECONDARY }}
           >
+            {hasVariants && <span className="text-xs font-normal text-gray-500 mr-0.5">from</span>}
             ₹{product.price}
           </span>
           {product.original_price && product.original_price > product.price && (

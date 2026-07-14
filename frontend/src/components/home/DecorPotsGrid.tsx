@@ -73,6 +73,7 @@ function ProductTile({ product }: { product: Product }) {
             className="text-base sm:text-lg font-semibold"
             style={{ color: SECONDARY }}
           >
+            {hasVariants && <span className="text-xs font-normal text-gray-500 mr-0.5">from</span>}
             ₹{product.price}
           </span>
           {product.original_price &&

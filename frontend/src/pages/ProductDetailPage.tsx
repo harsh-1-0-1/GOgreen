@@ -39,28 +39,38 @@ function findCategoryName(categories: Category[] | undefined, categoryId: number
   return (search(categories) || 'Plants').toUpperCase();
 }
 
-function MobileGallery({ images }: { images: string[] }) {
-  const [active, setActive] = useState(0);
+function MobileGallery({
+  images,
+  activeIndex,
+  onActiveChange,
+}: {
+  images: string[];
+  activeIndex: number;
+  onActiveChange: (i: number) => void;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const list = images.length ? images : ['https://placehold.co/600x600?text=Plant'];
+
+  // Scroll to active slide whenever activeIndex changes from outside
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ left: activeIndex * el.clientWidth, behavior: 'smooth' });
+  }, [activeIndex]);
 
   function handleScroll() {
     const el = scrollRef.current;
     if (!el) return;
     const idx = Math.round(el.scrollLeft / el.clientWidth);
-    setActive(idx);
+    onActiveChange(idx);
   }
 
   function scrollPrev() {
-    if (active > 0) {
-      scrollRef.current?.scrollBy({ left: -window.innerWidth, behavior: 'smooth' });
-    }
+    if (activeIndex > 0) onActiveChange(activeIndex - 1);
   }
 
   function scrollNext() {
-    if (active < list.length - 1) {
-      scrollRef.current?.scrollBy({ left: window.innerWidth, behavior: 'smooth' });
-    }
+    if (activeIndex < list.length - 1) onActiveChange(activeIndex + 1);
   }
 
   return (
@@ -84,9 +94,9 @@ function MobileGallery({ images }: { images: string[] }) {
       {list.length > 1 && (
         <button 
           onClick={scrollPrev}
-          disabled={active === 0}
+          disabled={activeIndex === 0}
           className={`absolute top-1/2 -translate-y-1/2 left-0 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center -ml-2 z-10 touch-target text-gray-800 transition-opacity ${
-            active === 0 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
+            activeIndex === 0 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
           }`}
         >
           <ChevronLeft size={20} />
@@ -96,9 +106,9 @@ function MobileGallery({ images }: { images: string[] }) {
       {list.length > 1 && (
         <button 
           onClick={scrollNext}
-          disabled={active === list.length - 1}
+          disabled={activeIndex === list.length - 1}
           className={`absolute top-1/2 -translate-y-1/2 right-0 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center -mr-2 z-10 touch-target text-gray-800 transition-opacity ${
-            active === list.length - 1 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
+            activeIndex === list.length - 1 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
           }`}
         >
           <ChevronRight size={20} />
@@ -108,22 +118,29 @@ function MobileGallery({ images }: { images: string[] }) {
   );
 }
 
-function DesktopGallery({ images }: { images: string[] }) {
-  const [active, setActive] = useState(0);
+function DesktopGallery({
+  images,
+  activeIndex,
+  onActiveChange,
+}: {
+  images: string[];
+  activeIndex: number;
+  onActiveChange: (i: number) => void;
+}) {
   const list = images.length ? images : ['https://placehold.co/600x600?text=Plant'];
 
   return (
     <div className="space-y-3">
       <div className="aspect-square rounded-2xl overflow-hidden bg-gray-50">
-        <img src={list[active]} alt="Product" className="w-full h-full object-cover" loading="lazy" />
+        <img src={list[activeIndex]} alt="Product" className="w-full h-full object-cover" loading="lazy" />
       </div>
       {list.length > 1 && (
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
           {list.map((img, i) => (
             <button
               key={i}
-              onClick={() => setActive(i)}
-              className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition ${i === active ? 'border-primary' : 'border-transparent'}`}
+              onClick={() => onActiveChange(i)}
+              className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition ${i === activeIndex ? 'border-primary' : 'border-transparent'}`}
             >
               <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
             </button>
@@ -162,6 +179,8 @@ function CareTips({ tips }: { tips: string[] }) {
   );
 }
 
+const NO_POT_SLUG = 'no-pot';
+
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading, isError } = useProduct(slug!);
@@ -173,6 +192,7 @@ export default function ProductDetailPage() {
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedPot, setSelectedPot] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [galleryActive, setGalleryActive] = useState(0);
 
   const galleryRef = useRef<HTMLDivElement>(null);
   const isInitialized = useRef(false);
@@ -224,7 +244,8 @@ export default function ProductDetailPage() {
       .find(([, stock]) => Number(stock) > 0)?.[0];
     const inStockParts = firstInStockKey?.split('__') || [];
     setSelectedColor(colors.length ? (inStockParts[0] || colors[0].slug) : null);
-    setSelectedPot(pots.length ? (inStockParts[1] || pots[0].slug) : null);
+    // Always default to "no-pot" (just the plant) when pot types are available
+    setSelectedPot(pots.length ? NO_POT_SLUG : null);
     setSelectedSize(sizes.length
       ? (colors.length && pots.length ? inStockParts[2] : inStockParts[0]) || sizes[0].slug
       : null);
@@ -259,7 +280,10 @@ export default function ProductDetailPage() {
 
   const selectedPotType = variants?.pot_types?.find((p) => p.slug === selectedPot);
   const selectedSizeType = sizes.find((s) => s.slug === selectedSize);
-  const selectedStock = hasVariants ? Number(variants?.stock?.[comboKey] ?? 0) : product.stock_qty;
+  // "no-pot" is a synthetic option — stock comes directly from product.stock_qty
+  const selectedStock = selectedPot === NO_POT_SLUG
+    ? product.stock_qty
+    : (hasVariants ? Number(variants?.stock?.[comboKey] ?? 0) : product.stock_qty);
   const selectedPriceModifier =
     (selectedPotType?.price_modifier || 0) + (selectedSizeType?.price_modifier || 0);
   const displayPrice = product.price + selectedPriceModifier;
@@ -276,6 +300,10 @@ export default function ProductDetailPage() {
   const galleryImages = displayImage
     ? [displayImage, ...(product.images || []).filter((img) => img !== displayImage)]
     : product.images || [];
+
+  // Reset gallery to first image whenever the variant-driven hero image changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setGalleryActive(0); }, [displayImage]);
 
   // Build selectedOptions for cart
   let selectedOptions: Record<string, string> | null = null;
@@ -326,7 +354,7 @@ export default function ProductDetailPage() {
     <div ref={galleryRef} className="pb-20 md:pb-0 scroll-mt-[100px] sm:scroll-mt-[110px] lg:scroll-mt-[120px]">
       {/* Mobile image gallery */}
       <div className="md:hidden">
-        <MobileGallery images={galleryImages} />
+        <MobileGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} />
       </div>
 
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
@@ -342,7 +370,7 @@ export default function ProductDetailPage() {
         <div className="grid md:grid-cols-2 gap-6 lg:gap-10">
           {/* Desktop gallery */}
           <div className="hidden md:block">
-            <DesktopGallery images={galleryImages} />
+            <DesktopGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} />
           </div>
 
           <div className="space-y-4 sm:space-y-6">
@@ -468,6 +496,26 @@ export default function ProductDetailPage() {
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pot Type</p>
                       <div className="flex flex-wrap gap-2">
+                        {/* ── No Pot (synthetic default option) ── */}
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedPot(NO_POT_SLUG); setQty(1); }}
+                          className={`w-24 min-h-24 shrink-0 px-2 py-2 rounded-xl border text-xs font-medium transition ${
+                            selectedPot === NO_POT_SLUG
+                              ? 'border-primary bg-primary text-white shadow-sm'
+                              : 'border-gray-200 bg-white hover:border-primary/40'
+                          }`}
+                        >
+                          <span className="flex h-11 items-center justify-center mb-1">
+                            <span className={`text-3xl ${selectedPot === NO_POT_SLUG ? 'opacity-90' : 'opacity-30'}`}>🌿</span>
+                          </span>
+                          <span className="block truncate">No Pot</span>
+                          <span className={`block mt-0.5 ${selectedPot === NO_POT_SLUG ? 'text-white/80' : 'text-gray-500'}`}>
+                            Included
+                          </span>
+                        </button>
+
+                        {/* ── Actual pot type options ── */}
                         {variants!.pot_types.map((pot) => {
                           const potCombo = selectedColor
                             ? `${selectedColor}__${pot.slug}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`
