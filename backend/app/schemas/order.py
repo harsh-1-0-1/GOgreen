@@ -1,7 +1,8 @@
 from datetime import datetime
+from typing import Any
 from typing import Literal
 
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, Field, computed_field, field_serializer
 
 
 class CheckoutRequest(BaseModel):
@@ -40,13 +41,41 @@ class OrderItemResponse(BaseModel):
     unit_price: float
     selected_options: dict[str, str] | None = None
     resolved_image_url: str | None = None
+    product: Any = Field(default=None, exclude=True)
 
     model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def product_name(self) -> str | None:
+        return self.product.name if getattr(self, "product", None) else None
 
     @field_serializer("resolved_image_url")
     def serialize_resolved_image_url(self, val: str | None) -> str | None:
         from app.utils.image_upload import resolve_image_url
         return resolve_image_url(val)
+
+
+class OrderUserResponse(BaseModel):
+    id: int
+    email: str
+    full_name: str
+    phone: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class OrderAddressResponse(BaseModel):
+    id: int
+    full_name: str
+    phone: str
+    line1: str
+    line2: str | None = None
+    city: str
+    state: str
+    pincode: str
+
+    model_config = {"from_attributes": True}
 
 
 class OrderResponse(BaseModel):
@@ -59,6 +88,8 @@ class OrderResponse(BaseModel):
     payment_status: str
     address_id: int
     created_at: datetime
+    user: OrderUserResponse | None = None
+    address: OrderAddressResponse | None = None
     items: list[OrderItemResponse] = []
 
     model_config = {"from_attributes": True}

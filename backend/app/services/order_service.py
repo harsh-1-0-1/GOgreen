@@ -244,7 +244,11 @@ async def list_orders(
     offset = (page - 1) * limit
     result = await db.execute(
         select(Order).where(Order.user_id == user_id)
-        .options(selectinload(Order.items))
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.user),
+            selectinload(Order.address),
+        )
         .order_by(Order.created_at.desc())
         .offset(offset).limit(limit)
     )
@@ -254,7 +258,11 @@ async def list_orders(
 async def get_order(db: AsyncSession, order_id: int, user_id: int) -> Order | None:
     result = await db.execute(
         select(Order).where(Order.id == order_id, Order.user_id == user_id)
-        .options(selectinload(Order.items).selectinload(OrderItem.product))
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.user),
+            selectinload(Order.address),
+        )
     )
     return result.scalar_one_or_none()
 

@@ -152,10 +152,18 @@ export interface Address {
 export interface OrderItem {
   id: number;
   product_id: number;
+  product_name: string | null;
   quantity: number;
   unit_price: number;
   selected_options: Record<string, string> | null;
   resolved_image_url: string | null;
+}
+
+export interface OrderUser {
+  id: number;
+  email: string;
+  full_name: string;
+  phone: string | null;
 }
 
 export interface Order {
@@ -168,6 +176,8 @@ export interface Order {
   payment_status: string;
   address_id: number;
   created_at: string;
+  user: OrderUser | null;
+  address: Address | null;
   items: OrderItem[];
 }
 
