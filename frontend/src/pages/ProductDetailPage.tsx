@@ -294,16 +294,28 @@ export default function ProductDetailPage() {
     displayOriginalPrice && displayOriginalPrice > displayPrice
       ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
       : null;
-  const displayImage = hasVariants
-    ? variants?.image_map?.[comboKey] || selectedPotType?.image_url || variants?.default_image || product.images?.[0]
-    : product.images?.[0];
-  const galleryImages = displayImage
-    ? [displayImage, ...(product.images || []).filter((img) => img !== displayImage)]
-    : product.images || [];
+  // Derive gallery images
+  let galleryImages: string[] = [];
+  if (hasVariants) {
+    const comboImages = variants?.image_map?.[comboKey];
+    if (Array.isArray(comboImages) && comboImages.length > 0) {
+      galleryImages = comboImages;
+    } else if (selectedPotType?.image_url) {
+      galleryImages = [selectedPotType.image_url];
+    } else if (variants?.default_image) {
+      galleryImages = [variants.default_image];
+    }
+  }
 
-  // Reset gallery to first image whenever the variant-driven hero image changes
+  if (galleryImages.length === 0) {
+    galleryImages = product.images || [];
+  }
+
+  const displayImage = galleryImages[0] || product.images?.[0] || '';
+
+  // Reset gallery to first image whenever the selected comboKey changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setGalleryActive(0); }, [displayImage]);
+  useEffect(() => { setGalleryActive(0); }, [comboKey]);
 
   // Build selectedOptions for cart
   let selectedOptions: Record<string, string> | null = null;

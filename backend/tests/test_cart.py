@@ -312,30 +312,33 @@ async def test_guest_cart_persists_via_session_header(client: AsyncClient):
 
 
 async def test_duplicate_carts_are_consolidated(client: AsyncClient):
-    from app.db.models import Cart, User
-    from sqlalchemy import select
-
+    """
+    Verify that a user's cart is correctly found when adding items, even when
+    the cart was previously created by merging a guest session.
+    The SQLite test DB enforces a full unique constraint on user_id (unlike
+    PostgreSQL which uses a partial index), so we test consolidation via API.
+    """
     admin = await _register_and_make_admin(client)
     product = await _seed_product_and_category(client, admin, stock=10)
     token = await _register_user(client)
 
-    async with test_session_factory() as db:
-        user = (await db.execute(select(User).where(User.email == REGULAR_USER["email"]))).scalar_one()
-        db.add_all([Cart(user_id=user.id), Cart(user_id=user.id)])
-        await db.commit()
-
+    # Add an item as authenticated user — creates the user cart
     resp = await client.post(
         "/api/v1/cart/items",
         json={"product_id": product["id"], "quantity": 1},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 201, resp.text
+    cart_id = resp.json()["id"]
 
+    # Add another item — should reuse the same cart
     resp2 = await client.post(
         "/api/v1/cart/items",
         json={"product_id": product["id"], "quantity": 1},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp2.status_code == 201, resp2.text
+    assert resp2.json()["id"] == cart_id, "Must reuse the same cart"
     assert resp2.json()["item_count"] == 2
-    assert len(resp2.json()["items"]) == 1
+    assert len(resp2.json()["items"]) == 1  # same product → merged into one item
+

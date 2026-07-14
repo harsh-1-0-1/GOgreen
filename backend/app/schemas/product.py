@@ -61,7 +61,8 @@ class ProductResponse(BaseModel):
     # Despite field names like "image_url", variants store RELATIVE KEYS in the database
     # (e.g. "plantoga/product-variants/42/abc.webp"), NOT full URLs.
     # The serializer below resolves them to full URLs in API responses.
-    # Applies to: variants.default_image, variants.image_map[*], variants.pot_types[*].image_url
+    # Applies to: variants.default_image, variants.image_map[*] (List of URLs/keys), variants.pot_types[*].image_url
+
 
     model_config = {"from_attributes": True}
 

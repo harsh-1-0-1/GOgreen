@@ -30,15 +30,55 @@ def _assert_relative_keys(variants: dict | None) -> None:
     if not variants:
         return
     
-    suspects = [
-        variants.get("default_image"),
-        *variants.get("image_map", {}).values(),
-        *[p.get("image_url") for p in variants.get("pot_types", [])],
-    ]
+    suspects = [variants.get("default_image")]
+    image_map = variants.get("image_map", {}) or {}
+    for val in image_map.values():
+        if isinstance(val, list):
+            suspects.extend(val)
+        elif isinstance(val, str):
+            suspects.append(val)
+            
+    suspects.extend([p.get("image_url") for p in variants.get("pot_types", [])])
     
     bad = [s for s in suspects if s and (s.startswith("http://") or s.startswith("https://"))]
     if bad:
         raise ValueError(f"variants contains full URL(s), expected relative keys: {bad}")
+
+
+def _clean_and_validate_variants(variants: dict | None) -> dict | None:
+    if not variants:
+        return variants
+    
+    cleaned = dict(variants)
+    
+    if "image_map" in cleaned and isinstance(cleaned["image_map"], dict):
+        new_image_map = {}
+        for k, v in cleaned["image_map"].items():
+            if isinstance(v, list):
+                # Remove duplicate image keys while keeping order
+                seen = set()
+                cleaned_v = []
+                for img in v:
+                    if img and img not in seen:
+                        seen.add(img)
+                        cleaned_v.append(img)
+                # Empty list is allowed — storefront falls back to
+                # default_image → pot_type.image_url → product.images
+                if len(cleaned_v) > 8:
+                    raise ValueError(f"Combination {k} exceeds the limit of 8 images")
+                new_image_map[k] = cleaned_v
+            elif isinstance(v, str):
+                if not v.strip():
+                    # Blank string: treat as "no image" — same fallback as []
+                    new_image_map[k] = []
+                else:
+                    new_image_map[k] = [v.strip()]
+            else:
+                raise ValueError(f"Invalid image format for combination {k}")
+        cleaned["image_map"] = new_image_map
+        
+    _assert_relative_keys(cleaned)
+    return cleaned
 
 
 def make_list_cache_key(
@@ -154,7 +194,7 @@ async def create_product(
 
     data = payload.model_dump()
     if data.get("variants"):
-        _assert_relative_keys(data["variants"])
+        data["variants"] = _clean_and_validate_variants(data["variants"])
 
     product = Product(
         **data,
@@ -176,7 +216,7 @@ async def update_product(
     if "name" in data and data["name"]:
         data["slug"] = _slugify(data["name"])
     if "variants" in data and data["variants"]:
-        _assert_relative_keys(data["variants"])
+        data["variants"] = _clean_and_validate_variants(data["variants"])
     
     # Full dict reassignment triggers SQLAlchemy dirty tracking for JSON columns.
     # Do NOT refactor to in-place mutation without calling flag_modified(product, "variants").

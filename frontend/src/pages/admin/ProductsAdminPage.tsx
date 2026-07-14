@@ -121,9 +121,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const [defaultImageKey, setDefaultImageKey] = useState('');
   const [defaultImageUrl, setDefaultImageUrl] = useState('');
   const [stockByKey, setStockByKey] = useState<Record<string, number>>({});
-  // imageKeyByCombo: relative keys sent to backend. imageUrlByCombo: full URLs for preview only.
-  const [imageKeyByCombo, setImageKeyByCombo] = useState<Record<string, string>>({});
-  const [imageUrlByCombo, setImageUrlByCombo] = useState<Record<string, string>>({});
+  // imageKeysByCombo: relative keys sent to backend. imageUrlsByCombo: full URLs for preview only.
+  const [imageKeysByCombo, setImageKeysByCombo] = useState<Record<string, string[]>>({});
+  const [imageUrlsByCombo, setImageUrlsByCombo] = useState<Record<string, string[]>>({});
   // rawPotTypes: raw pot_types from the admin raw endpoint, held separately so the
   // pot-image merge effect runs regardless of which fetch (rawProduct vs freshProduct) wins.
   const [rawPotTypes, setRawPotTypes] = useState<any[] | null>(null);
@@ -206,8 +206,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setDefaultImageKey('');
     setDefaultImageUrl('');
     setStockByKey(p.variants?.stock || {});
-    setImageKeyByCombo({});
-    setImageUrlByCombo({});
+    setImageKeysByCombo({});
+    setImageUrlsByCombo({});
     setRawPotTypes(null);
     seededPotImagesRef.current = false; // allow one seed for the incoming product
     setVariantError(null);
@@ -223,11 +223,23 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setDefaultImageKey(v.default_image || '');
     setDefaultImageUrl(resolveImageUrl(v.default_image));
 
-    const rawImageMap: Record<string, string> = v.image_map || {};
-    setImageKeyByCombo(rawImageMap);
-    setImageUrlByCombo(
-      Object.fromEntries(Object.entries(rawImageMap).map(([k, val]) => [k, resolveImageUrl(val as string)])),
-    );
+    const rawImageMap = v.image_map || {};
+    const loadedKeys: Record<string, string[]> = {};
+    const loadedUrls: Record<string, string[]> = {};
+    for (const [k, val] of Object.entries(rawImageMap)) {
+      if (Array.isArray(val)) {
+        loadedKeys[k] = val;
+        loadedUrls[k] = val.map(key => resolveImageUrl(key));
+      } else if (typeof val === 'string' && val.trim() !== '') {
+        loadedKeys[k] = [val];
+        loadedUrls[k] = [resolveImageUrl(val)];
+      } else {
+        loadedKeys[k] = [];
+        loadedUrls[k] = [];
+      }
+    }
+    setImageKeysByCombo(loadedKeys);
+    setImageUrlsByCombo(loadedUrls);
 
     // Store raw pot types separately so the merge effect below can run
     // regardless of whether rawProduct or applyProductToForm resolved first.
@@ -333,7 +345,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             pot_types: cleanPots,
             ...(cleanSizes.length ? { sizes: cleanSizes } : {}),
             default_image: defaultImageKey,
-            image_map: Object.fromEntries(rowKeys.map((key) => [key, imageKeyByCombo[key] || ''])),
+            image_map: Object.fromEntries(rowKeys.map((key) => [key, imageKeysByCombo[key] || []])),
             stock: Object.fromEntries(rowKeys.map((key) => [key, Number(stockByKey[key] || 0)])),
           };
         } else if (cleanColors.length || cleanPots.length) {
@@ -482,6 +494,13 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
   async function handleComboImageUpload(comboKey: string, file?: File) {
     if (!file) return;
+
+    const currentKeys = imageKeysByCombo[comboKey] || [];
+    if (currentKeys.length >= 8) {
+      toast.error('Limit of 8 images reached for this combination');
+      return;
+    }
+
     setUploadingComboImage(comboKey);
     try {
       const fd = new FormData();
@@ -489,14 +508,56 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/upload-image', fd);
       // key → stored in payload; url → display only
-      setImageKeyByCombo(prev => ({ ...prev, [comboKey]: data.key }));
-      setImageUrlByCombo(prev => ({ ...prev, [comboKey]: data.url }));
+      setImageKeysByCombo(prev => ({
+        ...prev,
+        [comboKey]: [...(prev[comboKey] || []), data.key]
+      }));
+      setImageUrlsByCombo(prev => ({
+        ...prev,
+        [comboKey]: [...(prev[comboKey] || []), data.url]
+      }));
       toast.success('Combination image uploaded');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to upload combination image');
     } finally {
       setUploadingComboImage(null);
     }
+  }
+
+  function handleRemoveComboImage(comboKey: string, index: number) {
+    setImageKeysByCombo(prev => ({
+      ...prev,
+      [comboKey]: (prev[comboKey] || []).filter((_, i) => i !== index)
+    }));
+    setImageUrlsByCombo(prev => ({
+      ...prev,
+      [comboKey]: (prev[comboKey] || []).filter((_, i) => i !== index)
+    }));
+  }
+
+  function handleMoveComboImage(comboKey: string, index: number, direction: 'up' | 'down') {
+    const keys = [...(imageKeysByCombo[comboKey] || [])];
+    const urls = [...(imageUrlsByCombo[comboKey] || [])];
+    if (direction === 'up' && index > 0) {
+      const tempKey = keys[index];
+      keys[index] = keys[index - 1];
+      keys[index - 1] = tempKey;
+
+      const tempUrl = urls[index];
+      urls[index] = urls[index - 1];
+      urls[index - 1] = tempUrl;
+    } else if (direction === 'down' && index < keys.length - 1) {
+      const tempKey = keys[index];
+      keys[index] = keys[index + 1];
+      keys[index + 1] = tempKey;
+
+      const tempUrl = urls[index];
+      urls[index] = urls[index + 1];
+      urls[index + 1] = tempUrl;
+    }
+
+    setImageKeysByCombo(prev => ({ ...prev, [comboKey]: keys }));
+    setImageUrlsByCombo(prev => ({ ...prev, [comboKey]: urls }));
   }
   
   // Build variant rows for the stock/image matrix
@@ -1142,36 +1203,60 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                                 />
                               </td>
                               <td className="p-3">
-                                <div className="flex gap-2 items-center">
-                                  {imageUrlByCombo[row.key] && (
-                                    <div className="h-9 w-9 rounded border overflow-hidden bg-gray-50 shrink-0">
-                                      <img src={imageUrlByCombo[row.key]} alt="" className="h-full w-full object-cover" />
-                                    </div>
-                                  )}
-                                  <label className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 ${uploadingComboImage === row.key ? 'opacity-60 pointer-events-none' : ''}`}>
-                                    <Upload size={12} />
-                                    {uploadingComboImage === row.key ? 'Uploading…' : imageKeyByCombo[row.key] ? 'Change' : 'Upload'}
-                                    <input
-                                      type="file"
-                                      accept="image/jpeg,image/png,image/webp"
-                                      className="hidden"
-                                      onChange={(e) => {
-                                        void handleComboImageUpload(row.key, e.target.files?.[0]);
-                                        e.target.value = '';
-                                      }}
-                                    />
-                                  </label>
-                                  {imageKeyByCombo[row.key] && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setImageKeyByCombo(prev => ({ ...prev, [row.key]: '' }));
-                                        setImageUrlByCombo(prev => ({ ...prev, [row.key]: '' }));
-                                      }}
-                                      className="text-xs text-red-500 hover:text-red-600 font-medium"
-                                    >
-                                      ✕
-                                    </button>
+                                <div className="flex flex-col gap-2">
+                                  <div className="flex flex-wrap gap-1.5 max-w-sm">
+                                    {(imageUrlsByCombo[row.key] || []).map((url, idx) => (
+                                      <div key={idx} className="relative group h-12 w-12 rounded border overflow-hidden bg-gray-50 shrink-0 flex items-center justify-center">
+                                        <img src={url} alt="" className="h-full w-full object-cover" />
+                                        
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                                          {idx > 0 && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleMoveComboImage(row.key, idx, 'up')}
+                                              className="p-0.5 text-white hover:text-gray-250 bg-black/40 rounded text-[9px] leading-none"
+                                              title="Move left"
+                                            >
+                                              ←
+                                            </button>
+                                          )}
+                                          {idx < (imageUrlsByCombo[row.key] || []).length - 1 && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleMoveComboImage(row.key, idx, 'down')}
+                                              className="p-0.5 text-white hover:text-gray-250 bg-black/40 rounded text-[9px] leading-none"
+                                              title="Move right"
+                                            >
+                                              →
+                                            </button>
+                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemoveComboImage(row.key, idx)}
+                                            className="p-0.5 text-red-400 hover:text-red-350 bg-black/40 rounded text-[9px] leading-none"
+                                            title="Delete image"
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  
+                                  {(!imageKeysByCombo[row.key] || imageKeysByCombo[row.key].length < 8) && (
+                                    <label className={`inline-flex items-center gap-1 px-2 py-1 rounded border bg-white text-[11px] font-medium text-primary cursor-pointer hover:bg-green-50 self-start ${uploadingComboImage === row.key ? 'opacity-60 pointer-events-none' : ''}`}>
+                                      <Upload size={10} />
+                                      {uploadingComboImage === row.key ? 'Uploading…' : 'Add Image'}
+                                      <input
+                                        type="file"
+                                        accept="image/jpeg,image/png,image/webp"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                          void handleComboImageUpload(row.key, e.target.files?.[0]);
+                                          e.target.value = '';
+                                        }}
+                                      />
+                                    </label>
                                   )}
                                 </div>
                               </td>
