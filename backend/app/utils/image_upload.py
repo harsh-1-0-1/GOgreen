@@ -88,6 +88,12 @@ def resolve_variants_images(variants: dict | None) -> dict | None:
             for pt in resolved["pot_types"]
         ]
 
+    if "colors" in resolved and isinstance(resolved["colors"], list):
+        resolved["colors"] = [
+            {**c, "image_url": resolve_image_url(c.get("image_url"))} if "image_url" in c else c
+            for c in resolved["colors"]
+        ]
+
     return resolved
 
 

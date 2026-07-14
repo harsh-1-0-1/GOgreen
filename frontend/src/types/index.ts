@@ -42,6 +42,7 @@ export interface ProductVariantColor {
   name: string;
   hex: string;
   slug: string;
+  image_url?: string;
 }
 
 export interface ProductVariantPotType {
@@ -62,7 +63,7 @@ export interface ProductVariants {
   colors: ProductVariantColor[];
   pot_types: ProductVariantPotType[];
   sizes?: ProductVariantSize[];
-  image_map: Record<string, string>;
+  image_map: Record<string, string | string[]>;
   default_image: string;
   stock: Record<string, number>;
 }

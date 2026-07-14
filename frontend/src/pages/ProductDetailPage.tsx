@@ -278,6 +278,7 @@ export default function ProductDetailPage() {
     if (selectedSize) comboKey = selectedSize;
   }
 
+  const selectedColorType = variants?.colors?.find((c) => c.slug === selectedColor);
   const selectedPotType = variants?.pot_types?.find((p) => p.slug === selectedPot);
   const selectedSizeType = sizes.find((s) => s.slug === selectedSize);
   // "no-pot" is a synthetic option — stock comes directly from product.stock_qty
@@ -295,7 +296,7 @@ export default function ProductDetailPage() {
       ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
       : null;
   const displayImage = hasVariants
-    ? variants?.image_map?.[comboKey] || selectedPotType?.image_url || variants?.default_image || product.images?.[0]
+    ? (Array.isArray(variants?.image_map?.[comboKey]) ? (variants.image_map[comboKey] as string[])[0] : variants?.image_map?.[comboKey] as string | undefined) || selectedColorType?.image_url || selectedPotType?.image_url || variants?.default_image || product.images?.[0]
     : product.images?.[0];
   const galleryImages = displayImage
     ? [displayImage, ...(product.images || []).filter((img) => img !== displayImage)]
@@ -479,6 +480,7 @@ export default function ProductDetailPage() {
                               disabled={disabled}
                               onClick={() => {
                                 setSelectedColor(color.slug);
+                                setGalleryActive(0);
                                 setQty(1);
                               }}
                               className={`w-9 h-9 rounded-full border-2 transition disabled:opacity-30 disabled:cursor-not-allowed ${

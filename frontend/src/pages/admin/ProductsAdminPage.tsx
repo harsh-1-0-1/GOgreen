@@ -41,7 +41,9 @@ const productSchema = z.object({
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
-type VariantColorDraft = { name: string; hex: string };
+// ⚠️ image_key is the relative storage key sent to the backend (e.g. "plantoga/...").
+// image_url is the resolved full URL used only for <img> preview — never sent anywhere.
+type VariantColorDraft = { name: string; hex: string; image_key: string; image_url: string };
 // ⚠️ image_key is the relative storage key sent to the backend (e.g. "plantoga/...").
 // image_url is the resolved full URL used only for <img> preview — never sent anywhere.
 type VariantPotDraft = { name: string; price_modifier: number; image_key: string; image_url: string };
@@ -113,6 +115,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // Variant States
   const [colors, setColors] = useState<VariantColorDraft[]>([]);
   const [pots, setPots] = useState<VariantPotDraft[]>([]);
+  const [uploadingColorImage, setUploadingColorImage] = useState<number | null>(null);
   const [uploadingPotImage, setUploadingPotImage] = useState<number | null>(null);
   const [uploadingDefaultImage, setUploadingDefaultImage] = useState(false);
   const [uploadingComboImage, setUploadingComboImage] = useState<string | null>(null);
@@ -124,13 +127,15 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // imageKeyByCombo: relative keys sent to backend. imageUrlByCombo: full URLs for preview only.
   const [imageKeyByCombo, setImageKeyByCombo] = useState<Record<string, string>>({});
   const [imageUrlByCombo, setImageUrlByCombo] = useState<Record<string, string>>({});
-  // rawPotTypes: raw pot_types from the admin raw endpoint, held separately so the
-  // pot-image merge effect runs regardless of which fetch (rawProduct vs freshProduct) wins.
+  // rawPotTypes / rawColorTypes: raw arrays from the admin raw endpoint, held separately so the
+  // merge effects run regardless of which fetch (rawProduct vs freshProduct) wins.
   const [rawPotTypes, setRawPotTypes] = useState<any[] | null>(null);
-  // seededPotImagesRef: guards the merge effect so it only runs once per product load.
-  // Prevents pots.length changes (add/remove pot row) from re-seeding and overwriting
+  const [rawColorTypes, setRawColorTypes] = useState<any[] | null>(null);
+  // seeded*Ref: guards the merge effects so they each run exactly once per product load.
+  // Prevents row-count changes (add/remove) from re-seeding and overwriting
   // images the admin has already uploaded during this edit session.
   const seededPotImagesRef = useRef(false);
+  const seededColorImagesRef = useRef(false);
 
   // Derive a display URL from a relative storage key.
   // Full URLs pass through unchanged (external images, legacy data).
@@ -184,7 +189,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setNewImageUrl('');
     setUploadedFiles([]);
     setFilePreviews([]);
-    setColors(p.variants?.colors?.map((c: any) => ({ name: c.name, hex: c.hex })) || []);
+    setColors(p.variants?.colors?.map((c: any) => ({ name: c.name, hex: c.hex, image_key: '', image_url: '' })) || []);
     // Pot image keys are seeded by the rawProduct effect (relative keys from DB).
     // Here we only set structural fields; image_key/image_url start empty.
     setPots(
@@ -209,7 +214,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setImageKeyByCombo({});
     setImageUrlByCombo({});
     setRawPotTypes(null);
+    setRawColorTypes(null);
     seededPotImagesRef.current = false; // allow one seed for the incoming product
+    seededColorImagesRef.current = false;
     setVariantError(null);
   }, [reset]);
 
@@ -223,10 +230,14 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setDefaultImageKey(v.default_image || '');
     setDefaultImageUrl(resolveImageUrl(v.default_image));
 
-    const rawImageMap: Record<string, string> = v.image_map || {};
-    setImageKeyByCombo(rawImageMap);
+    const rawImageMap: Record<string, string | string[]> = v.image_map || {};
+    // Normalize: image_map values may be a plain string or a legacy string[]; always keep a string key
+    const normalizedImageMap: Record<string, string> = Object.fromEntries(
+      Object.entries(rawImageMap).map(([k, val]) => [k, Array.isArray(val) ? val[0] ?? '' : val]),
+    );
+    setImageKeyByCombo(normalizedImageMap);
     setImageUrlByCombo(
-      Object.fromEntries(Object.entries(rawImageMap).map(([k, val]) => [k, resolveImageUrl(val as string)])),
+      Object.fromEntries(Object.entries(normalizedImageMap).map(([k, val]) => [k, resolveImageUrl(val)])),
     );
 
     // Store raw pot types separately so the merge effect below can run
@@ -234,6 +245,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     // Reset the guard so the merge runs exactly once for this product load.
     seededPotImagesRef.current = false;
     setRawPotTypes(v.pot_types || []);
+    seededColorImagesRef.current = false;
+    setRawColorTypes(v.colors || []);
   // resolveImageUrl is stable (defined inside component but no deps) — safe to omit
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, rawProduct]);
@@ -255,6 +268,18 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawPotTypes, pots.length]);
 
+  // Merge color image keys into the colors array — same pattern as pots.
+  useEffect(() => {
+    if (!rawColorTypes || colors.length === 0 || seededColorImagesRef.current) return;
+    setColors(prev => prev.map((color, i) => {
+      const rawKey: string = rawColorTypes[i]?.image_url || '';
+      return { ...color, image_key: rawKey, image_url: resolveImageUrl(rawKey) };
+    }));
+    seededColorImagesRef.current = true;
+  // colors.length (not colors) — only retrigger when rows are added/removed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawColorTypes, colors.length]);
+
   useEffect(() => {
     if (!isEdit) return;
     const source = freshProduct ?? editProduct;
@@ -274,7 +299,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       if (colors.length || pots.length || sizes.length || defaultImageKey.trim()) {
         const cleanColors = colors
           .filter((c) => c.name.trim())
-          .map(c => ({ name: c.name.trim(), hex: c.hex, slug: slugify(c.name) }));
+          .map(c => ({ name: c.name.trim(), hex: c.hex, slug: slugify(c.name), image_url: (c.image_key || '').trim() }));
 
         const cleanPots = pots
           .filter((p) => p.name.trim())
@@ -442,6 +467,23 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const activeColors = colors.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), slug: slugify(c.name) }));
   const activePots = pots.filter(p => p.name.trim()).map(p => ({ name: p.name.trim(), slug: slugify(p.name) }));
   const activeSizes = sizes.filter(s => s.name.trim()).map(s => ({ name: s.name.trim(), slug: slugify(s.name) }));
+
+  async function handleColorImageUpload(index: number, file?: File) {
+    if (!file) return;
+    setUploadingColorImage(index);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      if (editProduct?.id) fd.append('product_id', String(editProduct.id));
+      const { data } = await api.post<{ key: string; url: string }>('/products/variant-image', fd);
+      setColors(current => current.map((color, i) => i === index ? { ...color, image_key: data.key, image_url: data.url } : color));
+      toast.success('Color image uploaded');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to upload color image');
+    } finally {
+      setUploadingColorImage(null);
+    }
+  }
 
   async function handlePotImageUpload(index: number, file?: File) {
     if (!file) return;
@@ -883,7 +925,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     </div>
                     <button
                       type="button"
-                      onClick={() => setColors([...colors, { name: '', hex: '#2D6A4F' }])}
+                      onClick={() => setColors([...colors, { name: '', hex: '#2D6A4F', image_key: '', image_url: '' }])}
                       className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
                     >
                       + Add Color
@@ -891,28 +933,61 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                   </div>
                   <div className="space-y-2">
                     {colors.map((color, index) => (
-                      <div key={index} className="flex gap-2 items-center">
-                        <input
-                          value={color.name}
-                          onChange={(e) => setColors(colors.map((c, i) => i === index ? { ...c, name: e.target.value } : c))}
-                          placeholder="Color Name (e.g., Terracotta)"
-                          className={`${inputClass} flex-1`}
-                        />
-                        <div className="flex items-center gap-1 shrink-0">
+                      <div key={index} className="rounded-xl border border-gray-200 p-3 space-y-3 bg-gray-50/40">
+                        <div className="flex gap-2 items-center">
+                          <input
+                            value={color.name}
+                            onChange={(e) => setColors(colors.map((c, i) => i === index ? { ...c, name: e.target.value } : c))}
+                            placeholder="Color Name (e.g., Terracotta)"
+                            className={`${inputClass} flex-1 bg-white`}
+                          />
                           <input
                             type="color"
                             value={color.hex}
                             onChange={(e) => setColors(colors.map((c, i) => i === index ? { ...c, hex: e.target.value } : c))}
-                            className="h-9 w-9 border border-gray-200 rounded-lg cursor-pointer bg-transparent p-0"
+                            className="h-9 w-9 border border-gray-200 rounded-lg cursor-pointer bg-transparent p-0 shrink-0"
                           />
+                          <button
+                            type="button"
+                            onClick={() => setColors(colors.filter((_, i) => i !== index))}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setColors(colors.filter((_, i) => i !== index))}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        <div className="flex gap-3 items-center">
+                          <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
+                            {color.image_url ? (
+                              <img src={color.image_url} alt={`${color.name || 'Color'} preview`} className="h-full w-full object-contain" />
+                            ) : (
+                              <ImageIcon size={22} className="text-gray-300" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingColorImage === index ? 'opacity-60 pointer-events-none' : ''}`}>
+                              <Upload size={14} />
+                              {uploadingColorImage === index ? 'Uploading…' : color.image_key ? 'Change color image' : 'Upload color image'}
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                className="hidden"
+                                onChange={(e) => {
+                                  void handleColorImageUpload(index, e.target.files?.[0]);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                            {color.image_key && (
+                              <button
+                                type="button"
+                                onClick={() => setColors(colors.map((c, i) => i === index ? { ...c, image_key: '', image_url: '' } : c))}
+                                className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium"
+                              >
+                                Remove image
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     ))}
                     {colors.length === 0 && (
@@ -1252,10 +1327,12 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           <button
             type="button"
             onClick={handleSubmit(onSubmit)}
-            disabled={submitting || uploadingPotImage !== null || uploadingDefaultImage || uploadingComboImage !== null}
+            disabled={submitting || uploadingColorImage !== null || uploadingPotImage !== null || uploadingDefaultImage || uploadingComboImage !== null}
             className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 transition"
           >
-            {uploadingPotImage !== null
+            {uploadingColorImage !== null
+              ? 'Uploading Color Image...'
+              : uploadingPotImage !== null
               ? 'Uploading Pot Image...'
               : uploadingDefaultImage
                 ? 'Uploading Default Image...'
