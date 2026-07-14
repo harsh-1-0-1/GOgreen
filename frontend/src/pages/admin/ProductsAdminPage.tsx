@@ -234,16 +234,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     const loadedKeys: Record<string, string[]> = {};
     const loadedUrls: Record<string, string[]> = {};
     for (const [k, val] of Object.entries(rawImageMap)) {
-      if (Array.isArray(val)) {
-        loadedKeys[k] = val;
-        loadedUrls[k] = val.map(key => resolveImageUrl(key));
-      } else if (typeof val === 'string' && val.trim() !== '') {
-        loadedKeys[k] = [val];
-        loadedUrls[k] = [resolveImageUrl(val)];
-      } else {
-        loadedKeys[k] = [];
-        loadedUrls[k] = [];
-      }
+      loadedKeys[k] = val;
+      loadedUrls[k] = val.map(key => resolveImageUrl(key));
     }
     setImageKeysByCombo(loadedKeys);
     setImageUrlsByCombo(loadedUrls);

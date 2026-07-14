@@ -295,14 +295,6 @@ export default function ProductDetailPage() {
     displayOriginalPrice && displayOriginalPrice > displayPrice
       ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
       : null;
-<<<<<<< HEAD
-  const displayImage = hasVariants
-    ? (Array.isArray(variants?.image_map?.[comboKey]) ? (variants.image_map[comboKey] as string[])[0] : variants?.image_map?.[comboKey] as string | undefined) || selectedColorType?.image_url || selectedPotType?.image_url || variants?.default_image || product.images?.[0]
-    : product.images?.[0];
-  const galleryImages = displayImage
-    ? [displayImage, ...(product.images || []).filter((img) => img !== displayImage)]
-    : product.images || [];
-=======
   // Derive gallery images
   let galleryImages: string[] = [];
   if (hasVariants) {
@@ -315,7 +307,6 @@ export default function ProductDetailPage() {
       galleryImages = [variants.default_image];
     }
   }
->>>>>>> 0bfe9e339bf614d54a734258043183951e460a52
 
   if (galleryImages.length === 0) {
     galleryImages = product.images || [];
