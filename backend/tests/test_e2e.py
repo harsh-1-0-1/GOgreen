@@ -121,6 +121,7 @@ async def test_full_happy_path(client: AsyncClient, monkeypatch):
             "payment": {
                 "entity": {
                     "id": razorpay_payment_id,
+                    "amount": 89700,
                     "notes": {
                         "order_id": str(order_id),
                         "source": "checkout",
@@ -142,6 +143,7 @@ async def test_full_happy_path(client: AsyncClient, monkeypatch):
         headers={
             "Content-Type": "application/json",
             "X-Razorpay-Signature": expected_signature,
+            "x-razorpay-event-id": "evt_test_happy_path_123",
         },
     )
     assert webhook_resp.status_code == 200, webhook_resp.text

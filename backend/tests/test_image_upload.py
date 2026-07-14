@@ -45,13 +45,13 @@ def test_variant_images_are_resolved(monkeypatch):
     monkeypatch.setattr(settings, "CDN_BASE_URL", "https://cdn.test")
     variants = {
         "default_image": "plantoga/default.jpg",
-        "image_map": {"green": "plantoga/green.jpg"},
+        "image_map": {"green": ["plantoga/green.jpg"]},
         "pot_types": [{"name": "Clay", "image_url": "plantoga/clay.jpg"}],
     }
 
     resolved = image_upload.resolve_variants_images(variants)
     assert resolved["default_image"] == "https://cdn.test/plantoga/default.jpg"
-    assert resolved["image_map"]["green"] == "https://cdn.test/plantoga/green.jpg"
+    assert resolved["image_map"]["green"] == ["https://cdn.test/plantoga/green.jpg"]
     assert resolved["pot_types"][0]["image_url"] == "https://cdn.test/plantoga/clay.jpg"
 
 
