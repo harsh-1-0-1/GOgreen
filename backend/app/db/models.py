@@ -173,6 +173,7 @@ class Order(Base):
     total_amount: Mapped[float] = mapped_column(Float, nullable=False)
     payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     razorpay_order_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    payment_method: Mapped[str] = mapped_column(String(30), nullable=False, default="razorpay")
     payment_status: Mapped[PaymentStatus] = mapped_column(
         Enum(PaymentStatus), default=PaymentStatus.PENDING
     )
@@ -293,10 +294,10 @@ class WebhookEvent(Base):
 @event.listens_for(Product, "before_update")
 def sync_stock_qty(mapper, connection, target):
     """Derive stock_qty from variants.stock before every write.
-    
+
     This ensures stock_qty is always the sum of variant stocks, even if
     the client sends an incorrect value or the DB is edited directly via ORM.
-    
+
     Only applies when variants are present and have a stock dict.
     For non-variant products, the client-sent stock_qty is used as-is.
     """

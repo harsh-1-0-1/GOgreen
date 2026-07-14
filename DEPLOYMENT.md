@@ -55,7 +55,34 @@ GOOGLE_REDIRECT_URI=https://your-railway-backend-domain/api/v1/auth/google/callb
 RAZORPAY_KEY_ID=
 RAZORPAY_KEY_SECRET=
 RAZORPAY_WEBHOOK_SECRET=
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_ADMIN_RECIPIENT=
+WHATSAPP_API_VERSION=v23.0
+WHATSAPP_ORDER_TEMPLATE_NAME=new_order_received
+WHATSAPP_ORDER_TEMPLATE_LANGUAGE=en_US
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_FROM_EMAIL=
+SMTP_FROM_NAME=Plantoga
+SMTP_USE_TLS=true
+SMTP_USE_SSL=false
+ADMIN_ORDER_EMAIL=
 ```
+
+WhatsApp order alerts use Meta WhatsApp Cloud API and are disabled until
+`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ADMIN_RECIPIENT`,
+and an approved `WHATSAPP_ORDER_TEMPLATE_NAME` are configured. Create the
+template with five body variables: order id, amount, customer name, customer
+phone, and item summary.
+
+Email order alerts use SMTP and are disabled until `SMTP_HOST` and
+`SMTP_FROM_EMAIL` are configured. Customers receive an order confirmation email;
+if `ADMIN_ORDER_EMAIL` is set, the store team also receives a new-order alert.
+The template includes order id, payment method/status, customer contact,
+shipping address, item summary, total, and next steps.
 
 Do not put `uv run alembic upgrade head` in Railway's Start Command. It is a one-off migration command and exits immediately, which prevents the HTTP server from starting.
 

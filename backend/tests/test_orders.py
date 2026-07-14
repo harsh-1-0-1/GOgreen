@@ -80,6 +80,34 @@ async def test_checkout_success(client: AsyncClient):
     assert data["razorpay_order_data"] is not None
 
 
+async def test_checkout_cod_skips_razorpay_and_records_payment_method(client: AsyncClient, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.WHATSAPP_ACCESS_TOKEN", "")
+    admin = await _register_and_make_admin(client)
+    product = await _seed_product_and_category(client, admin, stock=10)
+    token = await _register_user(client)
+    address = await _seed_address(client, token)
+    cart_id = await _setup_cart(client, token, product["id"], quantity=1)
+
+    resp = await client.post(
+        "/api/v1/orders/checkout",
+        json={"address_id": address["id"], "cart_id": cart_id, "payment_method": "cod"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["order_id"] > 0
+    assert data["razorpay_order_data"] is None
+
+    detail_resp = await client.get(
+        f"/api/v1/orders/{data['order_id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert detail_resp.status_code == 200
+    detail = detail_resp.json()
+    assert detail["payment_method"] == "cod"
+    assert detail["payment_status"] == "pending"
+
+
 async def test_checkout_clears_cart(client: AsyncClient):
     admin = await _register_and_make_admin(client)
     product = await _seed_product_and_category(client, admin, stock=10)

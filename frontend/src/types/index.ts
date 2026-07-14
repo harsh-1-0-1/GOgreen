@@ -164,6 +164,7 @@ export interface Order {
   status: string;
   total_amount: number;
   payment_id: string | null;
+  payment_method: string;
   payment_status: string;
   address_id: number;
   created_at: string;

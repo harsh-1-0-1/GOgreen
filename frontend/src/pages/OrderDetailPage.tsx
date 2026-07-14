@@ -9,6 +9,13 @@ function labelize(slug?: string) {
   return slug ? slug.split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' ') : '';
 }
 
+function paymentLabel(paymentMethod: string, paymentStatus: string) {
+  if (paymentMethod === 'cod') {
+    return paymentStatus === 'paid' ? 'COD collected' : 'Cash on delivery';
+  }
+  return paymentStatus;
+}
+
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: order, isLoading, isError } = useOrder(Number(id));
@@ -46,7 +53,7 @@ export default function OrderDetailPage() {
             order.payment_status === 'paid' ? 'text-green-600' :
             order.payment_status === 'failed' ? 'text-red-600' : 'text-yellow-600'
           }`}>
-            Payment: {order.payment_status}
+            Payment: {paymentLabel(order.payment_method, order.payment_status)}
           </p>
         </div>
       </div>

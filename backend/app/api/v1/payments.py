@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.models import WebhookEvent
 from app.db.session import get_db
-from app.services import order_service
+from app.services import email_service, order_service, whatsapp_service
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -128,6 +128,16 @@ async def razorpay_webhook(
 
         if refund_id:
             return {"status": "ok", "event": event, "order_id": order_id, "refund_id": refund_id}
+        if order and event == "payment.captured":
+            try:
+                await whatsapp_service.send_new_order_notification(db, order_id)
+            except Exception as exc:
+                logger.exception("New order WhatsApp notification failed for order {}: {}", order_id, exc)
+            try:
+                await email_service.send_order_emails(db, order_id)
+            except Exception as exc:
+                logger.exception("New order email notification failed for order {}: {}", order_id, exc)
+
         if order:
             return {"status": "ok", "event": event, "order_id": order_id,
                     "payment_status": order.payment_status.value}
@@ -145,4 +155,3 @@ async def razorpay_webhook(
         await db.rollback()
         logger.exception("Unexpected error processing webhook: {}", exc)
         raise HTTPException(status_code=500, detail="Internal server error")
-

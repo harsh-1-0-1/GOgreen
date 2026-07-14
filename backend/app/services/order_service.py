@@ -106,8 +106,8 @@ async def _reserve_product_for_order(
 
 async def checkout(
     db: AsyncSession, user_id: int, address_id: int, cart_id: int,
-    email: str, full_name: str, phone: str,
-) -> tuple[Order, dict]:
+    email: str, full_name: str, phone: str, payment_method: str = "razorpay",
+) -> tuple[Order, dict | None]:
     """
     1. Validate cart + stock
     2. Create order & order items (snapshot prices)
@@ -149,6 +149,7 @@ async def checkout(
         user_id=user_id,
         status=OrderStatus.PENDING,
         total_amount=total_amount,
+        payment_method=payment_method,
         payment_status=PaymentStatus.PENDING,
         address_id=address_id,
     )
@@ -163,24 +164,26 @@ async def checkout(
         await db.delete(ci)
     await db.flush()
 
-    try:
-        razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
-    except Exception as e:
-        logger.error("Razorpay order creation failed during checkout for order {}: {}", order.id, e)
-        await db.rollback()
-        raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
+    razorpay_data = None
+    if payment_method == "razorpay":
+        try:
+            razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+        except Exception as e:
+            logger.error("Razorpay order creation failed during checkout for order {}: {}", order.id, e)
+            await db.rollback()
+            raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
 
-    order.razorpay_order_id = razorpay_data.get("order_id")
+    order.razorpay_order_id = razorpay_data.get("order_id") if razorpay_data else None
     await db.flush()
 
-    logger.info("Checkout complete: order_id={} amount={}", order.id, total_amount)
+    logger.info("Checkout complete: order_id={} amount={} payment_method={}", order.id, total_amount, payment_method)
     return order, razorpay_data
 
 
 async def direct_checkout(
     db: AsyncSession, user_id: int, address_id: int, items: list[DirectCheckoutItem],
-    email: str, full_name: str, phone: str,
-) -> tuple[Order, dict]:
+    email: str, full_name: str, phone: str, payment_method: str = "razorpay",
+) -> tuple[Order, dict | None]:
     address = await db.execute(
         select(Address).where(Address.id == address_id, Address.user_id == user_id)
     )
@@ -206,6 +209,7 @@ async def direct_checkout(
         user_id=user_id,
         status=OrderStatus.PENDING,
         total_amount=round(total_amount, 2),
+        payment_method=payment_method,
         payment_status=PaymentStatus.PENDING,
         address_id=address_id,
     )
@@ -216,17 +220,19 @@ async def direct_checkout(
         db.add(OrderItem(order_id=order.id, **oi_data))
     await db.flush()
 
-    try:
-        razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
-    except Exception as e:
-        logger.error("Razorpay order creation failed during direct checkout for order {}: {}", order.id, e)
-        await db.rollback()
-        raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
+    razorpay_data = None
+    if payment_method == "razorpay":
+        try:
+            razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+        except Exception as e:
+            logger.error("Razorpay order creation failed during direct checkout for order {}: {}", order.id, e)
+            await db.rollback()
+            raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
 
-    order.razorpay_order_id = razorpay_data.get("order_id")
+    order.razorpay_order_id = razorpay_data.get("order_id") if razorpay_data else None
     await db.flush()
 
-    logger.info("Direct checkout complete: order_id={} amount={}", order.id, order.total_amount)
+    logger.info("Direct checkout complete: order_id={} amount={} payment_method={}", order.id, order.total_amount, payment_method)
     return order, razorpay_data
 
 

@@ -30,6 +30,19 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   cancelled: 'Order has been voided. If payment was made, initiate refund in gateway.',
 };
 
+function paymentLabel(order: Order) {
+  if (order.payment_method === 'cod') {
+    return order.payment_status === 'paid' ? 'COD Collected' : 'COD Pending';
+  }
+  return order.payment_status;
+}
+
+function paymentBadgeClass(order: Order) {
+  if (order.payment_status === 'paid') return 'bg-green-50 text-green-700';
+  if (order.payment_method === 'cod') return 'bg-orange-50 text-orange-700';
+  return 'bg-amber-50 text-amber-700';
+}
+
 // Realistic Mock Address Generator based on IDs since backend SQLite schema excludes address nesting in OrderResponse
 function getMockAddress(addressId: number, userId: number) {
   const names = ['Rajesh Kumar', 'Priya Patel', 'Vikram Singh', 'Anjali Sharma', 'Rohan Mehta', 'Sneha Reddy', 'Amit Joshi'];
@@ -132,10 +145,8 @@ function OrderDrawer({ order, onClose }: { order: Order; onClose: () => void }) 
             </div>
             <div className="bg-white p-3 rounded-xl border border-gray-100">
               <span className="text-gray-400 block text-[10px] font-bold uppercase">Payment Gateway Status</span>
-              <span className={`inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${
-                order.payment_status === 'paid' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-              }`}>
-                {order.payment_status}
+              <span className={`inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${paymentBadgeClass(order)}`}>
+                {paymentLabel(order)}
               </span>
             </div>
             <div className="bg-white p-3 rounded-xl border border-gray-100">
@@ -295,7 +306,7 @@ export default function OrdersAdminPage() {
               <th className="px-5 py-3.5 font-semibold text-xs">Order ID</th>
               <th className="px-5 py-3.5 font-semibold text-xs">Customer Name</th>
               <th className="px-5 py-3.5 font-semibold text-xs">Delivery Status</th>
-              <th className="px-5 py-3.5 font-semibold text-xs">Payment Gateway</th>
+              <th className="px-5 py-3.5 font-semibold text-xs">Payment Method</th>
               <th className="px-5 py-3.5 font-semibold text-xs">Order Amount</th>
               <th className="px-5 py-3.5 font-semibold text-xs">Purchased On</th>
             </tr>
@@ -324,10 +335,8 @@ export default function OrdersAdminPage() {
                       </span>
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded capitalize ${
-                        o.payment_status === 'paid' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-                      }`}>
-                        {o.payment_status}
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded capitalize ${paymentBadgeClass(o)}`}>
+                        {paymentLabel(o)}
                       </span>
                     </td>
                     <td className="px-5 py-3.5 font-bold text-gray-950">₹{o.total_amount}</td>
@@ -365,7 +374,7 @@ export default function OrdersAdminPage() {
                   </span>
                 </div>
                 <div className="flex items-end justify-between mt-2 pt-2 border-t border-gray-100">
-                  <p className="text-[10px] text-gray-400">{new Date(o.created_at).toLocaleDateString()}</p>
+                  <p className="text-[10px] text-gray-400">{new Date(o.created_at).toLocaleDateString()} · {paymentLabel(o)}</p>
                   <p className="text-sm font-bold text-primary">₹{o.total_amount}</p>
                 </div>
               </button>

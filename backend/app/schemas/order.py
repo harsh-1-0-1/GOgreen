@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, field_serializer
 
@@ -6,6 +7,7 @@ from pydantic import BaseModel, field_serializer
 class CheckoutRequest(BaseModel):
     address_id: int
     cart_id: int
+    payment_method: Literal["razorpay", "cod"] = "razorpay"
 
 
 class DirectCheckoutItem(BaseModel):
@@ -17,6 +19,7 @@ class DirectCheckoutItem(BaseModel):
 class DirectCheckoutRequest(BaseModel):
     address_id: int
     items: list[DirectCheckoutItem]
+    payment_method: Literal["razorpay", "cod"] = "razorpay"
 
 
 class RazorpayOrderData(BaseModel):
@@ -52,6 +55,7 @@ class OrderResponse(BaseModel):
     status: str
     total_amount: float
     payment_id: str | None
+    payment_method: str = "razorpay"
     payment_status: str
     address_id: int
     created_at: datetime

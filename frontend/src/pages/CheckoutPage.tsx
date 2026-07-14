@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { BadgePercent, ChevronDown, ChevronUp, CreditCard, LockKeyhole, PackageCheck, ShieldCheck, Sprout } from 'lucide-react';
+import { BadgePercent, Banknote, ChevronDown, ChevronUp, CreditCard, LockKeyhole, PackageCheck, ShieldCheck, Sprout } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { clearDirectCheckoutSession, readDirectCheckoutSession } from '@/lib/directCheckout';
@@ -202,6 +202,7 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [shippingMethod, setShippingMethod] = useState<'standard' | 'express'>('standard');
+  const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay');
   const [billingMode, setBillingMode] = useState<'same' | 'different'>('same');
   const [paying, setPaying] = useState(false);
 
@@ -287,6 +288,13 @@ export default function CheckoutPage() {
     }).open();
   }
 
+  function completeCodOrder(orderId: number) {
+    clearDirectCheckoutSession();
+    if (!isBuyNow) cart.clearLocal();
+    toast.success('COD order placed successfully');
+    navigate(`/orders/${orderId}`);
+  }
+
   async function handlePay(e: FormEvent) {
     e.preventDefault();
     if (!validate()) return;
@@ -323,14 +331,23 @@ export default function CheckoutPage() {
             quantity: item.quantity,
             selected_options: item.selected_options,
           })),
+          payment_method: paymentMethod,
         });
-        await openRazorpay(data);
+        if (paymentMethod === 'cod') completeCodOrder(data.order_id);
+        else await openRazorpay(data);
       } else {
         const currentCartId = useCartStore.getState().cartId;
         if (!currentCartId) throw new Error('Cart not found');
-        const { data } = await api.post<CheckoutResponse>('/orders/checkout', { address_id: savedAddress.id, cart_id: currentCartId });
-        cart.clearLocal();
-        await openRazorpay(data);
+        const { data } = await api.post<CheckoutResponse>('/orders/checkout', {
+          address_id: savedAddress.id,
+          cart_id: currentCartId,
+          payment_method: paymentMethod,
+        });
+        if (paymentMethod === 'cod') completeCodOrder(data.order_id);
+        else {
+          cart.clearLocal();
+          await openRazorpay(data);
+        }
       }
     } catch (err: any) {
       toast.error(err.response?.data?.detail || err.message || 'Checkout failed');
@@ -422,12 +439,21 @@ export default function CheckoutPage() {
             <h2 className="text-base sm:text-lg font-bold text-gray-900">Payment</h2>
             <p className="text-xs sm:text-sm text-gray-500">All transactions are secure and encrypted.</p>
             <div className="overflow-hidden rounded-lg border border-gray-200">
-              <label className="flex items-start gap-3 border border-primary bg-primary/5 p-3 text-sm">
-                <input type="radio" checked readOnly className="mt-0.5 h-4 w-4 accent-primary" />
+              <label className={`flex cursor-pointer items-start gap-3 border-b border-gray-200 p-3 text-sm ${paymentMethod === 'razorpay' ? 'border-primary bg-primary/5' : 'bg-white'}`}>
+                <input type="radio" name="payment_method" checked={paymentMethod === 'razorpay'} onChange={() => setPaymentMethod('razorpay')} className="mt-0.5 h-4 w-4 accent-primary" />
                 <span className="flex-1 font-bold text-gray-950">Razorpay Secure <span className="text-xs text-gray-500 font-normal ml-1.5">(UPI, Cards, NetBanking, Wallets)</span></span>
                 <CreditCard className="text-primary h-5 w-5" />
               </label>
-              <div className="bg-gray-50 p-4 text-center text-xs text-gray-600">You’ll be redirected to Razorpay Secure to complete your purchase.</div>
+              <label className={`flex cursor-pointer items-start gap-3 p-3 text-sm ${paymentMethod === 'cod' ? 'border-primary bg-primary/5' : 'bg-white'}`}>
+                <input type="radio" name="payment_method" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="mt-0.5 h-4 w-4 accent-primary" />
+                <span className="flex-1 font-bold text-gray-950">Cash on Delivery <span className="text-xs text-gray-500 font-normal ml-1.5">(Pay when your order arrives)</span></span>
+                <Banknote className="text-primary h-5 w-5" />
+              </label>
+              <div className="bg-gray-50 p-4 text-center text-xs text-gray-600">
+                {paymentMethod === 'razorpay'
+                  ? 'You’ll be redirected to Razorpay Secure to complete your purchase.'
+                  : 'Your order will be placed now. Payment will be collected at delivery.'}
+              </div>
             </div>
           </section>
 
@@ -447,7 +473,7 @@ export default function CheckoutPage() {
           </section>
 
           <button disabled={paying || createAddress.isPending} className="mt-6 h-12 w-full rounded-lg bg-primary text-base font-semibold text-white transition hover:bg-primary/95 disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.99]">
-            {paying || createAddress.isPending ? 'Processing...' : 'Pay Now'}
+            {paying || createAddress.isPending ? 'Processing...' : paymentMethod === 'cod' ? 'Place COD Order' : 'Pay Now'}
           </button>
 
           <section className="mt-8 space-y-4 border-t border-gray-100 pt-6">
