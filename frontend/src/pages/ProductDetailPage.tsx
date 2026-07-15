@@ -179,8 +179,6 @@ function CareTips({ tips }: { tips: string[] }) {
   );
 }
 
-const NO_POT_SLUG = 'no-pot';
-
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading, isError } = useProduct(slug!);
@@ -244,8 +242,8 @@ export default function ProductDetailPage() {
       .find(([, stock]) => Number(stock) > 0)?.[0];
     const inStockParts = firstInStockKey?.split('__') || [];
     setSelectedColor(colors.length ? (inStockParts[0] || colors[0].slug) : null);
-    // Always default to "no-pot" (just the plant) when pot types are available
-    setSelectedPot(pots.length ? NO_POT_SLUG : null);
+    // Default to the first actual pot type when pot types are available
+    setSelectedPot(pots.length ? (inStockParts[1] || pots[0].slug) : null);
     setSelectedSize(sizes.length
       ? (colors.length && pots.length ? inStockParts[2] : inStockParts[0]) || sizes[0].slug
       : null);
@@ -281,10 +279,7 @@ export default function ProductDetailPage() {
   const selectedColorType = variants?.colors?.find((c) => c.slug === selectedColor);
   const selectedPotType = variants?.pot_types?.find((p) => p.slug === selectedPot);
   const selectedSizeType = sizes.find((s) => s.slug === selectedSize);
-  // "no-pot" is a synthetic option — stock comes directly from product.stock_qty
-  const selectedStock = selectedPot === NO_POT_SLUG
-    ? product.stock_qty
-    : (hasVariants ? Number(variants?.stock?.[comboKey] ?? 0) : product.stock_qty);
+  const selectedStock = hasVariants ? Number(variants?.stock?.[comboKey] ?? 0) : product.stock_qty;
   const selectedPriceModifier =
     (selectedPotType?.price_modifier || 0) + (selectedSizeType?.price_modifier || 0);
   const displayPrice = product.price + selectedPriceModifier;
@@ -510,26 +505,6 @@ export default function ProductDetailPage() {
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pot Type</p>
                       <div className="flex flex-wrap gap-2">
-                        {/* ── No Pot (synthetic default option) ── */}
-                        <button
-                          type="button"
-                          onClick={() => { setSelectedPot(NO_POT_SLUG); setQty(1); }}
-                          className={`w-24 min-h-24 shrink-0 px-2 py-2 rounded-xl border text-xs font-medium transition ${
-                            selectedPot === NO_POT_SLUG
-                              ? 'border-primary bg-primary text-white shadow-sm'
-                              : 'border-gray-200 bg-white hover:border-primary/40'
-                          }`}
-                        >
-                          <span className="flex h-11 items-center justify-center mb-1">
-                            <span className={`text-3xl ${selectedPot === NO_POT_SLUG ? 'opacity-90' : 'opacity-30'}`}>🌿</span>
-                          </span>
-                          <span className="block truncate">No Pot</span>
-                          <span className={`block mt-0.5 ${selectedPot === NO_POT_SLUG ? 'text-white/80' : 'text-gray-500'}`}>
-                            Included
-                          </span>
-                        </button>
-
-                        {/* ── Actual pot type options ── */}
                         {variants!.pot_types.map((pot) => {
                           const potCombo = selectedColor
                             ? `${selectedColor}__${pot.slug}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`

@@ -2,13 +2,18 @@ import hashlib
 import math
 import re
 
-from sqlalchemy import Select, cast, func, or_, select
+from sqlalchemy import Select, cast, func, or_, select  # func used in list_products count queries
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Category, Product
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.utils.redis import cache_delete, cache_delete_pattern
+
+# Maximum number of times to retry a slug-collision IntegrityError before giving up.
+# In practice this only fires under concurrent writes; 3 retries is more than enough.
+_SLUG_RETRY_LIMIT = 3
 
 
 def _slugify(text: str) -> str:
@@ -184,25 +189,60 @@ async def get_product_by_id(db: AsyncSession, product_id: int) -> Product | None
     return result.scalar_one_or_none()
 
 
+async def _unique_slug(db: AsyncSession, base_slug: str, exclude_id: int | None = None) -> str:
+    """Return a slug that doesn't collide with any existing product.
+    
+    If base_slug is taken, appends -2, -3, … until a free one is found.
+    Pass exclude_id when updating so the product's own current slug is not
+    treated as a collision.
+    """
+    candidate = base_slug
+    suffix = 2
+    while True:
+        q = select(Product.id).where(Product.slug == candidate)
+        if exclude_id is not None:
+            q = q.where(Product.id != exclude_id)
+        taken = (await db.execute(q)).scalar_one_or_none()
+        if taken is None:
+            return candidate
+        candidate = f"{base_slug}-{suffix}"
+        suffix += 1
+
+
+def _is_slug_violation(exc: IntegrityError) -> bool:
+    """Return True when the IntegrityError is specifically a slug uniqueness conflict."""
+    msg = str(exc.orig).lower()
+    return "ix_products_slug" in msg or (
+        "unique" in msg and "slug" in msg
+    )
+
+
 async def create_product(
     db: AsyncSession, payload: ProductCreate, image_urls: list[str] | None = None,
 ) -> Product:
-    slug = _slugify(payload.name)
-    existing = await db.execute(select(Product).where(Product.slug == slug))
-    if existing.scalar_one_or_none():
-        slug = f"{slug}-{func.count()}"
-
+    base_slug = _slugify(payload.name)
     data = payload.model_dump()
     if data.get("variants"):
         data["variants"] = _clean_and_validate_variants(data["variants"])
 
-    product = Product(
-        **data,
-        slug=slug,
-        images=image_urls or [],
-    )
-    db.add(product)
-    await db.flush()
+    for attempt in range(_SLUG_RETRY_LIMIT):
+        slug = await _unique_slug(db, base_slug)
+        product = Product(**data, slug=slug, images=image_urls or [])
+        db.add(product)
+        try:
+            await db.flush()
+        except IntegrityError as exc:
+            await db.rollback()
+            if not _is_slug_violation(exc):
+                # A different constraint (FK, not-null, etc.) — retrying won't help.
+                raise
+            if attempt < _SLUG_RETRY_LIMIT - 1:
+                # Another request grabbed the same slug between our SELECT and INSERT.
+                # Roll back, let _unique_slug pick the next free candidate, and retry.
+                continue
+            raise
+        break
+
     await db.refresh(product)
     await _invalidate_product_cache(product.slug)
     return product
@@ -214,15 +254,43 @@ async def update_product(
     old_slug = product.slug
     data = payload.model_dump(exclude_unset=True)
     if "name" in data and data["name"]:
-        data["slug"] = _slugify(data["name"])
+        # Only regenerate the slug if the name actually changed
+        new_slug_base = _slugify(data["name"])
+        if new_slug_base != product.slug:
+            new_slug = await _unique_slug(db, new_slug_base, exclude_id=product.id)
+            data["slug"] = new_slug
+        else:
+            # Name unchanged (or slug already matches) — keep existing slug
+            data.pop("slug", None)
     if "variants" in data and data["variants"]:
         data["variants"] = _clean_and_validate_variants(data["variants"])
-    
+
     # Full dict reassignment triggers SQLAlchemy dirty tracking for JSON columns.
     # Do NOT refactor to in-place mutation without calling flag_modified(product, "variants").
     for field, value in data.items():
         setattr(product, field, value)
-    await db.flush()
+
+    for attempt in range(_SLUG_RETRY_LIMIT):
+        try:
+            await db.flush()
+        except IntegrityError as exc:
+            await db.rollback()
+            if not _is_slug_violation(exc):
+                # A different constraint — retrying with a new slug won't fix it.
+                raise
+            if attempt < _SLUG_RETRY_LIMIT - 1:
+                # Race: another request claimed this slug between our SELECT and UPDATE.
+                # Re-fetch the product (session was rolled back) and pick a new slug.
+                product = await get_product_by_id(db, product.id)
+                new_base = _slugify(data.get("name", product.name))
+                new_slug = await _unique_slug(db, new_base, exclude_id=product.id)
+                data["slug"] = new_slug
+                for field, value in data.items():
+                    setattr(product, field, value)
+                continue
+            raise
+        break
+
     await db.refresh(product)
     await cache_delete(f"product:{old_slug}")
     await _invalidate_product_cache(product.slug)

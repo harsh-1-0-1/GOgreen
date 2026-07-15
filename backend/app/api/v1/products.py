@@ -2,6 +2,7 @@ import json
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
@@ -266,6 +267,10 @@ async def create_product(
             for key in uploaded_keys:
                 await delete_image_file(key)
             raise
+    except IntegrityError as exc:
+        orig = str(exc.orig) if exc.orig else str(exc)
+        detail = orig.split("\n")[0] if "unique" in orig.lower() else "Could not save product due to a data conflict."
+        raise HTTPException(status_code=409, detail=detail) from exc
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -294,6 +299,10 @@ async def update_product(
 
     try:
         product = await product_service.update_product(db, product, body)
+    except IntegrityError as exc:
+        orig = str(exc.orig) if exc.orig else str(exc)
+        detail = orig.split("\n")[0] if "unique" in orig.lower() else "Could not save product due to a data conflict."
+        raise HTTPException(status_code=409, detail=detail) from exc
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

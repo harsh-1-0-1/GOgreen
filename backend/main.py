@@ -13,6 +13,7 @@ from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy.exc import IntegrityError
 
 import app.core.logging as _  # noqa: F401 – initialise loguru sinks
 from app.api.middleware import CloudFrontGateMiddleware
@@ -98,6 +99,30 @@ async def image_storage_unavailable_handler(
     return JSONResponse(
         status_code=503,
         content={"error": "Image upload service unavailable"},
+    )
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(_request: Request, exc: IntegrityError) -> JSONResponse:
+    # This handler is a backstop for any IntegrityError that isn't caught at the
+    # endpoint level (e.g. from routers that don't have explicit IntegrityError handling).
+    # Product endpoints catch it themselves first so the session rollback happens
+    # at the right layer — this handler will never fire for those routes unless
+    # something slips through after all retries are exhausted.
+    orig = str(exc.orig) if exc.orig else str(exc)
+    logger.warning("IntegrityError on {}: {}", _request.url.path, orig)
+
+    # Only surface constraint/column names for slug violations, which are safe to
+    # expose (no schema detail, just the duplicate value the client already sent).
+    # Everything else gets a generic message — column names and FK targets stay
+    # server-side in the log.
+    if "ix_products_slug" in orig or ("unique" in orig.lower() and "slug" in orig.lower()):
+        first_line = orig.split("\n")[0]
+        return JSONResponse(status_code=409, content={"detail": first_line})
+
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "A database constraint was violated. Check your input and try again."},
     )
 
 
