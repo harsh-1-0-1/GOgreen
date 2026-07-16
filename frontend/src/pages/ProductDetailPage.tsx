@@ -48,32 +48,120 @@ function MobileGallery({
   activeIndex: number;
   onActiveChange: (i: number) => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  // Track whether the next scroll event was triggered programmatically
-  // (button click) so we don't echo it back via onActiveChange.
-  const isProgrammaticScroll = useRef(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const list = images.length ? images : ['https://placehold.co/600x600?text=Plant'];
 
-  // Scroll to active slide whenever activeIndex changes from a button click
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const targetLeft = activeIndex * el.clientWidth;
-    if (Math.abs(el.scrollLeft - targetLeft) < 2) return; // already there
-    isProgrammaticScroll.current = true;
-    el.scrollTo({ left: targetLeft, behavior: 'smooth' });
-  }, [activeIndex]);
+  const EASING = 'transform 380ms cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 
-  function handleScroll() {
-    // Ignore scroll events we triggered ourselves
-    if (isProgrammaticScroll.current) {
-      isProgrammaticScroll.current = false;
-      return;
+  // Touch gesture state — all refs so touch handlers never close over stale values
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const touchDeltaX = useRef(0);
+  // null = intent not yet determined, 'h' = horizontal (we own it), 'v' = vertical (pass through)
+  const gestureIntent = useRef<'h' | 'v' | null>(null);
+  // Velocity tracking: record last two move events to compute px/ms on touchend
+  const lastMoveTime = useRef(0);
+  const lastMoveX = useRef(0);
+  const velocityX = useRef(0); // px/ms, positive = moving right
+
+  // React's synthetic onTouchMove is passive by default (can't call preventDefault).
+  // Attach the move listener manually as { passive: false } so we can block
+  // page scroll when the gesture is determined to be horizontal.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const onMove = (e: TouchEvent) => {
+      // Only block scroll if intent is confirmed horizontal
+      if (gestureIntent.current === 'h') e.preventDefault();
+    };
+    track.addEventListener('touchmove', onMove, { passive: false });
+    return () => track.removeEventListener('touchmove', onMove);
+  }, []);
+
+  function settle(toIndex: number) {
+    // Re-enable transition, then let React re-render drive the transform.
+    // For snap-back (toIndex === currentIndex), also force the pixel position
+    // so the animation plays — React won't re-render since index didn't change.
+    // We receive currentIndex as a parameter (not from closure) to avoid
+    // stale-closure bugs if a re-render happens before transitionend fires.
+    const currentIndex = activeIndex;
+    if (!trackRef.current || !containerRef.current) return;
+    const el = trackRef.current;
+    el.style.transition = EASING;
+    if (toIndex === currentIndex) {
+      el.style.transform = `translateX(${-currentIndex * containerRef.current.offsetWidth}px)`;
+      const onEnd = () => {
+        el.style.transform = '';
+        el.style.transition = '';
+        el.removeEventListener('transitionend', onEnd);
+      };
+      el.addEventListener('transitionend', onEnd);
+    } else {
+      // React re-render will apply the correct percentage transform with transition
+      el.style.transform = '';
+      onActiveChange(toIndex);
     }
-    const el = scrollRef.current;
-    if (!el) return;
-    const idx = Math.round(el.scrollLeft / el.clientWidth);
-    if (idx !== activeIndex) onActiveChange(idx);
+  }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchDeltaX.current = 0;
+    gestureIntent.current = null;
+    lastMoveTime.current = e.timeStamp;
+    lastMoveX.current = e.touches[0].clientX;
+    velocityX.current = 0;
+    // Disable transition so the track follows the finger with zero lag
+    if (trackRef.current) trackRef.current.style.transition = 'none';
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (!containerRef.current || !trackRef.current) return;
+
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+
+    // Determine gesture intent on the first few pixels of movement
+    if (gestureIntent.current === null) {
+      if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return; // not moved enough yet
+      gestureIntent.current = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+    }
+
+    // Vertical intent — do nothing, let the page scroll normally
+    if (gestureIntent.current === 'v') return;
+
+    // Horizontal intent — drive the track (preventDefault handled by the
+    // non-passive native listener registered in useEffect)
+    touchDeltaX.current = dx;
+
+    // Velocity: px/ms over the last move interval
+    const dt = e.timeStamp - lastMoveTime.current;
+    if (dt > 0) velocityX.current = (e.touches[0].clientX - lastMoveX.current) / dt;
+    lastMoveTime.current = e.timeStamp;
+    lastMoveX.current = e.touches[0].clientX;
+
+    const base = -activeIndex * containerRef.current.offsetWidth;
+    trackRef.current.style.transform = `translateX(${base + dx}px)`;
+  }
+
+  function handleTouchEnd() {
+    // If intent was vertical (or never determined), nothing to do
+    if (gestureIntent.current !== 'h' || !containerRef.current) return;
+
+    const width = containerRef.current.offsetWidth;
+    const dist = touchDeltaX.current;
+    const vel = velocityX.current; // px/ms
+
+    // Advance if: fast flick (>0.3px/ms) OR dragged past 25% of width
+    const isFlickLeft  = vel < -0.3 && activeIndex < list.length - 1;
+    const isFlickRight = vel >  0.3 && activeIndex > 0;
+    const isDragLeft   = dist < -width * 0.25 && activeIndex < list.length - 1;
+    const isDragRight  = dist >  width * 0.25 && activeIndex > 0;
+
+    if (isFlickLeft  || isDragLeft)  { settle(activeIndex + 1); return; }
+    if (isFlickRight || isDragRight) { settle(activeIndex - 1); return; }
+    settle(activeIndex); // snap back
   }
 
   function scrollPrev() {
@@ -84,22 +172,56 @@ function MobileGallery({
     if (activeIndex < list.length - 1) onActiveChange(activeIndex + 1);
   }
 
+  // Keyboard navigation for desktop / accessibility
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); scrollPrev(); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); scrollNext(); }
+  }
+
   return (
-    <div className="relative">
+    // touch-action: pan-y tells the browser "I'm claiming horizontal gestures;
+    // vertical scroll is yours." This is the CSS-level contract that backs up
+    // the intent-detection logic above and prevents flicker on fast diagonals.
+    <div
+      className="relative overflow-hidden rounded-2xl"
+      ref={containerRef}
+      style={{ touchAction: 'pan-y' }}
+      // aria: region label + roledescription so screen readers announce "Image carousel"
+      role="region"
+      aria-label={`Product images, ${list.length} total`}
+      aria-roledescription="carousel"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
+      {/* Track — slides side by side, driven by transform */}
       <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        // No gap — images must be exactly clientWidth wide for snap math to work
-        className="flex overflow-x-auto snap-x-mandatory scrollbar-hide"
+        ref={trackRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="flex will-change-transform"
+        style={{
+          transform: `translateX(${-activeIndex * 100}%)`,
+          transition: EASING,
+        }}
       >
         {list.map((img, i) => (
-          <img
+          <div
             key={i}
-            src={img}
-            alt={`Product ${i + 1}`}
-            className="w-full shrink-0 snap-center aspect-square object-cover rounded-2xl"
-            loading="lazy"
-          />
+            role="group"
+            aria-roledescription="slide"
+            aria-label={`Image ${i + 1} of ${list.length}`}
+            aria-hidden={i !== activeIndex}
+            className="w-full shrink-0"
+          >
+            <img
+              src={img}
+              alt={`Product image ${i + 1}`}
+              className="w-full aspect-square object-cover"
+              loading="lazy"
+              draggable={false}
+            />
+          </div>
         ))}
       </div>
       
