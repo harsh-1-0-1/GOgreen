@@ -213,9 +213,12 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setStockByKey(p.variants?.stock || {});
     setImageKeysByCombo({});
     setImageUrlsByCombo({});
-    setRawPotTypes(null);
-    setRawColorTypes(null);
-    seededPotImagesRef.current = false; // allow one seed for the incoming product
+    // Do NOT clear rawPotTypes/rawColorTypes here — they may have already been set by the
+    // rawProduct effect if that fetch resolved before freshProduct. Clearing them here
+    // would prevent the merge effect from ever running in that ordering.
+    // The guard refs are reset here (and also in the rawProduct effect) so the merge
+    // runs exactly once regardless of which fetch wins the race.
+    seededPotImagesRef.current = false;
     seededColorImagesRef.current = false;
     setVariantError(null);
   }, [reset]);
@@ -974,7 +977,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     </div>
                     <button
                       type="button"
-                      onClick={() => setColors([...colors, { name: '', hex: '#2D6A4F', image_key: '', image_url: '' }])}
+                      onClick={() => setColors(prev => [...prev, { name: '', hex: '#2D6A4F', image_key: '', image_url: '' }])}
                       className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
                     >
                       + Add Color
@@ -986,19 +989,19 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                         <div className="flex gap-2 items-center">
                           <input
                             value={color.name}
-                            onChange={(e) => setColors(colors.map((c, i) => i === index ? { ...c, name: e.target.value } : c))}
+                            onChange={(e) => { const v = e.target.value; setColors(prev => prev.map((c, i) => i === index ? { ...c, name: v } : c)); }}
                             placeholder="Color Name (e.g., Terracotta)"
                             className={`${inputClass} flex-1 bg-white`}
                           />
                           <input
                             type="color"
                             value={color.hex}
-                            onChange={(e) => setColors(colors.map((c, i) => i === index ? { ...c, hex: e.target.value } : c))}
+                            onChange={(e) => { const v = e.target.value; setColors(prev => prev.map((c, i) => i === index ? { ...c, hex: v } : c)); }}
                             className="h-9 w-9 border border-gray-200 rounded-lg cursor-pointer bg-transparent p-0 shrink-0"
                           />
                           <button
                             type="button"
-                            onClick={() => setColors(colors.filter((_, i) => i !== index))}
+                            onClick={() => setColors(prev => prev.filter((_, i) => i !== index))}
                             className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
                           >
                             <Trash2 size={15} />
@@ -1029,7 +1032,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                             {color.image_key && (
                               <button
                                 type="button"
-                                onClick={() => setColors(colors.map((c, i) => i === index ? { ...c, image_key: '', image_url: '' } : c))}
+                                onClick={() => setColors(prev => prev.map((c, i) => i === index ? { ...c, image_key: '', image_url: '' } : c))}
                                 className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium"
                               >
                                 Remove image
@@ -1054,7 +1057,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     </div>
                     <button
                       type="button"
-                      onClick={() => setPots([...pots, { name: '', price_modifier: 0, image_key: '', image_url: '' }])}
+                      onClick={() => setPots(prev => [...prev, { name: '', price_modifier: 0, image_key: '', image_url: '' }])}
                       className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
                     >
                       + Add Pot Option
@@ -1066,7 +1069,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                         <div className="flex gap-2 items-center">
                           <input
                             value={pot.name}
-                            onChange={(e) => setPots(pots.map((p, i) => i === index ? { ...p, name: e.target.value } : p))}
+                            onChange={(e) => { const v = e.target.value; setPots(prev => prev.map((p, i) => i === index ? { ...p, name: v } : p)); }}
                             placeholder="Pot Type (e.g. Ceramic pot)"
                             className={`${inputClass} flex-1 bg-white`}
                           />
@@ -1075,14 +1078,14 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                             <input
                               type="number"
                               value={pot.price_modifier}
-                              onChange={(e) => setPots(pots.map((p, i) => i === index ? { ...p, price_modifier: Number(e.target.value) } : p))}
+                              onChange={(e) => { const v = Number(e.target.value); setPots(prev => prev.map((p, i) => i === index ? { ...p, price_modifier: v } : p)); }}
                               placeholder="Price +/-"
                               className={`${inputClass} bg-white`}
                             />
                           </div>
                           <button
                             type="button"
-                            onClick={() => setPots(pots.filter((_, i) => i !== index))}
+                            onClick={() => setPots(prev => prev.filter((_, i) => i !== index))}
                             className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
                             aria-label={`Remove ${pot.name || 'pot'} option`}
                           >
@@ -1114,7 +1117,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                             {pot.image_key && (
                               <button
                                 type="button"
-                                onClick={() => setPots(pots.map((p, i) => i === index ? { ...p, image_key: '', image_url: '' } : p))}
+                                onClick={() => setPots(prev => prev.map((p, i) => i === index ? { ...p, image_key: '', image_url: '' } : p))}
                                 className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium"
                               >
                                 Remove image
@@ -1139,7 +1142,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     </div>
                     <button
                       type="button"
-                      onClick={() => setSizes([...sizes, { name: '', price_modifier: 0, description: '' }])}
+                      onClick={() => setSizes(prev => [...prev, { name: '', price_modifier: 0, description: '' }])}
                       className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
                     >
                       + Add Size
@@ -1150,7 +1153,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                       <div key={index} className="flex gap-2 items-center">
                         <select
                           value={size.name}
-                          onChange={(e) => setSizes(sizes.map((s, i) => i === index ? { ...s, name: e.target.value } : s))}
+                          onChange={(e) => { const v = e.target.value; setSizes(prev => prev.map((s, i) => i === index ? { ...s, name: v } : s)); }}
                           className={`${inputClass} flex-1`}
                         >
                           <option value="">Select Size</option>
@@ -1161,7 +1164,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                         </select>
                         <input
                           value={size.description}
-                          onChange={(e) => setSizes(sizes.map((s, i) => i === index ? { ...s, description: e.target.value } : s))}
+                          onChange={(e) => { const v = e.target.value; setSizes(prev => prev.map((s, i) => i === index ? { ...s, description: v } : s)); }}
                           placeholder="Hint (e.g. 6–12 in)"
                           className={`${inputClass} w-40`}
                         />
@@ -1170,14 +1173,14 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                           <input
                             type="number"
                             value={size.price_modifier}
-                            onChange={(e) => setSizes(sizes.map((s, i) => i === index ? { ...s, price_modifier: Number(e.target.value) } : s))}
+                            onChange={(e) => { const v = Number(e.target.value); setSizes(prev => prev.map((s, i) => i === index ? { ...s, price_modifier: v } : s)); }}
                             placeholder="+Price"
                             className={inputClass}
                           />
                         </div>
                         <button
                           type="button"
-                          onClick={() => setSizes(sizes.filter((_, i) => i !== index))}
+                          onClick={() => setSizes(prev => prev.filter((_, i) => i !== index))}
                           className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
                         >
                           <Trash2 size={15} />
