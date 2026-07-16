@@ -290,21 +290,28 @@ export default function ProductDetailPage() {
     displayOriginalPrice && displayOriginalPrice > displayPrice
       ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
       : null;
-  // Derive gallery images
+  // Derive gallery images — priority order:
+  // 1. image_map entry for the current combo (variant-specific images)
+  // 2. product.images (the main uploaded gallery, used as fallback for all combos)
+  // 3. pot type image / default_image (legacy single-image fallbacks)
   let galleryImages: string[] = [];
   if (hasVariants) {
     const comboImages = variants?.image_map?.[comboKey];
     if (Array.isArray(comboImages) && comboImages.length > 0) {
       galleryImages = comboImages;
+    }
+  }
+
+  if (galleryImages.length === 0) {
+    // No combo-specific images — use the product's own image gallery first,
+    // then fall back to pot thumbnail / default_image as a last resort.
+    if (product.images?.length) {
+      galleryImages = product.images;
     } else if (selectedPotType?.image_url) {
       galleryImages = [selectedPotType.image_url];
     } else if (variants?.default_image) {
       galleryImages = [variants.default_image];
     }
-  }
-
-  if (galleryImages.length === 0) {
-    galleryImages = product.images || [];
   }
 
   const displayImage = galleryImages[0] || product.images?.[0] || '';
