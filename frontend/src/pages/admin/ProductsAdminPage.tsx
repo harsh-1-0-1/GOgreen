@@ -1242,14 +1242,29 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                 {/* Combinations Matrix */}
                 {variantRows.length > 0 && (
                   <div className="border-t pt-4 space-y-2">
-                    <span className="text-xs font-semibold text-gray-700 block">4. Variant Combinations stock & images</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-gray-700 block">4. Variant Combinations stock & images</span>
+                      {Object.values(imageKeysByCombo).some(arr => arr.length > 0) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!confirm('Clear all combination images? The product gallery images will show instead.')) return;
+                            setImageKeysByCombo({});
+                            setImageUrlsByCombo({});
+                          }}
+                          className="text-xs text-red-500 hover:text-red-600 font-medium border border-red-200 px-2 py-1 rounded hover:bg-red-50 transition"
+                        >
+                          Clear all combo images
+                        </button>
+                      )}
+                    </div>
                     <div className="overflow-x-auto border rounded-lg bg-gray-50/50">
                       <table className="w-full text-xs text-left">
                         <thead className="bg-gray-100 text-gray-600 border-b">
                           <tr>
                             <th className="p-3 font-medium">Combination</th>
                             <th className="p-3 font-medium w-28">Stock Qty</th>
-                            <th className="p-3 font-medium">Image URL</th>
+                            <th className="p-3 font-medium">Images <span className="font-normal text-gray-400">(optional — product gallery used if empty)</span></th>
                           </tr>
                         </thead>
                         <tbody>
