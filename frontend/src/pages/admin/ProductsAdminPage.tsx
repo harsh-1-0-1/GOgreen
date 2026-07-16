@@ -53,6 +53,55 @@ function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
+/**
+ * Crops an image file to a centered square and returns a new File.
+ * This ensures the product carousel always receives uniform square images.
+ *
+ * Uses createImageBitmap so the browser applies EXIF rotation automatically
+ * before we ever touch the canvas — phone photos with rotation metadata
+ * will render correctly without any manual EXIF parsing.
+ *
+ * Preserves PNG transparency (keeps format as image/png). Everything else
+ * is output as JPEG at 92% quality so product cutouts with transparent
+ * backgrounds aren't flattened to a solid color.
+ */
+async function cropToSquare(file: File): Promise<File> {
+  // createImageBitmap applies EXIF orientation for us
+  const bitmap = await createImageBitmap(file);
+
+  const size = Math.min(bitmap.width, bitmap.height);
+  const sx = (bitmap.width - size) / 2;
+  const sy = (bitmap.height - size) / 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+
+  const isPng = file.type === 'image/png';
+  if (!isPng) {
+    // Fill with white so any semi-transparent edge pixels don't go black
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+  }
+
+  ctx.drawImage(bitmap, sx, sy, size, size, 0, 0, size, size);
+  bitmap.close();
+
+  return new Promise((resolve, reject) => {
+    const outputType = isPng ? 'image/png' : 'image/jpeg';
+    const quality = isPng ? undefined : 0.92;
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) { reject(new Error('Canvas toBlob failed')); return; }
+        resolve(new File([blob], file.name, { type: outputType, lastModified: Date.now() }));
+      },
+      outputType,
+      quality,
+    );
+  });
+}
+
 function ProductModal({ onClose, editProduct }: { onClose: () => void; editProduct?: Product | null }) {
   const isEdit = !!editProduct;
   // useProduct (public endpoint, resolved URLs) — used for display fields only (name, price, etc.)
@@ -97,14 +146,13 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setProductImages(productImages.filter((_, i) => i !== index));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files) {
-      const newFiles = Array.from(files);
-      setUploadedFiles([...uploadedFiles, ...newFiles]);
-      const newPreviews = newFiles.map(file => URL.createObjectURL(file));
-      setFilePreviews([...filePreviews, ...newPreviews]);
-    }
+    if (!files) return;
+    const cropped = await Promise.all(Array.from(files).map(cropToSquare));
+    setUploadedFiles((prev) => [...prev, ...cropped]);
+    const previews = cropped.map((f) => URL.createObjectURL(f));
+    setFilePreviews((prev) => [...prev, ...previews]);
   };
 
   const handleRemoveFile = (index: number) => {
@@ -405,8 +453,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         // Upload any newly selected files first
         const uploadedUrls: string[] = [];
         for (const file of uploadedFiles) {
+          const squared = await cropToSquare(file);
           const fd = new FormData();
-          fd.append('image', file);
+          fd.append('image', squared);
           fd.append('product_id', String(editProduct.id));
           const { data: uploadResult } = await api.post<{ url: string }>('/products/upload-image', fd);
           uploadedUrls.push(uploadResult.url);
@@ -485,8 +534,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     if (!file) return;
     setUploadingColorImage(index);
     try {
+      const squared = await cropToSquare(file);
       const fd = new FormData();
-      fd.append('image', file);
+      fd.append('image', squared);
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/variant-image', fd);
       setColors(current => current.map((color, i) => i === index ? { ...color, image_key: data.key, image_url: data.url } : color));
@@ -502,8 +552,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     if (!file) return;
     setUploadingPotImage(index);
     try {
+      const squared = await cropToSquare(file);
       const fd = new FormData();
-      fd.append('image', file);
+      fd.append('image', squared);
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/variant-image', fd);
       // key → stored in payload; url → display only
@@ -520,8 +571,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     if (!file) return;
     setUploadingDefaultImage(true);
     try {
+      const squared = await cropToSquare(file);
       const fd = new FormData();
-      fd.append('image', file);
+      fd.append('image', squared);
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/upload-image', fd);
       // key → stored in payload; url → display only
@@ -546,8 +598,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
     setUploadingComboImage(comboKey);
     try {
+      const squared = await cropToSquare(file);
       const fd = new FormData();
-      fd.append('image', file);
+      fd.append('image', squared);
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/upload-image', fd);
       // key → stored in payload; url → display only

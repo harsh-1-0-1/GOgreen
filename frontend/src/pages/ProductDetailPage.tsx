@@ -49,20 +49,31 @@ function MobileGallery({
   onActiveChange: (i: number) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Track whether the next scroll event was triggered programmatically
+  // (button click) so we don't echo it back via onActiveChange.
+  const isProgrammaticScroll = useRef(false);
   const list = images.length ? images : ['https://placehold.co/600x600?text=Plant'];
 
-  // Scroll to active slide whenever activeIndex changes from outside
+  // Scroll to active slide whenever activeIndex changes from a button click
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTo({ left: activeIndex * el.clientWidth, behavior: 'smooth' });
+    const targetLeft = activeIndex * el.clientWidth;
+    if (Math.abs(el.scrollLeft - targetLeft) < 2) return; // already there
+    isProgrammaticScroll.current = true;
+    el.scrollTo({ left: targetLeft, behavior: 'smooth' });
   }, [activeIndex]);
 
   function handleScroll() {
+    // Ignore scroll events we triggered ourselves
+    if (isProgrammaticScroll.current) {
+      isProgrammaticScroll.current = false;
+      return;
+    }
     const el = scrollRef.current;
     if (!el) return;
     const idx = Math.round(el.scrollLeft / el.clientWidth);
-    onActiveChange(idx);
+    if (idx !== activeIndex) onActiveChange(idx);
   }
 
   function scrollPrev() {
@@ -74,11 +85,12 @@ function MobileGallery({
   }
 
   return (
-    <div className="relative px-4">
+    <div className="relative">
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex overflow-x-auto snap-x-mandatory scrollbar-hide gap-4"
+        // No gap — images must be exactly clientWidth wide for snap math to work
+        className="flex overflow-x-auto snap-x-mandatory scrollbar-hide"
       >
         {list.map((img, i) => (
           <img
