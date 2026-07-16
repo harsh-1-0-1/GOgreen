@@ -45,5 +45,10 @@ export function useProductRaw(productId: number | null) {
       return data as Product;  // same shape as Product but image fields are relative keys
     },
     enabled: !!productId,
+    // Keep the raw admin data fresh for the duration of an edit session.
+    // Without staleTime, React Query refetches on every window-focus event, which causes
+    // the rawProduct useEffect to re-fire, reset seededPotImagesRef, and overwrite any
+    // variant images the admin has uploaded in the current session with stale server values.
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }

@@ -136,6 +136,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // images the admin has already uploaded during this edit session.
   const seededPotImagesRef = useRef(false);
   const seededColorImagesRef = useRef(false);
+  // Track which product ID the seed ran for, so a background refetch of the *same*
+  // product doesn't reset the guard and re-run the merge over already-edited state.
+  const seededForProductIdRef = useRef<number | null>(null);
 
   // Derive a display URL from a relative storage key.
   // Full URLs pass through unchanged (external images, legacy data).
@@ -245,10 +248,17 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
     // Store raw pot types separately so the merge effect below can run
     // regardless of whether rawProduct or applyProductToForm resolved first.
-    // Reset the guard so the merge runs exactly once for this product load.
-    seededPotImagesRef.current = false;
+    // Only reset the seed guards if this is a genuinely new product load — not a
+    // background refetch of the same product. A refetch after the admin has already
+    // uploaded new variant images must NOT reset the guards, because the merge would
+    // then re-run and overwrite those unsaved uploads with stale server-side keys.
+    const incomingId = rawProduct.id ?? null;
+    if (seededForProductIdRef.current !== incomingId) {
+      seededForProductIdRef.current = incomingId;
+      seededPotImagesRef.current = false;
+      seededColorImagesRef.current = false;
+    }
     setRawPotTypes(v.pot_types || []);
-    seededColorImagesRef.current = false;
     setRawColorTypes(v.colors || []);
   // resolveImageUrl is stable (defined inside component but no deps) — safe to omit
   // eslint-disable-next-line react-hooks/exhaustive-deps
