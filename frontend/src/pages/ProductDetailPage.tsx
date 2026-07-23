@@ -326,7 +326,7 @@ function InlineBanner({ banner: b, fallbackImg, hasCta }: {
       className="mt-10 sm:mt-14 rounded-2xl overflow-hidden relative"
       style={{ backgroundColor: b.bg_color || '#1B4332' }}
     >
-      <img src={fallbackImg} alt={b.title} className="w-full h-36 sm:h-52 object-cover" loading="lazy" />
+      <img src={fallbackImg} alt={b.title} className="w-full h-[280px] sm:h-[350px] object-cover" loading="lazy" />
       <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent flex items-center px-6 sm:px-10 gap-4">
         <div className="flex-1 min-w-0">
           <p
