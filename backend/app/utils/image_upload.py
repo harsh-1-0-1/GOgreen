@@ -144,7 +144,8 @@ async def upload_image_file(
     contents = await file.read()
     key = generate_image_key(folder, entity_id, file.filename or "")
 
-    if s3_enabled:
+    # Only use S3 in production. Local / dev / staging always writes to static/.
+    if is_prod and s3_enabled:
         content_type = file.content_type or "image/jpeg"
         await run_in_threadpool(_upload_to_s3_sync, contents, key, content_type)
         logger.info("Image uploaded to S3: {}", key)
@@ -164,7 +165,7 @@ async def delete_image_file(key: str | None) -> None:
     if not relative_key or relative_key.startswith(("http://", "https://", "/")):
         return
 
-    if _s3_enabled():
+    if settings.ENVIRONMENT.lower() == "production" and _s3_enabled():
         try:
             await run_in_threadpool(_delete_from_s3_sync, relative_key)
             logger.info("Deleted S3 object: {}", relative_key)
