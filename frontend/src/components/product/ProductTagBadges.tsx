@@ -1,106 +1,5 @@
 import { Link } from 'react-router-dom';
-
-// ---------------------------------------------------------------------------
-// Tag mapping and exact pastel color styling for Plantoga
-// ---------------------------------------------------------------------------
-interface TagConfig {
-  label: string;
-  bg: string;
-  text: string;
-  border: string;
-  slug: string;
-}
-
-const ALLOWED_TAGS_MAP: Record<string, TagConfig> = {
-  // Air Purifying -> #d5e9f2
-  'air-purifying': {
-    label: 'Air Purifying',
-    bg: '#d5e9f2',
-    text: '#1e3e57',
-    border: '#b3d3e3',
-    slug: 'air-purifying',
-  },
-  
-  // Modern Decor -> #fedfc3
-  'modern-decor': {
-    label: 'Modern Decor',
-    bg: '#fedfc3',
-    text: '#6b3f17',
-    border: '#f9cb9e',
-    slug: 'modern-decor',
-  },
-  'modern': {
-    label: 'Modern Decor',
-    bg: '#fedfc3',
-    text: '#6b3f17',
-    border: '#f9cb9e',
-    slug: 'modern-decor',
-  },
-  
-  // Easy Care -> #cde3b5
-  'easy-care': {
-    label: 'Easy Care',
-    bg: '#cde3b5',
-    text: '#2e4c19',
-    border: '#b1cc96',
-    slug: 'easy-care',
-  },
-  'low-maintenance': {
-    label: 'Easy Care',
-    bg: '#cde3b5',
-    text: '#2e4c19',
-    border: '#b1cc96',
-    slug: 'easy-care',
-  },
-  'beginner-friendly': {
-    label: 'Easy Care',
-    bg: '#cde3b5',
-    text: '#2e4c19',
-    border: '#b1cc96',
-    slug: 'easy-care',
-  },
-  
-  // Tropical -> #f0d5e8
-  'tropical': {
-    label: 'Tropical',
-    bg: '#f0d5e8',
-    text: '#5c1f46',
-    border: '#e3bad6',
-    slug: 'tropical',
-  },
-  
-  // Pet Friendly -> #fff0c2
-  'pet-friendly': {
-    label: 'Pet Friendly',
-    bg: '#fff0c2',
-    text: '#614f10',
-    border: '#fad891',
-    slug: 'pet-friendly',
-  },
-  'pet-safe': {
-    label: 'Pet Friendly',
-    bg: '#fff0c2',
-    text: '#614f10',
-    border: '#fad891',
-    slug: 'pet-friendly',
-  },
-  
-  // Vastu Friendly -> #d9e0ce
-  'vastu-friendly': {
-    label: 'Vastu Friendly',
-    bg: '#d9e0ce',
-    text: '#3c4c28',
-    border: '#c2cca7',
-    slug: 'vastu-friendly',
-  },
-  'lucky': {
-    label: 'Vastu Friendly',
-    bg: '#d9e0ce',
-    text: '#3c4c28',
-    border: '#c2cca7',
-    slug: 'vastu-friendly',
-  },
-};
+import { ALLOWED_TAGS_MAP, type TagConfig } from './productTagBadges.utils';
 
 interface ProductTagBadgesProps {
   tags: string[] | null | undefined;
@@ -123,7 +22,7 @@ export default function ProductTagBadges({
 }: ProductTagBadgesProps) {
   if (!tags || tags.length === 0) return null;
 
-  // Filter and map incoming tags to keep only the 6 allowed types
+  // Filter and map incoming tags to keep only the allowed types
   const mappedList = tags
     .map((t) => {
       const key = t.toLowerCase().trim().replace(/\s+/g, '-');
@@ -131,7 +30,7 @@ export default function ProductTagBadges({
     })
     .filter((styleObj): styleObj is TagConfig => styleObj !== null);
 
-  // Deduplicate tags by label (e.g. if product has both low-maintenance and easy-care, show only one Easy Care)
+  // Deduplicate by label (e.g. low-maintenance + easy-care → one "Easy Care" badge)
   const seenLabels = new Set<string>();
   const uniqueMapped = mappedList.filter((styleObj) => {
     if (seenLabels.has(styleObj.label)) return false;
@@ -181,19 +80,4 @@ export default function ProductTagBadges({
       })}
     </div>
   );
-}
-
-export function getTagStyle(slug: string) {
-  const key = slug.toLowerCase().trim().replace(/\s+/g, '-');
-  const config = ALLOWED_TAGS_MAP[key] || {
-    label: slug,
-    bg: '#F3F4F6',
-    text: '#6B7280',
-    border: '#E5E7EB',
-  };
-  return {
-    bg: config.bg,
-    text: config.text,
-    border: config.border,
-  };
 }

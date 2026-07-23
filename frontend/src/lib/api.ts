@@ -77,7 +77,12 @@ api.interceptors.response.use(
       processQueue(err, null);
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
-      window.location.href = '/';
+      // Use replace instead of href assignment so React isn't mid-render when
+      // the page unloads, avoiding a spurious ErrorBoundary catch on the way out.
+      // Also only redirect if we're not already on the home page.
+      if (window.location.pathname !== '/') {
+        window.location.replace('/');
+      }
       return Promise.reject(err);
     } finally {
       isRefreshing = false;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Edit2, X, Image as ImageIcon, BookOpen, Eye, Edit3, HelpCircle, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useBlogPosts } from '@/hooks/useBlog';
@@ -35,6 +35,22 @@ export default function BlogAdminPage() {
   // Active Mode: 'edit' or 'preview'
   const [activeFormTab, setActiveFormTab] = useState<'write' | 'preview'>('write');
 
+  // Defined with useCallback so the useEffect below can safely list it as a
+  // dependency — avoids the "used before declaration" bug where const resetForm
+  // was referenced inside the effect before it was initialised.
+  const resetForm = useCallback(() => {
+    setTitle('');
+    setExcerpt('');
+    setContent('');
+    setCategory('CARE');
+    setAuthorName('Admin Desk');
+    setIsPublished(false);
+    setCoverImage(null);
+    setCoverImagePreview(null);
+    setEditingPost(null);
+    setActiveFormTab('write');
+  }, []);
+
   useEffect(() => {
     if (editingPost) {
       setTitle(editingPost.title);
@@ -48,20 +64,7 @@ export default function BlogAdminPage() {
     } else {
       resetForm();
     }
-  }, [editingPost]);
-
-  const resetForm = () => {
-    setTitle('');
-    setExcerpt('');
-    setContent('');
-    setCategory('CARE');
-    setAuthorName('Admin Desk');
-    setIsPublished(false);
-    setCoverImage(null);
-    setCoverImagePreview(null);
-    setEditingPost(null);
-    setActiveFormTab('write');
-  };
+  }, [editingPost, resetForm]);
 
   const openCreateModal = () => {
     resetForm();

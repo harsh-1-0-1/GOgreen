@@ -106,6 +106,18 @@ const PLACEMENTS = [
     description: 'Scrollable customer and plant photos shown on every product detail page.',
     helpText: 'Upload portrait photos. Recommended size: 800x1000px (4:5). Drag images to change their display order.',
   },
+  {
+    key: 'product_detail',
+    label: '📦 Product Detail Page Banner',
+    description: 'A wide promotional banner displayed on the product detail page, just above the FAQ section.',
+    helpText: 'Recommended size: 1400x350px. Great for cross-sell, related collections, or care tip promotions.',
+  },
+  {
+    key: 'product_spec',
+    label: '📋 Product Spec Banner',
+    description: 'A wide promotional banner displayed on the product detail page, just above the Product Specification section.',
+    helpText: 'Recommended size: 1400x350px. Good for warranty info, certifications, or care kit upsells.',
+  },
 ] as const;
 
 const bannerSchema = z
@@ -115,7 +127,7 @@ const bannerSchema = z
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
-    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'mobile_promo', 'menu_banner', 'mobile_category', 'cart_suggestions', 'corporate_gifting', 'happy_planters']),
+    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'mobile_promo', 'menu_banner', 'mobile_category', 'cart_suggestions', 'corporate_gifting', 'happy_planters', 'product_detail', 'product_spec']),
     target_path: z.string().max(255).optional().or(z.literal('')),
     bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #FFFFFF)'),
     text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #000000)'),

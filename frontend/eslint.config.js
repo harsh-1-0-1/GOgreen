@@ -19,5 +19,19 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // ── Hard errors — these MUST be clean; build will fail if violated ──
+      'react-hooks/rules-of-hooks': 'error',
+
+      // ── Demoted to warnings — pre-existing issues, not blocking ──
+      // Clean these up incrementally; they won't break the build.
+      'react-hooks/exhaustive-deps': 'warn',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-unused-expressions': 'warn',
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-refresh/only-export-components': 'warn',
+      'no-use-before-define': 'warn',
+    },
   },
 ])

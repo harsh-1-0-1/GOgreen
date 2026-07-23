@@ -5,7 +5,7 @@ import { useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useBanners } from '@/hooks/useBanners';
 import ProductCard from '@/components/product/ProductCard';
-import { getTagStyle } from '@/components/product/ProductTagBadges';
+import { getTagStyle } from '@/components/product/productTagBadges.utils';
 import SkeletonCard from '@/components/ui/SkeletonCard';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';

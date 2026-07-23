@@ -16,6 +16,7 @@ import ProductSpecification from '@/components/product/ProductSpecification';
 import WhyPlantoga from '@/components/product/WhyPlantoga';
 import HappyPlanters from '@/components/product/HappyPlanters';
 import ProductFaq from '@/components/product/ProductFaq';
+import { useBanners } from '@/hooks/useBanners';
 import { STORE_LEGAL } from '@/lib/branding';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
@@ -313,6 +314,44 @@ function CareTips({ tips }: { tips: string[] }) {
   );
 }
 
+import type { Banner } from '@/types';
+
+function InlineBanner({ banner: b, fallbackImg, hasCta }: {
+  banner: Banner;
+  fallbackImg: string;
+  hasCta: boolean;
+}) {
+  return (
+    <div
+      className="mt-10 sm:mt-14 rounded-2xl overflow-hidden relative"
+      style={{ backgroundColor: b.bg_color || '#1B4332' }}
+    >
+      <img src={fallbackImg} alt={b.title} className="w-full h-36 sm:h-52 object-cover" loading="lazy" />
+      <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent flex items-center px-6 sm:px-10 gap-4">
+        <div className="flex-1 min-w-0">
+          <p
+            className="text-lg sm:text-2xl font-bold leading-tight line-clamp-2"
+            style={{ color: b.text_color || '#ffffff' }}
+          >
+            {b.title}
+          </p>
+          {b.subtitle && (
+            <p className="text-white/80 text-xs sm:text-sm mt-1 line-clamp-1">{b.subtitle}</p>
+          )}
+        </div>
+        {hasCta && b.cta_link && (
+          <a
+            href={b.cta_link}
+            className="shrink-0 px-4 py-2 rounded-full text-xs sm:text-sm font-semibold bg-white text-gray-900 hover:bg-gray-100 transition whitespace-nowrap"
+          >
+            {b.cta_text}
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading, isError } = useProduct(slug!);
@@ -331,6 +370,8 @@ export default function ProductDetailPage() {
 
   const { data: similar } = useProducts({ limit: 5 });
   const { data: reviewPreview } = useProductReviews(product?.id, { limit: 1 });
+  const { data: productDetailBanners = [] } = useBanners('product_detail');
+  const { data: productSpecBanners = [] } = useBanners('product_spec');
 
   useEffect(() => {
     isInitialized.current = false;
@@ -359,6 +400,12 @@ export default function ProductDetailPage() {
       }
     }
   }, [selectedColor, selectedPot, selectedSize, product]);
+
+  // Reset gallery to slide 0 whenever the variant selection changes.
+  // Deps are the raw state values (not the derived comboKey) so this hook
+  // can live unconditionally above the early returns — comboKey only changes
+  // when one of these three values changes, so behaviour is identical.
+  useEffect(() => { setGalleryActive(0); }, [selectedColor, selectedPot, selectedSize]);
 
   useEffect(() => {
     if (!product) return;
@@ -442,10 +489,6 @@ export default function ProductDetailPage() {
 
   const displayImage = galleryImages[0] || product.images?.[0] || '';
 
-  // Reset gallery to first image whenever the selected comboKey changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setGalleryActive(0); }, [comboKey]);
-
   // Build selectedOptions for cart
   let selectedOptions: Record<string, string> | null = null;
   if (hasColorPotVariants && selectedColor && selectedPot) {
@@ -490,6 +533,18 @@ export default function ProductDetailPage() {
     { label: 'Net Quantity', value: '1' },
     { label: 'Manufactured by', value: STORE_LEGAL.manufacturedBy },
   ];
+
+  // Shared renderer for product-page inline banners (spec + faq placements).
+  // Returns null when no active banner exists so the space collapses cleanly.
+  function renderInlineBanner(banners: typeof productDetailBanners, fallbackImg: string) {
+    if (!banners.length) return null;
+    const b = banners[0];
+    const img = b.image_url || fallbackImg;
+    const hasCta = b.cta_text && b.cta_link;
+    return (
+      <InlineBanner banner={b} fallbackImg={img} hasCta={!!hasCta} />
+    );
+  }
 
   return (
     <div ref={galleryRef} className="pb-20 md:pb-0 scroll-mt-[100px] sm:scroll-mt-[110px] lg:scroll-mt-[120px]">
@@ -758,6 +813,8 @@ export default function ProductDetailPage() {
 
         <HowToGuide product={product} />
 
+        {renderInlineBanner(productSpecBanners, 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&q=80')}
+
         <ProductSpecification specs={productSpecs} />
 
         <WhyPlantoga />
@@ -781,6 +838,9 @@ export default function ProductDetailPage() {
         <HappyPlanters fallbackImages={galleryImages} />
 
         <ProductReviews productId={product.id} />
+
+        {/* Product detail page ad banner — admin controlled via Banners › Product Detail Page Banner */}
+        {renderInlineBanner(productDetailBanners, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&q=80')}
 
         <ProductFaq />
       </div>

@@ -309,7 +309,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setRawPotTypes(v.pot_types || []);
     setRawColorTypes(v.colors || []);
   // resolveImageUrl is stable (defined inside component but no deps) — safe to omit
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [isEdit, rawProduct]);
 
   // Merge pot image keys into the pots array.
@@ -326,7 +326,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     }));
     seededPotImagesRef.current = true; // never re-seed after this for the current product
   // pots.length (not pots) — only retrigger when rows are added/removed, not on every keystroke
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [rawPotTypes, pots.length]);
 
   // Merge color image keys into the colors array — same pattern as pots.
@@ -338,7 +338,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     }));
     seededColorImagesRef.current = true;
   // colors.length (not colors) — only retrigger when rows are added/removed
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [rawColorTypes, colors.length]);
 
   useEffect(() => {
