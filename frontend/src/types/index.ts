@@ -17,6 +17,12 @@ export interface Category {
   children?: Category[];
 }
 
+export interface CareItem {
+  icon?: string | null;
+  title: string;
+  description: string;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -32,6 +38,7 @@ export interface Product {
   how_to_guide: string | null;
   sunlight: string | null;
   watering: string | null;
+  care_items?: CareItem[] | null;
   badge: string | null;
   is_active: boolean;
   created_at: string;

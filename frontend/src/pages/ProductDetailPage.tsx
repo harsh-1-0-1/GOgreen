@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronUp, Droplets, Minus, Plus, ShoppingCart, Sun, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronUp, Minus, Plus, ShoppingCart, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProduct, useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
@@ -10,6 +10,7 @@ import { useAuthStore } from '@/store/authStore';
 import ProductCard from '@/components/product/ProductCard';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
 import ProductReviews, { ProductRatingInline } from '@/components/product/ProductReviews';
+import PlantCareCard from '@/components/product/PlantCareCard';
 import PlantogaPromise from '@/components/product/PlantogaPromise';
 import HowToGuide from '@/components/product/HowToGuide';
 import ProductSpecification from '@/components/product/ProductSpecification';
@@ -736,19 +737,6 @@ export default function ProductDetailPage() {
               <p className="text-sm sm:text-base text-gray-600 leading-relaxed">{product.description}</p>
             )}
 
-            <div className="flex gap-4 sm:gap-6">
-              {product.sunlight && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Sun size={18} className="text-accent" />{product.sunlight}
-                </div>
-              )}
-              {product.watering && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Droplets size={18} className="text-blue-400" />{product.watering}
-                </div>
-              )}
-            </div>
-
             {/* Desktop add to cart */}
             {!isUnavailable && (
               <div className="hidden md:flex items-center gap-4">
@@ -808,6 +796,8 @@ export default function ProductDetailPage() {
             <CareTips tips={product.care_tips || []} />
           </div>
         </div>
+
+        <PlantCareCard items={product.care_items} />
 
         <PlantogaPromise />
 

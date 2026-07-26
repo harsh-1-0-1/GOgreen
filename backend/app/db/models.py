@@ -77,6 +77,7 @@ class Product(Base):
     how_to_guide: Mapped[str | None] = mapped_column(Text, nullable=True)
     sunlight: Mapped[str | None] = mapped_column(String(100), nullable=True)
     watering: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    care_items: Mapped[list | None] = mapped_column(JSON, nullable=True)
     badge: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

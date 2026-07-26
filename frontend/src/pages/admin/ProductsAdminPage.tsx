@@ -14,7 +14,7 @@ import {
   AlertTriangle,
   HelpCircle,
   Upload,
-  Check
+  Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProduct, useProductRaw, useProducts } from '@/hooks/useProducts';
@@ -167,6 +167,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const [uploadingPotImage, setUploadingPotImage] = useState<number | null>(null);
   const [uploadingDefaultImage, setUploadingDefaultImage] = useState(false);
   const [uploadingComboImage, setUploadingComboImage] = useState<string | null>(null);
+  // Care items — flexible list of {icon_key, icon_url, title, description}
+  type CareItemDraft = { title: string; description: string; icon_key: string; icon_url: string; uploading: boolean };
+  const [careItems, setCareItems] = useState<CareItemDraft[]>([]);
   const [sizes, setSizes] = useState<VariantSizeDraft[]>([]);
   // defaultImageKey: relative key sent to backend. defaultImageUrl: full URL for preview only.
   const [defaultImageKey, setDefaultImageKey] = useState('');
@@ -240,6 +243,16 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setNewImageUrl('');
     setUploadedFiles([]);
     setFilePreviews([]);
+    // Seed care items from raw product data (icons are relative keys at this point)
+    setCareItems(
+      (p.care_items || []).map((item: any) => ({
+        title: item.title || '',
+        description: item.description || '',
+        icon_key: item.icon || '',
+        icon_url: item.icon ? resolveImageUrl(item.icon) : '',
+        uploading: false,
+      }))
+    );
     setColors(p.variants?.colors?.map((c: any) => ({ name: c.name, hex: c.hex, image_key: '', image_url: '' })) || []);
     // Pot image keys are seeded by the rawProduct effect (relative keys from DB).
     // Here we only set structural fields; image_key/image_url start empty.
@@ -433,6 +446,25 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         ? Object.values(variants.stock).reduce((sum, qty) => sum + Number(qty || 0), 0)
         : data.stock_qty;
 
+      const cleanCareItems = careItems
+        .map((c) => ({
+          icon: c.icon_key || null,
+          title: c.title.trim(),
+          description: c.description.trim(),
+        }))
+        .filter((c) => c.title || c.description || c.icon);
+
+      const invalidCareItem = cleanCareItems.find(
+        (c) =>
+          !c.title ||
+          !c.description,
+      );
+      if (invalidCareItem) {
+        toast.error('Please enter a title and description for each care tile.');
+        setSubmitting(false);
+        return;
+      }
+
       const payload = {
         name: data.name,
         description: data.description || '',
@@ -443,6 +475,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         badge: data.badge || null,
         sunlight: data.sunlight || null,
         watering: data.watering || null,
+        care_items: cleanCareItems,
         how_to_guide: data.how_to_guide?.trim() || null,
         tags: data.tags?.map((t) => t.value).filter(Boolean) || [],
         care_tips: data.care_tips?.map((t) => t.value).filter(Boolean) || [],
@@ -501,6 +534,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         if (payload.badge) fd.append('badge', payload.badge);
         if (payload.sunlight) fd.append('sunlight', payload.sunlight);
         if (payload.watering) fd.append('watering', payload.watering);
+        if (payload.care_items?.length) fd.append('care_items', JSON.stringify(payload.care_items));
         if (payload.how_to_guide) fd.append('how_to_guide', payload.how_to_guide);
         if (payload.variants) fd.append('variants', JSON.stringify(payload.variants));
         fd.append('image_urls', JSON.stringify(productImages));
@@ -584,6 +618,23 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       toast.error(err.response?.data?.detail || 'Failed to upload default image');
     } finally {
       setUploadingDefaultImage(false);
+    }
+  }
+
+  async function handleCareIconUpload(index: number, file?: File) {
+    if (!file) return;
+    setCareItems(prev => prev.map((c, i) => i === index ? { ...c, uploading: true } : c));
+    try {
+      const squared = await cropToSquare(file);
+      const fd = new FormData();
+      fd.append('image', squared);
+      if (editProduct?.id) fd.append('product_id', String(editProduct.id));
+      const { data } = await api.post<{ key: string; url: string }>('/products/variant-image', fd);
+      setCareItems(prev => prev.map((c, i) => i === index ? { ...c, icon_key: data.key, icon_url: data.url, uploading: false } : c));
+      toast.success('Care icon uploaded');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to upload care icon');
+      setCareItems(prev => prev.map((c, i) => i === index ? { ...c, uploading: false } : c));
     }
   }
 
@@ -860,6 +911,92 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                       className={inputClass}
                     />
                     <p className="text-[11px] text-gray-400 mt-1">How often the plant needs watering.</p>
+                  </div>
+                </div>
+
+                {/* Care items — repeatable list */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block">🌿 Care Card Tiles</label>
+                      <p className="text-[11px] text-gray-400">Shown as a card on the product page. Add tiles like Light, Water, Soil, etc.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCareItems(prev => [...prev, { title: '', description: '', icon_key: '', icon_url: '', uploading: false }])}
+                      className="px-2.5 py-1 text-xs text-primary font-medium hover:bg-primary-light/10 border border-primary/20 rounded transition"
+                    >
+                      + Add Tile
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {careItems.map((item, index) => (
+                      <div key={index} className="rounded-xl border border-gray-200 p-3 bg-gray-50/40 space-y-2">
+                        <div className="flex gap-2 items-start">
+                          {/* Icon preview + upload */}
+                          <div className="shrink-0 flex flex-col items-center gap-1">
+                            <label
+                              className={`group relative h-12 w-12 rounded-lg border border-gray-200 overflow-hidden bg-[#f5f5f0] flex items-center justify-center cursor-pointer transition hover:border-primary/50 hover:bg-primary-light/5 focus-within:ring-2 focus-within:ring-primary/20 ${item.uploading ? 'pointer-events-none opacity-80' : ''}`}
+                              title={item.icon_key ? 'Replace care icon' : 'Upload care icon'}
+                              aria-label={item.icon_key ? 'Replace care icon' : 'Upload care icon'}
+                            >
+                              {item.uploading ? (
+                                <Loader2 size={18} className="animate-spin text-primary" />
+                              ) : item.icon_url ? (
+                                <>
+                                  <img src={item.icon_url} alt="Care icon" className="h-12 w-12 rounded-lg object-contain" />
+                                  <span className="absolute inset-0 bg-black/35 text-white text-[9px] font-medium opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 flex items-center justify-center transition">
+                                    Change
+                                  </span>
+                                </>
+                              ) : (
+                                <div className="flex flex-col items-center gap-0.5 text-primary">
+                                  <Upload size={15} />
+                                  <span className="text-[9px] font-medium">Icon</span>
+                                </div>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                className="sr-only"
+                                disabled={item.uploading}
+                                onChange={(e) => { void handleCareIconUpload(index, e.target.files?.[0]); e.target.value = ''; }}
+                              />
+                            </label>
+                            {item.icon_key && (
+                              <button type="button" onClick={() => setCareItems(prev => prev.map((c, i) => i === index ? { ...c, icon_key: '', icon_url: '' } : c))}
+                                className="text-[10px] text-red-500 hover:text-red-600">Remove</button>
+                            )}
+                            <span className="max-w-20 text-center text-[9px] leading-tight text-gray-400">Square icon recommended, e.g. 128x128px</span>
+                          </div>
+                          {/* Title + description */}
+                          <div className="flex-1 space-y-1.5">
+                            <input
+                              value={item.title}
+                              onChange={(e) => setCareItems(prev => prev.map((c, i) => i === index ? { ...c, title: e.target.value } : c))}
+                              placeholder="Title (e.g. Light, Water, Soil)"
+                              className={`${inputClass} bg-white`}
+                            />
+                            <input
+                              value={item.description}
+                              onChange={(e) => setCareItems(prev => prev.map((c, i) => i === index ? { ...c, description: e.target.value } : c))}
+                              placeholder="Description (e.g. Indirect light)"
+                              className={`${inputClass} bg-white`}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCareItems(prev => prev.filter((_, i) => i !== index))}
+                            className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0 mt-0.5"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {careItems.length === 0 && (
+                      <p className="text-xs text-gray-400 italic text-center py-2">No care tiles added yet. Click "+ Add Tile" to add one.</p>
+                    )}
                   </div>
                 </div>
 
@@ -1481,7 +1618,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           <button
             type="button"
             onClick={handleSubmit(onSubmit)}
-            disabled={submitting || uploadingColorImage !== null || uploadingPotImage !== null || uploadingDefaultImage || uploadingComboImage !== null}
+            disabled={submitting || uploadingColorImage !== null || uploadingPotImage !== null || uploadingDefaultImage || uploadingComboImage !== null || careItems.some(c => c.uploading)}
             className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 transition"
           >
             {uploadingColorImage !== null

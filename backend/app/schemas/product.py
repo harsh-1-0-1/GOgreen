@@ -1,6 +1,14 @@
 from datetime import datetime
+from typing import Optional, List
 
 from pydantic import BaseModel, Field, field_serializer
+
+
+class CareItem(BaseModel):
+    """A single tile in the product care card (icon + title + description)."""
+    icon: Optional[str] = None   # relative storage key, resolved to full URL in serializer
+    title: str
+    description: str
 
 
 class ProductCreate(BaseModel):
@@ -15,6 +23,7 @@ class ProductCreate(BaseModel):
     how_to_guide: str | None = None
     sunlight: str | None = None
     watering: str | None = None
+    care_items: Optional[List[CareItem]] = None
     badge: str | None = None
     is_active: bool = True
     variants: dict | None = None
@@ -33,6 +42,7 @@ class ProductUpdate(BaseModel):
     how_to_guide: str | None = None
     sunlight: str | None = None
     watering: str | None = None
+    care_items: Optional[List[CareItem]] = None
     badge: str | None = None
     is_active: bool | None = None
     variants: dict | None = None
@@ -53,6 +63,7 @@ class ProductResponse(BaseModel):
     how_to_guide: str | None
     sunlight: str | None
     watering: str | None
+    care_items: Optional[List[dict]] = None   # dicts so the serializer can mutate icon keys
     badge: str | None
     is_active: bool
     created_at: datetime
@@ -61,8 +72,7 @@ class ProductResponse(BaseModel):
     # Despite field names like "image_url", variants store RELATIVE KEYS in the database
     # (e.g. "plantoga/product-variants/42/abc.webp"), NOT full URLs.
     # The serializer below resolves them to full URLs in API responses.
-    # Applies to: variants.default_image, variants.image_map[*] (List of URLs/keys), variants.pot_types[*].image_url
-
+    # Applies to: variants.default_image, variants.image_map[*], variants.pot_types[*].image_url
 
     model_config = {"from_attributes": True}
 
@@ -71,11 +81,21 @@ class ProductResponse(BaseModel):
         from app.utils.image_upload import resolve_image_url
         return [resolve_image_url(img) for img in images] if images else []
 
+    @field_serializer("care_items")
+    def serialize_care_items(self, items: Optional[List[dict]]) -> Optional[List[dict]]:
+        """Resolve each care item's icon key to a full CDN/static URL."""
+        if not items:
+            return None
+        from app.utils.image_upload import resolve_image_url
+        return [
+            {**item, "icon": resolve_image_url(item["icon"]) if item.get("icon") else None}
+            for item in items
+        ]
+
     @field_serializer("variants")
     def serialize_variants(self, variants: dict | None) -> dict | None:
         from app.utils.image_upload import resolve_variants_images
         return resolve_variants_images(variants)
-
 
 
 class ProductListResponse(BaseModel):
