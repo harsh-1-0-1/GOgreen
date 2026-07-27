@@ -31,6 +31,7 @@ import OrdersAdminPage from '@/pages/admin/OrdersAdminPage';
 import UsersAdminPage from '@/pages/admin/UsersAdminPage';
 import BannersAdminPage from '@/pages/admin/BannersAdminPage';
 import BlogAdminPage from '@/pages/admin/BlogAdminPage';
+import StoriesAdminPage from '@/pages/admin/StoriesAdminPage';
 import CorporateAdminPage from '@/pages/admin/CorporateAdminPage';
 import CouponsAdminPage from '@/pages/admin/CouponsAdminPage';
 import SettingsAdminPage from '@/pages/admin/SettingsAdminPage';
@@ -117,6 +118,7 @@ export default function App() {
                 <Route path="orders" element={<OrdersAdminPage />} />
                 <Route path="users" element={<UsersAdminPage />} />
                 <Route path="banners" element={<BannersAdminPage />} />
+                <Route path="stories" element={<StoriesAdminPage />} />
                 <Route path="blog" element={<BlogAdminPage />} />
                 <Route path="corporate" element={<CorporateAdminPage />} />
                 <Route path="coupons" element={<CouponsAdminPage />} />

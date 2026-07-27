@@ -13,6 +13,7 @@ from app.api.v1 import (
     payments,
     products,
     reviews,
+    stories,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -28,3 +29,4 @@ api_router.include_router(payments.router)
 api_router.include_router(admin.router)
 api_router.include_router(blog.router)
 api_router.include_router(banners.router)
+api_router.include_router(stories.router)

@@ -257,3 +257,22 @@ export interface BlogListResponse {
   pages: number;
   limit: number;
 }
+
+export interface StoryProductInfo {
+  id: number;
+  name: string;
+  price: number;
+  original_price?: number | null;
+  thumbnail?: string | null;
+}
+
+export interface Story {
+  id: number;
+  video: string;
+  thumbnail?: string | null;
+  caption?: string | null;
+  linked_product_id?: number | null;
+  display_order: number;
+  is_active: boolean;
+  linked_product?: StoryProductInfo | null;
+}
