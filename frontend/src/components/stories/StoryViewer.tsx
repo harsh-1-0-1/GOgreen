@@ -50,7 +50,7 @@ export function StoryViewer({ stories, startIndex, onClose }: StoryViewerProps) 
     if (!story.linked_product_id) return;
 
     try {
-      await addItem(story.linked_product_id, 1, null);
+      await addItem(story.linked_product_id, 1, undefined);
       toast.success('Added to cart');
       openDrawer();
       onClose();
