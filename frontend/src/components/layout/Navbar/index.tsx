@@ -11,6 +11,7 @@ import {
   Package,
   Search,
   Settings,
+  ShieldCheck,
   ShoppingBag,
   User,
   X,
@@ -50,6 +51,7 @@ export default function Navbar() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [hidden, setHidden] = useState(false);
@@ -67,6 +69,12 @@ export default function Navbar() {
 
   const debouncedQuery = useDebounce(searchQuery, 300);
   const isHome = location.pathname === '/';
+  const isProductPage = /^\/products\/[^/]+/.test(location.pathname);
+
+  // Close mobile search when leaving a product page
+  useEffect(() => {
+    if (!isProductPage) setMobileSearchOpen(false);
+  }, [isProductPage]);
   const { data: mobilePromoBanners = [] } = useBanners('mobile_promo');
   const { data: menuBanners = [] } = useBanners('menu_banner');
   const mobilePromoBanner = mobilePromoBanners[0];
@@ -96,6 +104,11 @@ export default function Navbar() {
         const diff = currentScrollY - lastScrollY.current;
         if (diff > 10) setHidden(true);   // scroll down → hide top navbar
         else if (diff < -10) setHidden(false); // scroll up → show top navbar
+      }
+
+      // Hide mobile search bar on any scroll
+      if (Math.abs(currentScrollY - lastScrollY.current) > 5) {
+        setMobileSearchOpen(false);
       }
 
       lastScrollY.current = currentScrollY;
@@ -359,7 +372,6 @@ export default function Navbar() {
           )}
         </div>
 
-        {/* Right Icons â€” clean, spaced */}
         <div className="flex items-center gap-1 ml-auto shrink-0">
 
 
@@ -401,6 +413,13 @@ export default function Navbar() {
                     >
                       <Package size={15} /> My Orders
                     </Link>
+                    <Link
+                      to="/damage-replacement"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-gray-50 text-gray-700 transition-colors"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <ShieldCheck size={15} /> Damage Replacement
+                    </Link>
                     <button
                       onClick={() => {
                         logout();
@@ -421,6 +440,28 @@ export default function Navbar() {
               aria-label="Login"
             >
               <User size={22} />
+            </button>
+          )}
+
+          {/* Search icon — mobile product pages only */}
+          {isProductPage && (
+            <button
+              className="lg:hidden flex items-center justify-center w-10 h-10 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
+              onClick={() => {
+                setMobileSearchOpen((prev) => {
+                  const next = !prev;
+                  if (next) {
+                    // Focus the input after state update + DOM paint
+                    setTimeout(() => {
+                      document.querySelector<HTMLInputElement>('.mobile-search-input')?.focus();
+                    }, 50);
+                  }
+                  return next;
+                });
+              }}
+              aria-label="Search"
+            >
+              <Search size={21} />
             </button>
           )}
 
@@ -543,7 +584,7 @@ export default function Navbar() {
       {/* Mobile search bar                                                */}
       {/* Visible when product images move downward                        */}
       {/* ================================================================ */}
-      <div className="lg:hidden bg-white px-4 py-3 border-t border-gray-100">
+      <div className={`${isProductPage ? (mobileSearchOpen ? 'block' : 'hidden') : 'lg:hidden'} bg-white px-4 py-3 border-t border-gray-100`}>
           <form onSubmit={handleSearch}>
             <div className="relative flex items-center">
               <Search size={16} className="absolute left-4 text-gray-400 pointer-events-none" />
@@ -553,7 +594,7 @@ export default function Navbar() {
                 placeholder="Search for plants, seeds, pots..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-secondary text-sm transition-all placeholder:text-gray-400"
+                className="mobile-search-input w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-secondary text-sm transition-all placeholder:text-gray-400"
               />
               <button type="submit" className="sr-only">Search</button>
             </div>

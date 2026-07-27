@@ -187,6 +187,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // images the admin has already uploaded during this edit session.
   const seededPotImagesRef = useRef(false);
   const seededColorImagesRef = useRef(false);
+  const seededComboImagesRef = useRef(false);
   // Track which product ID the seed ran for, so a background refetch of the *same*
   // product doesn't reset the guard and re-run the merge over already-edited state.
   const seededForProductIdRef = useRef<number | null>(null);
@@ -284,6 +285,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     // runs exactly once regardless of which fetch wins the race.
     seededPotImagesRef.current = false;
     seededColorImagesRef.current = false;
+    seededComboImagesRef.current = false;
     setVariantError(null);
   }, [reset]);
 
@@ -293,32 +295,40 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     if (!isEdit || !rawProduct?.variants) return;
     const v = rawProduct.variants;
 
-    // default_image and image_map values are raw relative keys straight from DB
-    setDefaultImageKey(v.default_image || '');
-    setDefaultImageUrl(resolveImageUrl(v.default_image));
-
-    const rawImageMap = v.image_map || {};
-    const loadedKeys: Record<string, string[]> = {};
-    const loadedUrls: Record<string, string[]> = {};
-    for (const [k, val] of Object.entries(rawImageMap)) {
-      loadedKeys[k] = val;
-      loadedUrls[k] = val.map(key => resolveImageUrl(key));
-    }
-    setImageKeysByCombo(loadedKeys);
-    setImageUrlsByCombo(loadedUrls);
-
-    // Store raw pot types separately so the merge effect below can run
-    // regardless of whether rawProduct or applyProductToForm resolved first.
-    // Only reset the seed guards if this is a genuinely new product load — not a
-    // background refetch of the same product. A refetch after the admin has already
-    // uploaded new variant images must NOT reset the guards, because the merge would
-    // then re-run and overwrite those unsaved uploads with stale server-side keys.
+    // Resolve the product id first so the guard check below reflects the correct
+    // product. On a genuine product change the id differs from the stored ref, which
+    // resets all seed guards before they are evaluated — ensuring the new product
+    // always gets a full seed even if the flags were left true by the previous product.
     const incomingId = rawProduct.id ?? null;
     if (seededForProductIdRef.current !== incomingId) {
       seededForProductIdRef.current = incomingId;
       seededPotImagesRef.current = false;
       seededColorImagesRef.current = false;
+      seededComboImagesRef.current = false;
     }
+
+    // Seed default image and combo image_map exactly once per product load.
+    // A background refetch mid-session (window refocus, staleTime elapsing,
+    // network reconnect) must NOT wipe combo/default images the admin has already
+    // uploaded locally but hasn't saved yet — same reasoning as the pot/color guards.
+    if (!seededComboImagesRef.current) {
+      setDefaultImageKey(v.default_image || '');
+      setDefaultImageUrl(resolveImageUrl(v.default_image));
+
+      const rawImageMap = v.image_map || {};
+      const loadedKeys: Record<string, string[]> = {};
+      const loadedUrls: Record<string, string[]> = {};
+      for (const [k, val] of Object.entries(rawImageMap)) {
+        loadedKeys[k] = val;
+        loadedUrls[k] = val.map(key => resolveImageUrl(key));
+      }
+      setImageKeysByCombo(loadedKeys);
+      setImageUrlsByCombo(loadedUrls);
+      seededComboImagesRef.current = true;
+    }
+
+    // Store raw pot types separately so the merge effect below can run
+    // regardless of whether rawProduct or applyProductToForm resolved first.
     setRawPotTypes(v.pot_types || []);
     setRawColorTypes(v.colors || []);
   // resolveImageUrl is stable (defined inside component but no deps) — safe to omit
@@ -520,6 +530,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         // Still invalidate so stale data is refreshed in the background
         qc.invalidateQueries({ queryKey: ['products'] });
         qc.invalidateQueries({ queryKey: ['product', updatedProduct.slug] });
+        // Invalidate the raw admin cache so the next edit re-fetches fresh relative
+        // image keys from the DB. Without this, the 5-minute staleTime means the old
+        // (pre-save) image_map is used to seed imageKeysByCombo on re-open, making
+        // newly-saved variant combination images appear to disappear.
+        qc.invalidateQueries({ queryKey: ['product-raw', editProduct.id] });
       } else {
         // New creation uses FormData to support file uploads
         const fd = new FormData();
