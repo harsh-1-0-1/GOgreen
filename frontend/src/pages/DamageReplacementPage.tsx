@@ -1,74 +1,123 @@
-
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, ShieldCheck, Upload, AlertCircle } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AlertCircle, ArrowLeft, CheckCircle2, ChevronDown, Loader2, ShieldCheck, Upload, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useDeliveredOrders, useSubmitDamageClaim } from '@/hooks/useDamageClaims';
+import type { Order } from '@/types';
+
+const ISSUE_TYPES = [
+  { value: 'broken_pot', label: 'Broken Pot / Planter' },
+  { value: 'damaged_plant', label: 'Broken Stems / Leaves (Transit)' },
+  { value: 'withered_plant', label: 'Withered / Dead Plant' },
+  { value: 'wrong_item', label: 'Incorrect Product Delivered' },
+  { value: 'missing_item', label: 'Missing Items' },
+];
+
+function orderSummaryLabel(order: Order): string {
+  const names = order.items
+    .map((i) => i.product_name ?? `Product #${i.product_id}`)
+    .slice(0, 2)
+    .join(', ');
+  const extra = order.items.length > 2 ? ` +${order.items.length - 2} more` : '';
+  return `#${order.id} — ${names}${extra}`;
+}
+
+function orderItemsSummary(order: Order): string {
+  return order.items
+    .map((i) => {
+      const name = i.product_name ?? `Product #${i.product_id}`;
+      return i.selected_options
+        ? `${name} (${Object.values(i.selected_options).join(', ')})`
+        : name;
+    })
+    .join(', ');
+}
+
+interface SuccessState {
+  ticketId: string;
+  orderId: number;
+  itemsSummary: string;
+}
 
 export default function DamageReplacementPage() {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    orderId: '',
-    productName: '',
-    deliveryDate: '',
-    issueType: '',
-    description: '',
-  });
+  const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [ticketId, setTicketId] = useState('');
+  // Server state
+  const { data: deliveredOrders, isLoading: ordersLoading } = useDeliveredOrders();
+  const submitMutation = useSubmitDamageClaim();
 
+  // Form state
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [issueType, setIssueType] = useState('');
+  const [description, setDescription] = useState('');
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+
+  // UI state
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [success, setSuccess] = useState<SuccessState | null>(null);
 
-  function handleInputChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[name];
-        return next;
-      });
-    }
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
+
+  function handleOrderSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    const id = parseInt(e.target.value, 10);
+    const order = deliveredOrders?.find((o) => o.id === id) ?? null;
+    setSelectedOrder(order);
+    clearError('order');
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
-      if (errors.image) {
-        setErrors((prev) => {
-          const next = { ...prev };
-          delete next.image;
-          return next;
-        });
-      }
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+
+    const remaining = 5 - photoFiles.length;
+    if (remaining <= 0) {
+      toast.error('Maximum 5 photos allowed');
+      return;
     }
+    const toAdd = files.slice(0, remaining);
+    setPhotoFiles((prev) => [...prev, ...toAdd]);
+    setPhotoPreviews((prev) => [...prev, ...toAdd.map((f) => URL.createObjectURL(f))]);
+    clearError('photos');
+    // Reset input so the same file can be re-selected after removal
+    if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  function validate() {
-    const nextErrors: Record<string, string> = {};
-    if (!formData.name.trim()) nextErrors.name = 'Name is required';
-    if (!formData.email.trim()) {
-      nextErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      nextErrors.email = 'Invalid email address';
-    }
-    if (!formData.phone.trim()) nextErrors.phone = 'Phone number is required';
-    if (!formData.orderId.trim()) nextErrors.orderId = 'Order ID is required';
-    if (!formData.productName.trim()) nextErrors.productName = 'Product name is required';
-    if (!formData.issueType) nextErrors.issueType = 'Please select the issue type';
-    if (!formData.description.trim()) nextErrors.description = 'Please describe the damage in detail';
-    if (!imageFile) nextErrors.image = 'Proof of damage photo is required';
-
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+  function removePhoto(index: number) {
+    URL.revokeObjectURL(photoPreviews[index]);
+    setPhotoFiles((prev) => prev.filter((_, i) => i !== index));
+    setPhotoPreviews((prev) => prev.filter((_, i) => i !== index));
   }
+
+  function clearError(key: string) {
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Validation
+  // ---------------------------------------------------------------------------
+
+  function validate(): boolean {
+    const next: Record<string, string> = {};
+    if (!selectedOrder) next.order = 'Please select an order';
+    if (!issueType) next.issueType = 'Please select the issue type';
+    if (description.trim().length < 10) next.description = 'Please describe the damage in more detail (min 10 characters)';
+    if (photoFiles.length === 0) next.photos = 'At least one proof-of-damage photo is required';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Submit
+  // ---------------------------------------------------------------------------
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -77,17 +126,31 @@ export default function DamageReplacementPage() {
       return;
     }
 
-    setLoading(true);
-    // Simulate API request delay
-    await new Promise((resolve) => setTimeout(resolve, 1800));
-    setLoading(false);
+    const fd = new FormData();
+    fd.append('order_id', String(selectedOrder!.id));
+    fd.append('issue_type', issueType);
+    fd.append('description', description.trim());
+    photoFiles.forEach((file) => fd.append('photos', file));
 
-    // Generate random mock ticket ID
-    const randomTicket = `PLG-DR-${Math.floor(100000 + Math.random() * 900000)}`;
-    setTicketId(randomTicket);
-    setSuccess(true);
-    toast.success('Replacement claim submitted successfully!');
+    try {
+      const claim = await submitMutation.mutateAsync(fd);
+      setSuccess({
+        ticketId: claim.ticket_id,
+        orderId: selectedOrder!.id,
+        itemsSummary: orderItemsSummary(selectedOrder!),
+      });
+      toast.success('Replacement claim submitted successfully!');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+        'Something went wrong. Please try again.';
+      toast.error(msg);
+    }
   }
+
+  // ---------------------------------------------------------------------------
+  // Success screen
+  // ---------------------------------------------------------------------------
 
   if (success) {
     return (
@@ -95,23 +158,28 @@ export default function DamageReplacementPage() {
         <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 mb-6 shadow-inner">
           <CheckCircle2 size={44} />
         </div>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 leading-tight">Claim Submitted Successfully</h2>
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 leading-tight">
+          Claim Submitted Successfully
+        </h2>
         <p className="text-gray-500 mt-3 text-sm sm:text-base max-w-md">
-          We have received your damage replacement request. Our team will review the photos and initiate a replacement or refund within 24-48 hours.
+          We have received your damage replacement request. Our team will review the photos and
+          initiate a replacement or refund within 24–48 hours.
         </p>
 
         <div className="mt-8 bg-gray-50 border border-gray-100 rounded-2xl p-5 w-full max-w-sm text-left">
           <div className="flex justify-between text-sm py-1.5 border-b border-gray-200/50">
             <span className="text-gray-400">Ticket Reference</span>
-            <span className="font-bold text-gray-800">{ticketId}</span>
+            <span className="font-bold text-gray-800">{success.ticketId}</span>
           </div>
           <div className="flex justify-between text-sm py-1.5 border-b border-gray-200/50">
             <span className="text-gray-400">Order ID</span>
-            <span className="font-medium text-gray-700">{formData.orderId.toUpperCase()}</span>
+            <span className="font-medium text-gray-700">#{success.orderId}</span>
           </div>
           <div className="flex justify-between text-sm py-1.5">
-            <span className="text-gray-400">Product Name</span>
-            <span className="font-medium text-gray-700 truncate max-w-[180px]">{formData.productName}</span>
+            <span className="text-gray-400 shrink-0 mr-3">Items</span>
+            <span className="font-medium text-gray-700 text-right truncate max-w-[200px]">
+              {success.itemsSummary}
+            </span>
           </div>
         </div>
 
@@ -133,210 +201,296 @@ export default function DamageReplacementPage() {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Form
+  // ---------------------------------------------------------------------------
+
+  const isSubmitting = submitMutation.isPending;
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
       {/* Back Button */}
-      <Link to="/" className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-gray-500 hover:text-primary transition mb-6">
+      <Link
+        to="/"
+        className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-gray-500 hover:text-primary transition mb-6"
+      >
         <ArrowLeft size={16} /> Back to Home
       </Link>
 
       <div className="bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden">
-        {/* Header Block */}
+        {/* Header */}
         <div className="bg-gradient-to-br from-[#1B4332] to-[#2D6A4F] text-white p-6 sm:p-10 relative">
           <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-[0.08] pointer-events-none select-none hidden sm:block">
             <ShieldCheck size={160} />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight leading-none">Damage Replacement Form</h1>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight leading-none">
+            Damage Replacement Form
+          </h1>
           <p className="text-emerald-100/90 text-sm mt-3 leading-relaxed max-w-xl">
-            Did your plant arrive withered or did a ceramic pot break in transit? Fill out this quick form with pictures of the damaged item, and our plant doctors will ship a replacement immediately.
+            Did your plant arrive withered or did a ceramic pot break in transit? Select your order,
+            upload photos, and our plant doctors will ship a replacement immediately.
           </p>
         </div>
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 sm:p-10 space-y-6 sm:space-y-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
-            {/* Name */}
-            <div>
-              <label htmlFor="name" className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5">Full Name *</label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 ${
-                  errors.name ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-primary-light'
-                }`}
-                placeholder="Enter your name"
-              />
-              {errors.name && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} /> {errors.name}</p>}
-            </div>
 
-            {/* Email */}
-            <div>
-              <label htmlFor="email" className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5">Email Address *</label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 ${
-                  errors.email ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-primary-light'
-                }`}
-                placeholder="you@example.com"
-              />
-              {errors.email && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} /> {errors.email}</p>}
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label htmlFor="phone" className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5">Phone Number *</label>
-              <input
-                type="tel"
-                id="phone"
-                name="phone"
-                value={formData.phone}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 ${
-                  errors.phone ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-primary-light'
-                }`}
-                placeholder="Enter mobile number"
-              />
-              {errors.phone && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} /> {errors.phone}</p>}
-            </div>
-
-            {/* Order ID */}
-            <div>
-              <label htmlFor="orderId" className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5">Order ID *</label>
-              <input
-                type="text"
-                id="orderId"
-                name="orderId"
-                value={formData.orderId}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 ${
-                  errors.orderId ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-primary-light'
-                }`}
-                placeholder="e.g. PLG-98402"
-              />
-              {errors.orderId && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} /> {errors.orderId}</p>}
-            </div>
-
-            {/* Product Name */}
-            <div>
-              <label htmlFor="productName" className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5">Product to Replace *</label>
-              <input
-                type="text"
-                id="productName"
-                name="productName"
-                value={formData.productName}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 ${
-                  errors.productName ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-primary-light'
-                }`}
-                placeholder="e.g. Snake Plant / Ceramic Pot"
-              />
-              {errors.productName && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} /> {errors.productName}</p>}
-            </div>
-
-            {/* Issue Type */}
-            <div>
-              <label htmlFor="issueType" className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5">What went wrong? *</label>
-              <select
-                id="issueType"
-                name="issueType"
-                value={formData.issueType}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 ${
-                  errors.issueType ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-primary-light'
-                }`}
-              >
-                <option value="">Select the issue</option>
-                <option value="broken_pot">Broken Pot / Planter</option>
-                <option value="damaged_plant">Broken Stems / Leaves (Transit)</option>
-                <option value="withered_plant">Withered / Dead Plant</option>
-                <option value="wrong_item">Incorrect Product Delivered</option>
-                <option value="missing_item">Missing Items</option>
-              </select>
-              {errors.issueType && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} /> {errors.issueType}</p>}
-            </div>
-          </div>
-
-          {/* Description */}
+          {/* Order picker */}
           <div>
-            <label htmlFor="description" className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5">Detailed Description *</label>
-            <textarea
-              id="description"
-              name="description"
-              rows={4}
-              value={formData.description}
-              onChange={handleInputChange}
-              className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 ${
-                errors.description ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-primary-light'
-              }`}
-              placeholder="Please describe what parts are broken or explain the condition of the plant upon arrival."
-            />
-            {errors.description && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} /> {errors.description}</p>}
-          </div>
-
-          {/* Image upload */}
-          <div>
-            <span className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5">Photo Proof of Damage *</span>
-            <div className={`relative flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-2xl transition ${
-              errors.image ? 'border-red-400 bg-red-50/10' : 'border-gray-200 hover:bg-gray-50'
-            }`}>
-              <input
-                type="file"
-                id="damage_photo"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              {imagePreview ? (
-                <div className="flex flex-col items-center gap-3">
-                  <img src={imagePreview} alt="Damage Preview" className="h-32 w-auto object-cover rounded-xl border" />
-                  <p className="text-xs font-semibold text-primary">Click or drag another image to replace</p>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center text-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-primary mb-1">
-                    <Upload size={20} />
-                  </div>
-                  <p className="text-sm font-bold text-gray-700">Upload Damage Photo</p>
-                  <p className="text-[11px] text-gray-400 max-w-xs">Supports PNG, JPG, or JPEG. Max size 5MB.</p>
-                </div>
-              )}
-            </div>
-            {errors.image && <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1"><AlertCircle size={12} /> {errors.image}</p>}
-          </div>
-
-          {/* Guarantee Alert */}
-          <div className="p-4 bg-emerald-50/60 border border-emerald-100 rounded-2xl flex gap-3 text-emerald-800">
-            <ShieldCheck size={20} className="shrink-0 mt-0.5" />
-            <div className="text-xs leading-normal">
-              <span className="font-bold">Plantoga thrive guarantee active.</span> All transit damages are 100% covered. We do not ask you to ship the damaged plants back!
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3.5 bg-primary hover:bg-primary/95 text-white font-bold rounded-2xl transition active:scale-[0.98] shadow-md hover:shadow-lg disabled:opacity-50 text-sm sm:text-base flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                <span>Submitting request...</span>
-              </>
+            <label htmlFor="order" className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5">
+              Select Order *
+            </label>
+            {ordersLoading ? (
+              <div className="flex items-center gap-2 text-sm text-gray-400 py-3">
+                <Loader2 size={16} className="animate-spin" /> Loading your orders…
+              </div>
+            ) : !deliveredOrders?.length ? (
+              <div className="text-sm text-gray-500 py-3 px-4 bg-gray-50 rounded-xl border border-gray-200">
+                No eligible delivered orders found. Damage claims can only be submitted for
+                delivered orders.{' '}
+                <button
+                  type="button"
+                  onClick={() => navigate('/orders')}
+                  className="text-primary font-semibold hover:underline"
+                >
+                  View my orders
+                </button>
+              </div>
             ) : (
-              <span>Submit Replacement Request</span>
+              <div className="relative">
+                <select
+                  id="order"
+                  value={selectedOrder?.id ?? ''}
+                  onChange={handleOrderSelect}
+                  className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 appearance-none pr-10 ${
+                    errors.order
+                      ? 'border-red-400 focus:ring-red-400'
+                      : 'border-gray-200 focus:ring-primary-light'
+                  }`}
+                >
+                  <option value="">Select a delivered order</option>
+                  {deliveredOrders.map((order) => (
+                    <option key={order.id} value={order.id}>
+                      {orderSummaryLabel(order)}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={16}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
+              </div>
             )}
-          </button>
+            {errors.order && (
+              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle size={12} /> {errors.order}
+              </p>
+            )}
+          </div>
+
+          {/* Issue Type + Description — shown once an order is selected */}
+          {selectedOrder && (
+            <>
+              {/* Selected order summary */}
+              <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 text-sm space-y-1.5">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+                  Order Summary
+                </p>
+                {selectedOrder.items.map((item) => (
+                  <div key={item.id} className="flex justify-between text-gray-700">
+                    <span className="font-medium">
+                      {item.product_name ?? `Product #${item.product_id}`}
+                      {item.selected_options && (
+                        <span className="font-normal text-gray-400 ml-1.5">
+                          ({Object.values(item.selected_options).join(', ')})
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-gray-500 shrink-0 ml-3">×{item.quantity}</span>
+                  </div>
+                ))}
+                <div className="pt-1.5 border-t border-gray-200 flex justify-between text-gray-500">
+                  <span>Total</span>
+                  <span className="font-semibold text-gray-800">₹{selectedOrder.total_amount}</span>
+                </div>
+              </div>
+
+              {/* Issue Type */}
+              <div>
+                <label
+                  htmlFor="issueType"
+                  className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5"
+                >
+                  What went wrong? *
+                </label>
+                <div className="relative">
+                  <select
+                    id="issueType"
+                    value={issueType}
+                    onChange={(e) => {
+                      setIssueType(e.target.value);
+                      clearError('issueType');
+                    }}
+                    className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 appearance-none pr-10 ${
+                      errors.issueType
+                        ? 'border-red-400 focus:ring-red-400'
+                        : 'border-gray-200 focus:ring-primary-light'
+                    }`}
+                  >
+                    <option value="">Select the issue</option>
+                    {ISSUE_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={16}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                  />
+                </div>
+                {errors.issueType && (
+                  <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                    <AlertCircle size={12} /> {errors.issueType}
+                  </p>
+                )}
+              </div>
+
+              {/* Description */}
+              <div>
+                <label
+                  htmlFor="description"
+                  className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5"
+                >
+                  Detailed Description *
+                </label>
+                <textarea
+                  id="description"
+                  rows={4}
+                  value={description}
+                  onChange={(e) => {
+                    setDescription(e.target.value);
+                    clearError('description');
+                  }}
+                  className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 ${
+                    errors.description
+                      ? 'border-red-400 focus:ring-red-400'
+                      : 'border-gray-200 focus:ring-primary-light'
+                  }`}
+                  placeholder="Please describe what parts are broken or explain the condition of the plant upon arrival."
+                />
+                {errors.description && (
+                  <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                    <AlertCircle size={12} /> {errors.description}
+                  </p>
+                )}
+              </div>
+
+              {/* Photo upload */}
+              <div>
+                <span className="block text-xs sm:text-sm font-bold text-gray-700 mb-1.5">
+                  Photo Proof of Damage * <span className="font-normal text-gray-400">(up to 5 photos)</span>
+                </span>
+
+                {/* Existing previews */}
+                {photoPreviews.length > 0 && (
+                  <div className="flex flex-wrap gap-3 mb-3">
+                    {photoPreviews.map((src, i) => (
+                      <div key={i} className="relative group">
+                        <img
+                          src={src}
+                          alt={`Damage photo ${i + 1}`}
+                          className="h-24 w-24 object-cover rounded-xl border border-gray-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(i)}
+                          aria-label="Remove photo"
+                          className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload zone — hide when at limit */}
+                {photoFiles.length < 5 && (
+                  <div
+                    className={`relative flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-2xl transition cursor-pointer ${
+                      errors.photos
+                        ? 'border-red-400 bg-red-50/10'
+                        : 'border-gray-200 hover:bg-gray-50'
+                    }`}
+                    onClick={() => fileInputRef.current?.click()}
+                    onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Upload damage photos"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      multiple
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    <div className="flex flex-col items-center text-center gap-2">
+                      <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-primary mb-1">
+                        <Upload size={20} />
+                      </div>
+                      <p className="text-sm font-bold text-gray-700">
+                        {photoPreviews.length > 0 ? 'Add more photos' : 'Upload Damage Photos'}
+                      </p>
+                      <p className="text-[11px] text-gray-400 max-w-xs">
+                        PNG, JPG, JPEG or WebP · Max 5 MB each · Up to {5 - photoFiles.length} more
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {errors.photos && (
+                  <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
+                    <AlertCircle size={12} /> {errors.photos}
+                  </p>
+                )}
+              </div>
+
+              {/* Guarantee notice */}
+              <div className="p-4 bg-emerald-50/60 border border-emerald-100 rounded-2xl flex gap-3 text-emerald-800">
+                <ShieldCheck size={20} className="shrink-0 mt-0.5" />
+                <div className="text-xs leading-normal">
+                  <span className="font-bold">Plantoga thrive guarantee active.</span> All transit
+                  damages are 100% covered. We do not ask you to ship the damaged plants back!
+                </div>
+              </div>
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-3.5 bg-primary hover:bg-primary/95 text-white font-bold rounded-2xl transition active:scale-[0.98] shadow-md hover:shadow-lg disabled:opacity-50 text-sm sm:text-base flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    <span>Submitting request…</span>
+                  </>
+                ) : (
+                  <span>Submit Replacement Request</span>
+                )}
+              </button>
+            </>
+          )}
+
+          {/* Prompt to select an order if nothing is selected yet */}
+          {!selectedOrder && !ordersLoading && !!deliveredOrders?.length && (
+            <p className="text-sm text-gray-400 text-center pb-2">
+              Select an order above to continue filling out the form.
+            </p>
+          )}
         </form>
       </div>
     </div>
