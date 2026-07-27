@@ -22,6 +22,8 @@ import { STORE_LEGAL } from '@/lib/branding';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import type { Category } from '@/types';
+import { useStories } from '@/hooks/useStories';
+import { StoriesCarousel } from '@/components/stories/StoriesCarousel';
 
 
 function findCategoryName(categories: Category[] | undefined, categoryId: number): string {
@@ -373,6 +375,7 @@ export default function ProductDetailPage() {
   const { data: reviewPreview } = useProductReviews(product?.id, { limit: 1 });
   const { data: productDetailBanners = [] } = useBanners('product_detail');
   const { data: productSpecBanners = [] } = useBanners('product_spec');
+  const { data: stories = [] } = useStories();
 
   useEffect(() => {
     isInitialized.current = false;
@@ -806,6 +809,8 @@ export default function ProductDetailPage() {
         {renderInlineBanner(productSpecBanners, 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&q=80')}
 
         <ProductSpecification specs={productSpecs} />
+
+        <StoriesCarousel stories={stories} />
 
         <WhyPlantoga />
 

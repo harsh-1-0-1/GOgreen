@@ -9,7 +9,7 @@ from loguru import logger
 
 from app.core.config import settings
 
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".webm"}
 STATIC_ROOT = Path("static")
 
 
@@ -40,7 +40,8 @@ def resolve_image_url(key: str | None) -> str | None:
     if key.startswith(("http://", "https://", "/")):
         return key
 
-    if settings.CDN_BASE_URL:
+    is_prod = settings.ENVIRONMENT.lower() == "production"
+    if is_prod and settings.CDN_BASE_URL:
         return f"{settings.CDN_BASE_URL.rstrip('/')}/{key.lstrip('/')}"
 
     return f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}/static/{key.lstrip('/')}"

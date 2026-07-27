@@ -304,3 +304,18 @@ def sync_stock_qty(mapper, connection, target):
     """
     if target.variants and "stock" in target.variants:
         target.stock_qty = sum(int(v or 0) for v in target.variants["stock"].values())
+
+
+class Story(Base):
+    __tablename__ = "stories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    video: Mapped[str] = mapped_column(String(500), nullable=False)       # storage key
+    thumbnail: Mapped[str | None] = mapped_column(String(500), nullable=True)     # poster frame, optional
+    caption: Mapped[str | None] = mapped_column(String(255), nullable=True)        # e.g. small label overlay, optional
+    linked_product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    linked_product: Mapped["Product | None"] = relationship("Product")
