@@ -45,6 +45,9 @@ class ProductUpdate(BaseModel):
     care_items: Optional[List[CareItem]] = None
     badge: str | None = None
     is_active: bool | None = None
+    # null  → field omitted from update (existing variants are preserved).
+    # {}    → explicitly clear all variant data.
+    # {...} → replace variants with the provided structure.
     variants: dict | None = None
 
 

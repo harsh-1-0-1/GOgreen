@@ -115,6 +115,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const [variantError, setVariantError] = useState<string | null>(null);
   const [formInitialized, setFormInitialized] = useState(!isEdit);
 
+  // True once the form fields AND all variant/image seed effects have completed.
+  // For a new product this is immediate; for an edit we wait for both the public
+  // product fetch (form fields) and all three merge effects (image keys) to finish.
+  const formReady = formInitialized && (!isEdit || (potImagesSeeded && colorImagesSeeded && comboImagesSeeded));
+
   // Form Collapsible Sections
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     basic: true,
@@ -185,9 +190,15 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // seeded*Ref: guards the merge effects so they each run exactly once per product load.
   // Prevents row-count changes (add/remove) from re-seeding and overwriting
   // images the admin has already uploaded during this edit session.
-  const seededPotImagesRef = useRef(false);
-  const seededColorImagesRef = useRef(false);
-  const seededComboImagesRef = useRef(false);
+  const seededPotImagesRef = useRef(false);   // keep in sync with setPotImagesSeeded below
+  const seededColorImagesRef = useRef(false); // keep in sync with setColorImagesSeeded below
+  const seededComboImagesRef = useRef(false); // keep in sync with setComboImagesSeeded below
+  // Reactive mirrors of the seed refs — used only to drive formReady.
+  // The refs are the authoritative guards; these state flags exist solely so
+  // formReady re-evaluates after each merge effect completes.
+  const [potImagesSeeded, setPotImagesSeeded] = useState(!isEdit);
+  const [colorImagesSeeded, setColorImagesSeeded] = useState(!isEdit);
+  const [comboImagesSeeded, setComboImagesSeeded] = useState(!isEdit);
   // Track which product ID the seed ran for, so a background refetch of the *same*
   // product doesn't reset the guard and re-run the merge over already-edited state.
   const seededForProductIdRef = useRef<number | null>(null);
@@ -286,6 +297,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     seededPotImagesRef.current = false;
     seededColorImagesRef.current = false;
     seededComboImagesRef.current = false;
+    setPotImagesSeeded(false);
+    setColorImagesSeeded(false);
+    setComboImagesSeeded(false);
     setVariantError(null);
   }, [reset]);
 
@@ -305,6 +319,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       seededPotImagesRef.current = false;
       seededColorImagesRef.current = false;
       seededComboImagesRef.current = false;
+      setPotImagesSeeded(false);
+      setColorImagesSeeded(false);
+      setComboImagesSeeded(false);
     }
 
     // Seed default image and combo image_map exactly once per product load.
@@ -325,6 +342,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       setImageKeysByCombo(loadedKeys);
       setImageUrlsByCombo(loadedUrls);
       seededComboImagesRef.current = true;
+      setComboImagesSeeded(true);
     }
 
     // Store raw pot types separately so the merge effect below can run
@@ -342,24 +360,37 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // Without it, adding/removing a pot row would re-fire and overwrite any images
   // the admin already uploaded during this edit session.
   useEffect(() => {
-    if (!rawPotTypes || pots.length === 0 || seededPotImagesRef.current) return;
+    if (!rawPotTypes || seededPotImagesRef.current) return;
+    if (pots.length === 0) {
+      // No pots to merge — mark as seeded immediately so formReady isn't blocked.
+      seededPotImagesRef.current = true;
+      setPotImagesSeeded(true);
+      return;
+    }
     setPots(prev => prev.map((pot, i) => {
       const rawKey: string = rawPotTypes[i]?.image_url || '';
       return { ...pot, image_key: rawKey, image_url: resolveImageUrl(rawKey) };
     }));
     seededPotImagesRef.current = true; // never re-seed after this for the current product
+    setPotImagesSeeded(true);
   // pots.length (not pots) — only retrigger when rows are added/removed, not on every keystroke
    
   }, [rawPotTypes, pots.length]);
 
   // Merge color image keys into the colors array — same pattern as pots.
   useEffect(() => {
-    if (!rawColorTypes || colors.length === 0 || seededColorImagesRef.current) return;
+    if (!rawColorTypes || seededColorImagesRef.current) return;
+    if (colors.length === 0) {
+      seededColorImagesRef.current = true;
+      setColorImagesSeeded(true);
+      return;
+    }
     setColors(prev => prev.map((color, i) => {
       const rawKey: string = rawColorTypes[i]?.image_url || '';
       return { ...color, image_key: rawKey, image_url: resolveImageUrl(rawKey) };
     }));
     seededColorImagesRef.current = true;
+    setColorImagesSeeded(true);
   // colors.length (not colors) — only retrigger when rows are added/removed
    
   }, [rawColorTypes, colors.length]);
@@ -475,7 +506,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         return;
       }
 
-      const payload = {
+      // Only include `variants` in the payload when we actually built one.
+      // Sending `variants: null` would cause the backend to wipe the existing
+      // variant data (images, stock, combos) because the field would appear in
+      // the request body and the service sets it verbatim via setattr.
+      const payload: Record<string, unknown> = {
         name: data.name,
         description: data.description || '',
         price: data.price,
@@ -489,8 +524,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         how_to_guide: data.how_to_guide?.trim() || null,
         tags: data.tags?.map((t) => t.value).filter(Boolean) || [],
         care_tips: data.care_tips?.map((t) => t.value).filter(Boolean) || [],
-        variants,
       };
+      if (variants !== null) {
+        payload.variants = variants;
+      }
 
       if (editProduct) {
         // Upload any newly selected files first
@@ -1633,10 +1670,12 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           <button
             type="button"
             onClick={handleSubmit(onSubmit)}
-            disabled={submitting || uploadingColorImage !== null || uploadingPotImage !== null || uploadingDefaultImage || uploadingComboImage !== null || careItems.some(c => c.uploading)}
+            disabled={!formReady || submitting || uploadingColorImage !== null || uploadingPotImage !== null || uploadingDefaultImage || uploadingComboImage !== null || careItems.some(c => c.uploading)}
             className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 transition"
           >
-            {uploadingColorImage !== null
+            {!formReady
+              ? 'Loading...'
+              : uploadingColorImage !== null
               ? 'Uploading Color Image...'
               : uploadingPotImage !== null
               ? 'Uploading Pot Image...'

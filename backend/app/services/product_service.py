@@ -262,8 +262,14 @@ async def update_product(
         else:
             # Name unchanged (or slug already matches) — keep existing slug
             data.pop("slug", None)
-    if "variants" in data and data["variants"]:
-        data["variants"] = _clean_and_validate_variants(data["variants"])
+    if "variants" in data:
+        if data["variants"] is None:
+            # null means "don't touch variants" — drop the key so setattr never
+            # wipes the existing variant data (image_map, stock, combos etc.).
+            # A caller that genuinely wants to clear variants should send an empty dict.
+            data.pop("variants")
+        else:
+            data["variants"] = _clean_and_validate_variants(data["variants"])
 
     # Full dict reassignment triggers SQLAlchemy dirty tracking for JSON columns.
     # Do NOT refactor to in-place mutation without calling flag_modified(product, "variants").
