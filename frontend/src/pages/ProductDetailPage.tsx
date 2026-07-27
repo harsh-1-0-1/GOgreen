@@ -633,16 +633,16 @@ export default function ProductDetailPage() {
                           ? stockForSize <= 0
                           : (selectedColor && selectedPot ? stockForSize <= 0 : false);
                         const isActive = selectedSize === size.slug;
+                        if (disabled) return null;
                         return (
                           <button
                             key={size.slug}
                             type="button"
-                            disabled={disabled}
                             onClick={() => {
                               setSelectedSize(size.slug);
                               setQty(1);
                             }}
-                            className={`px-5 py-2 rounded-full border-2 text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                            className={`px-5 py-2 rounded-full border-2 text-sm font-semibold transition ${
                               isActive
                                 ? 'bg-primary border-primary text-white shadow-sm'
                                 : 'border-gray-300 text-gray-700 hover:border-primary hover:text-primary bg-white'
@@ -672,17 +672,31 @@ export default function ProductDetailPage() {
                             ? `${color.slug}__${selectedPot}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`
                             : '';
                           const disabled = colorCombo ? Number(variants?.stock?.[colorCombo] ?? 0) <= 0 : false;
+                          if (disabled) return null;
                           return (
                             <button
                               key={color.slug}
                               type="button"
-                              disabled={disabled}
                               onClick={() => {
-                                setSelectedColor(color.slug);
+                                const newColor = color.slug;
+                                setSelectedColor(newColor);
                                 setGalleryActive(0);
                                 setQty(1);
+                                // Re-validate pot: if the current pot has no stock with the new color, switch to first valid one
+                                if (selectedPot) {
+                                  const potStillValid = Number(variants?.stock?.[`${newColor}__${selectedPot}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`] ?? 0) > 0;
+                                  if (!potStillValid) {
+                                    const firstValidPot = variants!.pot_types.find((p) =>
+                                      Number(variants?.stock?.[`${newColor}__${p.slug}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`] ?? 0) > 0
+                                    );
+                                    setSelectedPot(firstValidPot?.slug ?? null);
+                                    if (firstValidPot) {
+                                      toast(`Switched to ${firstValidPot.name} — your previous pot isn't available in ${color.name}`, { icon: 'ℹ️', id: 'variant-swap' });
+                                    }
+                                  }
+                                }
                               }}
-                              className={`w-9 h-9 rounded-full border-2 transition disabled:opacity-30 disabled:cursor-not-allowed ${
+                              className={`w-9 h-9 rounded-full border-2 transition ${
                                 selectedColor === color.slug ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200'
                               }`}
                               title={color.name}
@@ -702,16 +716,30 @@ export default function ProductDetailPage() {
                             ? `${selectedColor}__${pot.slug}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`
                             : '';
                           const disabled = potCombo ? Number(variants?.stock?.[potCombo] ?? 0) <= 0 : false;
+                          if (disabled) return null;
                           return (
                             <button
                               key={pot.slug}
                               type="button"
-                              disabled={disabled}
                               onClick={() => {
-                                setSelectedPot(pot.slug);
+                                const newPot = pot.slug;
+                                setSelectedPot(newPot);
                                 setQty(1);
+                                // Re-validate color: if the current color has no stock with the new pot, switch to first valid one
+                                if (selectedColor) {
+                                  const colorStillValid = Number(variants?.stock?.[`${selectedColor}__${newPot}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`] ?? 0) > 0;
+                                  if (!colorStillValid) {
+                                    const firstValidColor = variants!.colors.find((c) =>
+                                      Number(variants?.stock?.[`${c.slug}__${newPot}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`] ?? 0) > 0
+                                    );
+                                    setSelectedColor(firstValidColor?.slug ?? null);
+                                    if (firstValidColor) {
+                                      toast(`Switched to ${firstValidColor.name} — your previous color isn't available in ${pot.name}`, { icon: 'ℹ️', id: 'variant-swap' });
+                                    }
+                                  }
+                                }
                               }}
-                              className={`w-24 min-h-24 shrink-0 px-2 py-2 rounded-xl border text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                              className={`w-24 min-h-24 shrink-0 px-2 py-2 rounded-xl border text-xs font-medium transition ${
                                 selectedPot === pot.slug ? 'border-primary bg-primary text-white shadow-sm' : 'border-gray-200 bg-white hover:border-primary/40'
                               }`}
                             >
