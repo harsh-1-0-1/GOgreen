@@ -115,11 +115,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const [variantError, setVariantError] = useState<string | null>(null);
   const [formInitialized, setFormInitialized] = useState(!isEdit);
 
-  // True once the form fields AND all variant/image seed effects have completed.
-  // For a new product this is immediate; for an edit we wait for both the public
-  // product fetch (form fields) and all three merge effects (image keys) to finish.
-  const formReady = formInitialized && (!isEdit || (potImagesSeeded && colorImagesSeeded && comboImagesSeeded));
-
   // Form Collapsible Sections
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     basic: true,
@@ -199,6 +194,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const [potImagesSeeded, setPotImagesSeeded] = useState(!isEdit);
   const [colorImagesSeeded, setColorImagesSeeded] = useState(!isEdit);
   const [comboImagesSeeded, setComboImagesSeeded] = useState(!isEdit);
+
+  // True once the form fields AND all variant/image seed effects have completed.
+  // For a new product this is immediate; for an edit we wait for both the public
+  // product fetch (form fields) and all three merge effects (image keys) to finish.
+  const formReady = formInitialized && (!isEdit || (potImagesSeeded && colorImagesSeeded && comboImagesSeeded));
   // Track which product ID the seed ran for, so a background refetch of the *same*
   // product doesn't reset the guard and re-run the merge over already-edited state.
   const seededForProductIdRef = useRef<number | null>(null);
@@ -510,7 +510,23 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       // Sending `variants: null` would cause the backend to wipe the existing
       // variant data (images, stock, combos) because the field would appear in
       // the request body and the service sets it verbatim via setattr.
-      const payload: Record<string, unknown> = {
+      type ProductPayload = {
+        name: string;
+        description: string;
+        price: number;
+        original_price: number | null;
+        stock_qty: number;
+        category_id: number;
+        badge: string | null;
+        sunlight: string | null;
+        watering: string | null;
+        care_items: { icon: string | null; title: string; description: string }[];
+        how_to_guide: string | null;
+        tags: string[];
+        care_tips: string[];
+        variants?: ProductVariants;
+      };
+      const payload: ProductPayload = {
         name: data.name,
         description: data.description || '',
         price: data.price,
