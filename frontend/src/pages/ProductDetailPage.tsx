@@ -424,11 +424,17 @@ export default function ProductDetailPage() {
     }
   }
 
-  // Price: sum of selected option prices (Tasks 2+3)
+  // Price: sum of selected option prices (absolute, not deltas over product.price).
+  // Falls back to product.price only when no group has a selection yet — which can
+  // happen briefly on first render before the auto-select effect fires, or if all
+  // groups are optional and nothing has been picked.
+  // NOTE: do NOT use `> 0` as the guard — a legitimately free option (price=0) would
+  // incorrectly fall through to product.price.
+  const hasAnySelection = Object.keys(selectedOptions).length > 0;
   const selectedOptionsPrice = Object.values(selectedOptions).reduce((sum, optId) => {
     return sum + Number(optionById[optId]?.price ?? 0);
   }, 0);
-  const displayPrice = hasGroups ? selectedOptionsPrice : product.price;
+  const displayPrice = hasGroups && hasAnySelection ? selectedOptionsPrice : product.price;
   const displayOriginalPrice = product.original_price && !hasGroups ? product.original_price : null;
   const discount = displayOriginalPrice && displayOriginalPrice > displayPrice
     ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
@@ -452,10 +458,15 @@ export default function ProductDetailPage() {
   //   4. product.images — plain product gallery
   //
   // Combo key = selected optionIds joined by '__' in variant_group order.
-  const comboKey = variantGroups
-    .map((g: any) => selectedOptions[g.id])
-    .filter(Boolean)
-    .join('__');
+  // Only generated when ALL groups have a selection — prevents partial keys (e.g. "opt1")
+  // from incorrectly matching image_map entries meant for full combinations ("opt1__opt2").
+  const allGroupsHaveSelection = variantGroups.every((g: any) => selectedOptions[g.id]);
+  const comboKey = allGroupsHaveSelection
+    ? variantGroups
+        .map((g: any) => selectedOptions[g.id])
+        .filter(Boolean)
+        .join('__')
+    : '';
 
   const imageMap: Record<string, string[]> = (product.variants as any)?.image_map ?? {};
   const comboImages: string[] = (imageMap[comboKey] ?? []).filter(Boolean);

@@ -12,6 +12,16 @@ export default function ProductCard({ product }: { product: Product }) {
   const hasVariants = Boolean(
     (product.variants as any)?.variant_groups?.length > 0,
   );
+  // For stock-display purposes the meaningful distinction is whether there are
+  // multiple variant groups. With 0 or 1 group, stock_qty is exact:
+  //   0 groups → simple product, stock_qty is the literal count.
+  //   1 group  → min([sum of that group]) = sum = total units across all options,
+  //              still an exact count for the product (e.g. "12 plants total across sizes").
+  // With 2+ groups, stock_qty = min(group sums) — a transportation-problem ceiling
+  // that can diverge from any individual combo's real availability, so showing
+  // the number as a per-item count would be misleading.
+  const variantGroupCount: number = (product.variants as any)?.variant_groups?.length ?? 0;
+  const stockQtyIsExact = variantGroupCount <= 1;
 
   const discount =
     product.original_price && product.original_price > product.price
@@ -104,8 +114,18 @@ export default function ProductCard({ product }: { product: Product }) {
         </div>
 
         {/* Low-stock / out-of-stock notice — hidden on mobile, shown sm+ */}
-        {product.stock_qty <= 5 && product.stock_qty > 0 && (
+        {/*
+          stock_qty is exact when there are 0 or 1 variant groups — show the count.
+          With 2+ groups it's a transportation-problem aggregate (min of group sums)
+          that can diverge from any specific combo's availability — show a label only.
+          "Out of Stock" (stock_qty === 0) is safe unconditionally: requires some
+          group's sum to be 0, making every combination unpurchasable.
+        */}
+        {product.stock_qty <= 5 && product.stock_qty > 0 && stockQtyIsExact && (
           <p className="hidden sm:block text-xs text-red-500 mt-1">Only {product.stock_qty} left!</p>
+        )}
+        {product.stock_qty <= 5 && product.stock_qty > 0 && !stockQtyIsExact && (
+          <p className="hidden sm:block text-xs text-amber-600 mt-1">Low stock</p>
         )}
         {product.stock_qty === 0 && (
           <p className="hidden sm:block text-xs text-red-500 mt-1 font-medium">Out of Stock</p>

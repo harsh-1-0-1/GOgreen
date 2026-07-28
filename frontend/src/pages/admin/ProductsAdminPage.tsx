@@ -199,8 +199,15 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   type CareItemDraft = { title: string; description: string; icon_key: string; icon_url: string; uploading: boolean };
   const [careItems, setCareItems] = useState<CareItemDraft[]>([]);
 
+  // Tracks which product ID has had its raw image keys seeded from the admin endpoint.
+  // Declared here (before formReady) so the guard can be read in the same render pass.
+  const seededForProductIdRef = useRef<number | null>(null);
+
   // True once form fields are initialized. For new products this is immediate.
-  const formReady = formInitialized;
+  // For edit mode, also wait for rawProduct to be seeded so option image_keys are
+  // populated — saving before that would wipe existing variant images.
+  const rawProductSeeded = !isEdit || seededForProductIdRef.current === (editProduct?.id ?? null);
+  const formReady = formInitialized && rawProductSeeded;
 
   // Derive a display URL from a relative storage key.
   // Full URLs pass through unchanged (external images, legacy data).
@@ -295,7 +302,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   }, [reset]);
   // Seed default_image from the raw admin endpoint (relative key, not resolved URL).
   // Runs once per product load; guard prevents re-seeding on background refetches.
-  const seededForProductIdRef = useRef<number | null>(null);
   useEffect(() => {
     if (!isEdit || !rawProduct) return;
     const incomingId = rawProduct.id ?? null;
@@ -406,10 +412,29 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         };
       }
 
-      // Total stock: sum all option stocks across all groups (use first group's stock sum)
-      // If no variants, use the form field value
+      // Total stock: min over groups of (sum of option stocks in that group).
+      //
+      // Derived from the order decrement code in order_service.py:
+      //   buying (S, Red) decrements ONLY S.stock and ONLY Red.stock — Blue and M untouched.
+      //   Option stocks are independent shared marginals. Red's 3 units can be consumed by
+      //   (S,Red) or (M,Red) interchangeably — they share the same pool.
+      //
+      //   → A group's total capacity = sum of its options (mutually exclusive, non-overlapping).
+      //   → Binding constraint = the group with the smallest total capacity (min across groups).
+      //
+      // Worked example that distinguishes this from "min of per-group max":
+      //   sizes [S:5, M:5] + colours [Red:3, Blue:3]
+      //   Sellable: 3×(S,Red) + 3×(M,Blue) = 6 units.
+      //   min(sum(5,5), sum(3,3)) = min(10,6) = 6  ✓
+      //   min(max(5,5), max(3,3)) = 5  ✗  — understates by 1
+      //
+      // If no variants, fall through to the form field value.
       const totalStock = variants?.variant_groups?.length
-        ? variants.variant_groups[0].options.reduce((sum, o) => sum + Number(o.stock || 0), 0)
+        ? Math.min(
+            ...variants.variant_groups.map((g) =>
+              g.options.reduce((sum: number, o: any) => sum + Number(o.stock || 0), 0)
+            )
+          )
         : data.stock_qty;
 
       const cleanCareItems = careItems
@@ -1533,7 +1558,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 transition"
           >
             {!formReady
-              ? 'Loading...'
+              ? (!formInitialized ? 'Loading...' : 'Loading image keys...')
               : uploadingOptionImage !== null
               ? 'Uploading Image...'
               : uploadingDefaultImage
