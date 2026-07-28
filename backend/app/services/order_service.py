@@ -95,13 +95,31 @@ async def _reserve_product_for_order(
         
         product.variants = variants
         flag_modified(product, "variants")
-        # Recalculate total stock from all options
-        total_stock = sum(
-            int(opt.get("stock", 0))
+        # Recalculate stock_qty as: min over groups of (sum of option stocks in that group).
+        #
+        # Why this formula — derived directly from the decrement code above:
+        # A purchase of (S, Red) decrements ONLY S.stock and ONLY Red.stock.
+        # Option stocks are therefore independent shared marginals: Red's 3 units can
+        # be consumed by (S,Red) OR (M,Red) — they share the same pool.
+        #
+        # Consequence: a group's total capacity = sum of its options' stocks, because
+        # those options are mutually exclusive choices whose pools don't overlap.
+        # The binding group is whichever has the smallest total capacity (min across groups).
+        #
+        # Counterexample that eliminates "min of per-group max":
+        #   Group A (sizes): S:5, M:5  → capacity 10
+        #   Group B (colors): Red:3, Blue:3 → capacity 6
+        #   Sellable: 3×(S,Red) + 3×(M,Blue) = 6 total. Correct answer: 6.
+        #   min(max(5,5), max(3,3)) = 5 — wrong, understates real capacity by 1.
+        #   min(10, 6) = 6 — correct.
+        #
+        # Counterexample that eliminates "sum all options across all groups":
+        #   Same setup: sum = 10+6 = 16 — obviously wrong, double-counts.
+        group_totals = [
+            sum(int(opt.get("stock", 0)) for opt in grp.get("options", []))
             for grp in variant_groups
-            for opt in grp.get("options", [])
-        )
-        product.stock_qty = total_stock
+        ]
+        product.stock_qty = min(group_totals) if group_totals else 0
     else:
         # Simple product: Atomic SQL update
         update_stmt = (
