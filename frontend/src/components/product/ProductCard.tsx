@@ -10,8 +10,7 @@ export default function ProductCard({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
   const navigate = useNavigate();
   const hasVariants = Boolean(
-    (product.variants?.colors?.length && product.variants?.pot_types?.length)
-    || product.variants?.sizes?.length,
+    (product.variants as any)?.variant_groups?.length > 0,
   );
 
   const discount =

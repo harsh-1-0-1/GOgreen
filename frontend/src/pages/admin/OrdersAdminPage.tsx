@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useAdminOrders, useUpdateOrderStatus } from '@/hooks/useAdmin';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import type { Order } from '@/types';
+import { formatSelectedOptions } from '@/lib/variantDisplay';
 
 const STATUSES = ['', 'pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 const STATUS_LABELS: Record<string, string> = {
@@ -186,7 +187,7 @@ function OrderDrawer({ order, onClose }: { order: Order; onClose: () => void }) 
                       <p className="text-[10px] text-gray-400">Product ID: #{item.product_id}</p>
                       {item.selected_options && (
                         <p className="text-[10px] text-gray-400">
-                          {Object.entries(item.selected_options).map(([k, v]) => `${k}: ${v}`).join(' | ')}
+                          {formatSelectedOptions(item.selected_options, null)}
                         </p>
                       )}
                     </div>

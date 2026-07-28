@@ -363,9 +363,8 @@ export default function ProductDetailPage() {
   const { user, openAuthModal } = useAuthStore();
   const navigate = useNavigate();
   const [qty, setQty] = useState(1);
-  const [selectedColor, setSelectedColor] = useState<string | null>(null);
-  const [selectedPot, setSelectedPot] = useState<string | null>(null);
-  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  // New: selectedOptions maps groupId → optionId for the new flexible variant system
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [galleryActive, setGalleryActive] = useState(0);
 
   const galleryRef = useRef<HTMLDivElement>(null);
@@ -381,59 +380,28 @@ export default function ProductDetailPage() {
     isInitialized.current = false;
   }, [slug]);
 
+  // Auto-select first in-stock option for each group when product loads
   useEffect(() => {
     if (!product) return;
-
-    const colors = product.variants?.colors || [];
-    const pots = product.variants?.pot_types || [];
-    const sizes = product.variants?.sizes || [];
-
-    const hasColors = colors.length > 0;
-    const hasPots = pots.length > 0;
-    const hasSizes = sizes.length > 0;
-
-    const colorOk = !hasColors || selectedColor !== null;
-    const potOk = !hasPots || selectedPot !== null;
-    const sizeOk = !hasSizes || selectedSize !== null;
-
-    if (colorOk && potOk && sizeOk) {
-      if (!isInitialized.current) {
-        isInitialized.current = true;
-      } else {
-        galleryRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }
-    }
-  }, [selectedColor, selectedPot, selectedSize, product]);
-
-  // Reset gallery to slide 0 whenever the variant selection changes.
-  // Deps are the raw state values (not the derived comboKey) so this hook
-  // can live unconditionally above the early returns — comboKey only changes
-  // when one of these three values changes, so behaviour is identical.
-  useEffect(() => { setGalleryActive(0); }, [selectedColor, selectedPot, selectedSize]);
-
-  useEffect(() => {
-    if (!product) return;
-    if (!product.variants) {
-      setSelectedColor(null);
-      setSelectedPot(null);
-      setSelectedSize(null);
+    const groups = (product.variants as any)?.variant_groups;
+    if (!Array.isArray(groups) || groups.length === 0) {
+      setSelectedOptions({});
       setQty(1);
       return;
     }
-    const colors = product.variants.colors || [];
-    const pots = product.variants.pot_types || [];
-    const sizes = product.variants.sizes || [];
-    const firstInStockKey = Object.entries(product.variants.stock || {})
-      .find(([, stock]) => Number(stock) > 0)?.[0];
-    const inStockParts = firstInStockKey?.split('__') || [];
-    setSelectedColor(colors.length ? (inStockParts[0] || colors[0].slug) : null);
-    // Default to the first actual pot type when pot types are available
-    setSelectedPot(pots.length ? (inStockParts[1] || pots[0].slug) : null);
-    setSelectedSize(sizes.length
-      ? (colors.length && pots.length ? inStockParts[2] : inStockParts[0]) || sizes[0].slug
-      : null);
+    const defaults: Record<string, string> = {};
+    for (const group of groups) {
+      // Pick first option that has stock > 0, fallback to first option
+      const firstInStock = group.options?.find((o: any) => Number(o.stock ?? 0) > 0);
+      const firstOption = firstInStock || group.options?.[0];
+      if (firstOption) defaults[group.id] = firstOption.id;
+    }
+    setSelectedOptions(defaults);
     setQty(1);
   }, [product]);
+
+  // Reset gallery when selection changes
+  useEffect(() => { setGalleryActive(0); }, [selectedOptions]);
 
   if (isLoading) return <Spinner className="py-32" />;
   if (isError || !product) {
@@ -445,71 +413,102 @@ export default function ProductDetailPage() {
     );
   }
 
-  const variants = product.variants;
-  const sizes = variants?.sizes || [];
-  const hasColorPotVariants = Boolean(variants?.colors?.length && variants?.pot_types?.length);
-  const isSizeOnly = Boolean(sizes.length && !variants?.colors?.length && !variants?.pot_types?.length);
-  const hasVariants = hasColorPotVariants || isSizeOnly;
+  const variantGroups = (product.variants as any)?.variant_groups ?? [];
+  const hasGroups = variantGroups.length > 0;
 
-  // Build combo key depending on variant mode
-  let comboKey = '';
-  if (hasColorPotVariants && sizes.length) {
-    if (selectedColor && selectedPot && selectedSize) comboKey = `${selectedColor}__${selectedPot}__${selectedSize}`;
-  } else if (hasColorPotVariants) {
-    if (selectedColor && selectedPot) comboKey = `${selectedColor}__${selectedPot}`;
-  } else if (isSizeOnly) {
-    if (selectedSize) comboKey = selectedSize;
+  // Build option lookup: optionId → option data
+  const optionById: Record<string, any> = {};
+  for (const group of variantGroups) {
+    for (const opt of group.options ?? []) {
+      optionById[opt.id] = opt;
+    }
   }
 
-  const selectedColorType = variants?.colors?.find((c) => c.slug === selectedColor);
-  const selectedPotType = variants?.pot_types?.find((p) => p.slug === selectedPot);
-  const selectedSizeType = sizes.find((s) => s.slug === selectedSize);
-  const selectedStock = hasVariants ? Number(variants?.stock?.[comboKey] ?? 0) : product.stock_qty;
-  const selectedPriceModifier =
-    (selectedPotType?.price_modifier || 0) + (selectedSizeType?.price_modifier || 0);
-  const displayPrice = product.price + selectedPriceModifier;
-  const displayOriginalPrice = product.original_price
-    ? product.original_price + selectedPriceModifier
+  // Price: sum of selected option prices (Tasks 2+3)
+  const selectedOptionsPrice = Object.values(selectedOptions).reduce((sum, optId) => {
+    return sum + Number(optionById[optId]?.price ?? 0);
+  }, 0);
+  const displayPrice = hasGroups ? selectedOptionsPrice : product.price;
+  const displayOriginalPrice = product.original_price && !hasGroups ? product.original_price : null;
+  const discount = displayOriginalPrice && displayOriginalPrice > displayPrice
+    ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
     : null;
-  const discount =
-    displayOriginalPrice && displayOriginalPrice > displayPrice
-      ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
-      : null;
-  // Derive gallery images.
-  // If the selected combo has dedicated image(s), show them first so the
-  // relevant pot/colour is immediately visible, then append the rest of
-  // product.images (deduped) so the full gallery is always accessible.
-  // If no combo image exists, show product.images as-is.
-  const comboImages = variants?.image_map?.[comboKey];
+
+  // Stock: minimum stock across all selected options (per-option stock model)
+  const selectedStock = hasGroups
+    ? Object.values(selectedOptions).reduce((min, optId) => {
+        const stock = Number(optionById[optId]?.stock ?? 0);
+        return Math.min(min, stock);
+      }, Infinity) as number
+    : product.stock_qty;
+  const effectiveStock = isFinite(selectedStock) ? selectedStock : product.stock_qty;
+
+  // Image swapping — mirrors old image_map[comboKey] system, adapted for new opt-ID keys.
+  //
+  // Priority chain:
+  //   1. image_map[optId1__optId2__...] — exact combo match (set in admin combinations table)
+  //   2. Colour option's per-option images — fallback when only colour distinguishes the photo
+  //   3. default_image — catch-all variant fallback
+  //   4. product.images — plain product gallery
+  //
+  // Combo key = selected optionIds joined by '__' in variant_group order.
+  const comboKey = variantGroups
+    .map((g: any) => selectedOptions[g.id])
+    .filter(Boolean)
+    .join('__');
+
+  const imageMap: Record<string, string[]> = (product.variants as any)?.image_map ?? {};
+  const comboImages: string[] = (imageMap[comboKey] ?? []).filter(Boolean);
+
+  // Colour fallback: images on any selected option that belongs to a colour group
+  const colourFallbackImages: string[] = variantGroups
+    .filter((g: any) => /colou?r/i.test(g.label))
+    .flatMap((g: any) => {
+      const optId = selectedOptions[g.id];
+      return optId ? (optionById[optId]?.images ?? []).filter(Boolean) : [];
+    });
+
+  const defaultVariantImage: string = (product.variants as any)?.default_image ?? '';
+
   let galleryImages: string[];
-  if (Array.isArray(comboImages) && comboImages.length > 0) {
+  if (comboImages.length > 0) {
+    // Combo image(s) first, rest of product gallery appended (deduped)
     galleryImages = [
       ...comboImages,
-      ...(product.images || []).filter((img) => !comboImages.includes(img)),
+      ...(product.images ?? []).filter((img) => !comboImages.includes(img)),
     ];
+  } else if (colourFallbackImages.length > 0) {
+    galleryImages = [
+      ...colourFallbackImages,
+      ...(product.images ?? []).filter((img) => !colourFallbackImages.includes(img)),
+    ];
+  } else if (defaultVariantImage) {
+    galleryImages = [defaultVariantImage, ...(product.images ?? [])];
   } else {
-    galleryImages = product.images || [];
+    galleryImages = product.images ?? [];
   }
 
-  const displayImage = galleryImages[0] || product.images?.[0] || '';
+  // Disable Add to Cart: (Task 5) ONLY disabled if has groups AND not all required groups selected
+  // Zero groups = simple product = always enabled
+  const allGroupsSelected = hasGroups
+    ? variantGroups.every((g: any) => {
+        const isRequired = g.required !== false; // default true
+        return !isRequired || selectedOptions[g.id];
+      })
+    : true;
+  const isUnavailable = (hasGroups && !allGroupsSelected) || effectiveStock <= 0;
 
-  // Build selectedOptions for cart
-  let selectedOptions: Record<string, string> | null = null;
-  if (hasColorPotVariants && selectedColor && selectedPot) {
-    selectedOptions = { color: selectedColor, pot_type: selectedPot };
-    if (sizes.length && selectedSize) selectedOptions.size = selectedSize;
-  } else if (isSizeOnly && selectedSize) {
-    selectedOptions = { size: selectedSize };
+  // Cart options: flat array of selected option IDs (Task 6)
+  const cartSelectedOptions: string[] = Object.values(selectedOptions);
+
+  function selectOption(groupId: string, optionId: string) {
+    setSelectedOptions((prev) => ({ ...prev, [groupId]: optionId }));
+    setQty(1);
   }
-
-  const selectionIncomplete =
-    (hasColorPotVariants && (!selectedColor || !selectedPot || (sizes.length > 0 && !selectedSize)))
-    || (isSizeOnly && !selectedSize);
-  const isUnavailable = selectionIncomplete || selectedStock <= 0;
 
   async function handleAddToCart() {
     try {
-      await addItem(product!.id, qty, product!, selectedOptions);
+      await addItem(product!.id, qty, product!, cartSelectedOptions.length ? cartSelectedOptions : null);
       toast.success(`${product!.name} added to cart`);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to add');
@@ -518,7 +517,7 @@ export default function ProductDetailPage() {
 
   async function handleBuyNow() {
     try {
-      await addItem(product!.id, 1, product!, selectedOptions);
+      await addItem(product!.id, 1, product!, cartSelectedOptions.length ? cartSelectedOptions : null);
       useCartStore.getState().closeDrawer();
       navigate('/cart');
     } catch (err: any) {
@@ -602,165 +601,153 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {selectedStock > 0 ? (
+            {effectiveStock > 0 ? (
               <p className="text-sm text-green-600 font-medium">
-                In Stock {selectedStock <= 5 && `(Only ${selectedStock} left)`}
+                In Stock {effectiveStock <= 5 && `(Only ${effectiveStock} left)`}
               </p>
             ) : (
               <p className="text-sm text-red-500 font-medium">Out of Stock</p>
             )}
 
-            {hasVariants && variants && (
+            {/* Flexible Variant Picker — smart rendering per group type */}
+            {hasGroups && (
               <div className="space-y-4">
-                {/* Plant Size Selector */}
-                {sizes.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        Select Plant Size
-                        {selectedSizeType?.description && (
-                          <span className="ml-2 text-primary normal-case font-normal">— {selectedSizeType.description}</span>
-                        )}
+                {variantGroups.map((group: any) => {
+                  const isColourGroup = /colou?r/i.test(group.label);
+                  const hasOptionImages = (group.options ?? []).some((o: any) => o.images?.[0]);
+                  // Render mode: colour → circular swatches; has images → image cards; else → pill chips
+                  const renderMode: 'colour' | 'image-card' | 'pill' =
+                    isColourGroup ? 'colour' : hasOptionImages ? 'image-card' : 'pill';
+
+                  return (
+                    <div key={group.id}>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                        {group.label}
                       </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {sizes.map((size) => {
-                        const sizeCombo = isSizeOnly
-                          ? size.slug
-                          : (selectedColor && selectedPot ? `${selectedColor}__${selectedPot}__${size.slug}` : '');
-                        const stockForSize = sizeCombo ? Number(variants?.stock?.[sizeCombo] ?? 0) : 0;
-                        const disabled = isSizeOnly
-                          ? stockForSize <= 0
-                          : (selectedColor && selectedPot ? stockForSize <= 0 : false);
-                        const isActive = selectedSize === size.slug;
-                        if (disabled) return null;
-                        return (
-                          <button
-                            key={size.slug}
-                            type="button"
-                            onClick={() => {
-                              setSelectedSize(size.slug);
-                              setQty(1);
-                            }}
-                            className={`px-5 py-2 rounded-full border-2 text-sm font-semibold transition ${
-                              isActive
-                                ? 'bg-primary border-primary text-white shadow-sm'
-                                : 'border-gray-300 text-gray-700 hover:border-primary hover:text-primary bg-white'
-                            }`}
-                          >
-                            {size.name}
-                            {size.price_modifier > 0 && (
-                              <span className={`ml-1 text-xs ${isActive ? 'text-white/80' : 'text-gray-400'}`}>
-                                +₹{size.price_modifier}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
 
-                {/* Color Selector */}
-                {hasColorPotVariants && (
-                  <>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Color</p>
-                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                        {variants!.colors.map((color) => {
-                          const colorCombo = selectedPot
-                            ? `${color.slug}__${selectedPot}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`
-                            : '';
-                          const disabled = colorCombo ? Number(variants?.stock?.[colorCombo] ?? 0) <= 0 : false;
-                          if (disabled) return null;
-                          return (
-                            <button
-                              key={color.slug}
-                              type="button"
-                              onClick={() => {
-                                const newColor = color.slug;
-                                setSelectedColor(newColor);
-                                setGalleryActive(0);
-                                setQty(1);
-                                // Re-validate pot: if the current pot has no stock with the new color, switch to first valid one
-                                if (selectedPot) {
-                                  const potStillValid = Number(variants?.stock?.[`${newColor}__${selectedPot}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`] ?? 0) > 0;
-                                  if (!potStillValid) {
-                                    const firstValidPot = variants!.pot_types.find((p) =>
-                                      Number(variants?.stock?.[`${newColor}__${p.slug}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`] ?? 0) > 0
-                                    );
-                                    setSelectedPot(firstValidPot?.slug ?? null);
-                                    if (firstValidPot) {
-                                      toast(`Switched to ${firstValidPot.name} — your previous pot isn't available in ${color.name}`, { icon: 'ℹ️', id: 'variant-swap' });
-                                    }
-                                  }
-                                }
-                              }}
-                              className={`w-9 h-9 rounded-full border-2 transition ${
-                                selectedColor === color.slug ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200'
-                              }`}
-                              title={color.name}
-                              aria-label={color.name}
-                              style={{ backgroundColor: color.hex }}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
+                      {/* ── Colour swatches ─────────────────────────────── */}
+                      {renderMode === 'colour' && (
+                        <div className="flex flex-wrap gap-2.5">
+                          {(group.options ?? []).map((opt: any) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            const outOfStock = Number(opt.stock ?? 0) <= 0;
+                            // hex is the source of truth for the swatch fill — same as old color.hex system
+                            const hex: string = opt.color_hex || '';
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                disabled={outOfStock}
+                                onClick={() => selectOption(group.id, opt.id)}
+                                title={opt.name}
+                                aria-label={opt.name}
+                                className={`relative h-9 w-9 rounded-full border-2 transition focus:outline-none
+                                  ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200 hover:border-primary/40'}
+                                  ${outOfStock ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
+                                `}
+                                style={{ backgroundColor: hex || '#e5e7eb' }}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
 
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pot Type</p>
-                      <div className="flex flex-wrap gap-2">
-                        {variants!.pot_types.map((pot) => {
-                          const potCombo = selectedColor
-                            ? `${selectedColor}__${pot.slug}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`
-                            : '';
-                          const disabled = potCombo ? Number(variants?.stock?.[potCombo] ?? 0) <= 0 : false;
-                          if (disabled) return null;
-                          return (
-                            <button
-                              key={pot.slug}
-                              type="button"
-                              onClick={() => {
-                                const newPot = pot.slug;
-                                setSelectedPot(newPot);
-                                setQty(1);
-                                // Re-validate color: if the current color has no stock with the new pot, switch to first valid one
-                                if (selectedColor) {
-                                  const colorStillValid = Number(variants?.stock?.[`${selectedColor}__${newPot}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`] ?? 0) > 0;
-                                  if (!colorStillValid) {
-                                    const firstValidColor = variants!.colors.find((c) =>
-                                      Number(variants?.stock?.[`${c.slug}__${newPot}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`] ?? 0) > 0
-                                    );
-                                    setSelectedColor(firstValidColor?.slug ?? null);
-                                    if (firstValidColor) {
-                                      toast(`Switched to ${firstValidColor.name} — your previous color isn't available in ${pot.name}`, { icon: 'ℹ️', id: 'variant-swap' });
-                                    }
-                                  }
-                                }
-                              }}
-                              className={`w-24 min-h-24 shrink-0 px-2 py-2 rounded-xl border text-xs font-medium transition ${
-                                selectedPot === pot.slug ? 'border-primary bg-primary text-white shadow-sm' : 'border-gray-200 bg-white hover:border-primary/40'
-                              }`}
-                            >
-                              <span className="flex h-11 items-center justify-center mb-1">
-                                {pot.image_url ? (
-                                  <img src={pot.image_url} alt="" className="h-11 w-14 object-contain" loading="lazy" />
-                                ) : (
-                                  <span className={`text-2xl ${selectedPot === pot.slug ? 'text-white/70' : 'text-gray-300'}`}>♧</span>
+                      {/* ── Image cards (pot type, style, etc.) ─────────── */}
+                      {renderMode === 'image-card' && (
+                        <div className="flex flex-wrap gap-2">
+                          {(group.options ?? []).map((opt: any) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            const outOfStock = Number(opt.stock ?? 0) <= 0;
+                            const priceDelta = Number(opt.price ?? 0);
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                disabled={outOfStock}
+                                onClick={() => selectOption(group.id, opt.id)}
+                                className={`relative flex flex-col items-center rounded-xl border-2 p-2 w-[88px] transition focus:outline-none
+                                  ${isSelected
+                                    ? 'border-primary bg-primary/5 shadow-sm'
+                                    : outOfStock
+                                      ? 'border-gray-200 opacity-50 cursor-not-allowed'
+                                      : 'border-gray-200 hover:border-primary/60 bg-white cursor-pointer'
+                                  }`}
+                              >
+                                <div className="h-14 w-14 rounded-lg overflow-hidden bg-gray-50 mb-1.5 shrink-0">
+                                  {opt.images?.[0] ? (
+                                    <img
+                                      src={opt.images[0]}
+                                      alt={opt.name}
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="h-full w-full flex items-center justify-center text-gray-300">
+                                      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                                        <path d="M21 15l-5-5L5 21"/>
+                                      </svg>
+                                    </div>
+                                  )}
+                                </div>
+                                <span className={`text-[11px] font-semibold text-center leading-tight line-clamp-2 ${isSelected ? 'text-primary' : 'text-gray-800'}`}>
+                                  {opt.name}
+                                </span>
+                                {priceDelta > 0 && (
+                                  <span className={`text-[10px] mt-0.5 font-medium ${isSelected ? 'text-primary/80' : 'text-gray-400'}`}>
+                                    +₹{priceDelta}
+                                  </span>
                                 )}
-                              </span>
-                              <span className="block truncate">{pot.name}</span>
-                              <span className={`block mt-0.5 ${selectedPot === pot.slug ? 'text-white/80' : 'text-gray-500'}`}>
-                                {pot.price_modifier > 0 ? `+₹${pot.price_modifier}` : 'Included'}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                                {priceDelta === 0 && (
+                                  <span className={`text-[10px] mt-0.5 font-medium ${isSelected ? 'text-primary/80' : 'text-gray-400'}`}>
+                                    Included
+                                  </span>
+                                )}
+                                {outOfStock && (
+                                  <span className="text-[9px] text-red-400 font-semibold mt-0.5">Out of stock</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* ── Pill chips (size, weight, etc.) ─────────────── */}
+                      {renderMode === 'pill' && (
+                        <div className="flex flex-wrap gap-2">
+                          {(group.options ?? []).map((opt: any) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            const outOfStock = Number(opt.stock ?? 0) <= 0;
+                            const priceDelta = Number(opt.price ?? 0);
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                disabled={outOfStock}
+                                onClick={() => selectOption(group.id, opt.id)}
+                                className={`px-4 py-2 rounded-full border-2 text-sm font-semibold transition focus:outline-none
+                                  ${isSelected
+                                    ? 'bg-primary border-primary text-white shadow-sm'
+                                    : outOfStock
+                                      ? 'border-gray-200 text-gray-300 cursor-not-allowed line-through'
+                                      : 'border-gray-200 text-gray-700 hover:border-primary hover:text-primary bg-white'
+                                  }`}
+                              >
+                                {opt.name}
+                                {priceDelta > 0 && (
+                                  <span className={`ml-1.5 text-xs font-normal ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
+                                    +₹{priceDelta}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  </>
-                )}
+                  );
+                })}
               </div>
             )}
 
@@ -776,7 +763,7 @@ export default function ProductDetailPage() {
                     <Minus size={16} />
                   </button>
                   <span className="px-4 font-medium">{qty}</span>
-                  <button onClick={() => setQty(Math.min(selectedStock, qty + 1))} className="p-3 hover:bg-gray-50 transition touch-target">
+                  <button onClick={() => setQty(Math.min(effectiveStock, qty + 1))} className="p-3 hover:bg-gray-50 transition touch-target">
                     <Plus size={16} />
                   </button>
                 </div>
@@ -804,7 +791,7 @@ export default function ProductDetailPage() {
                     <Minus size={14} />
                   </button>
                   <span className="min-w-10 px-3 text-center text-sm font-medium">{qty}</span>
-                  <button onClick={() => setQty(Math.min(selectedStock, qty + 1))} className="px-4 py-3 touch-target">
+                  <button onClick={() => setQty(Math.min(effectiveStock, qty + 1))} className="px-4 py-3 touch-target">
                     <Plus size={14} />
                   </button>
                 </div>

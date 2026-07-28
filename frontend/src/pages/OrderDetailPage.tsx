@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Package } from 'lucide-react';
 import { useOrder } from '@/hooks/useOrders';
 import Spinner from '@/components/ui/Spinner';
+import { formatSelectedOptions } from '@/lib/variantDisplay';
 
 const STATUS_STEPS = ['pending', 'confirmed', 'shipped', 'delivered'];
 
@@ -112,7 +113,7 @@ export default function OrderDetailPage() {
                 <p className="text-[10px] text-gray-400">Product ID: #{item.product_id}</p>
                 {item.selected_options && (
                   <p className="text-xs text-gray-500">
-                    {[item.selected_options.color && `Color: ${labelize(item.selected_options.color)}`, item.selected_options.pot_type && `Pot: ${labelize(item.selected_options.pot_type)}`, item.selected_options.size && `Size: ${labelize(item.selected_options.size)}`].filter(Boolean).join(' · ')}
+                    {formatSelectedOptions(item.selected_options, null)}
                   </p>
                 )}
                 <p className="text-xs text-gray-500">Qty: {item.quantity} × ₹{item.unit_price}</p>

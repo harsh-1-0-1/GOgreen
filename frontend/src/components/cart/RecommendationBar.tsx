@@ -33,8 +33,7 @@ export default function RecommendationBar({ lastAddedProduct, cartItems }: Recom
     e.preventDefault();
     e.stopPropagation();
     const hasVariants = Boolean(
-      (product.variants?.colors?.length && product.variants?.pot_types?.length)
-      || product.variants?.sizes?.length,
+      (product.variants as any)?.variant_groups?.length > 0,
     );
     if (hasVariants) {
       navigate(`/products/${product.slug}`);
@@ -104,8 +103,7 @@ export default function RecommendationBar({ lastAddedProduct, cartItems }: Recom
                 ) : (
                   <>
                     <Plus size={11} strokeWidth={2.5} />
-                    {(product.variants?.colors?.length && product.variants?.pot_types?.length)
-                      || product.variants?.sizes?.length ? 'Options' : 'Add'}
+                    {(product.variants as any)?.variant_groups?.length > 0 ? 'Options' : 'Add'}
                   </>
                 )}
               </button>
