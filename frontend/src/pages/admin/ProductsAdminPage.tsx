@@ -199,14 +199,16 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   type CareItemDraft = { title: string; description: string; icon_key: string; icon_url: string; uploading: boolean };
   const [careItems, setCareItems] = useState<CareItemDraft[]>([]);
 
-  // Tracks which product ID has had its raw image keys seeded from the admin endpoint.
-  // Declared here (before formReady) so the guard can be read in the same render pass.
-  const seededForProductIdRef = useRef<number | null>(null);
+  // Tracks whether the raw product image keys have been seeded into variant state.
+  // Stored as state (not a ref) so that changing it triggers a re-render, which is
+  // required for formReady to update the Save button's disabled state correctly.
+  // The ref-during-render lint error fires if this is a useRef.
+  const [rawProductSeededId, setRawProductSeededId] = useState<number | null>(null);
 
-  // True once form fields are initialized. For new products this is immediate.
-  // For edit mode, also wait for rawProduct to be seeded so option image_keys are
-  // populated — saving before that would wipe existing variant images.
-  const rawProductSeeded = !isEdit || seededForProductIdRef.current === (editProduct?.id ?? null);
+  // True once form fields are initialized. For edit mode, also wait for rawProduct
+  // to be seeded so option image_keys are populated — saving before that would wipe
+  // existing variant images.
+  const rawProductSeeded = !isEdit || rawProductSeededId === (editProduct?.id ?? null);
   const formReady = formInitialized && rawProductSeeded;
 
   // Derive a display URL from a relative storage key.
@@ -305,8 +307,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   useEffect(() => {
     if (!isEdit || !rawProduct) return;
     const incomingId = rawProduct.id ?? null;
-    if (seededForProductIdRef.current === incomingId) return;
-    seededForProductIdRef.current = incomingId;
+    if (rawProductSeededId === incomingId) return;
+    setRawProductSeededId(incomingId);
 
     const v = (rawProduct as any).variants || {};
     // Seed default image relative key
@@ -349,7 +351,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         };
       }));
     }
-  }, [isEdit, rawProduct]);
+  }, [isEdit, rawProduct, rawProductSeededId]);
 
   useEffect(() => {
     if (!isEdit) return;
