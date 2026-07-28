@@ -515,6 +515,12 @@ export default function ProductDetailPage() {
   function selectOption(groupId: string, optionId: string) {
     setSelectedOptions((prev) => ({ ...prev, [groupId]: optionId }));
     setQty(1);
+    // On mobile the gallery sits above the variant selector and scrolls out of view.
+    // Scroll back to the top of the page (galleryRef) so the image update is visible.
+    // Skip on md+ breakpoints where the gallery is always in the left column.
+    if (window.innerWidth < 768) {
+      galleryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   async function handleAddToCart() {
