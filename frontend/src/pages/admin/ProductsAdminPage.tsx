@@ -27,14 +27,15 @@ import type { Product, ProductListResponse, ProductVariants } from '@/types';
 type ProductFormData = z.infer<typeof productSchema>;
 
 // ─── Flexible Variant Draft Types ──────────────────────────────────────────
-// ⚠️ image_key = relative storage key sent to backend. image_url = preview only.
+// ⚠️ image_keys = relative storage keys sent to backend. image_urls = preview only.
 type VariantOptionDraft = {
   id: string;           // stable ID – preserved for existing options, generated for new
   name: string;
   price: number;
   stock: number;
-  image_key: string;    // relative key, stored in DB
-  image_url: string;    // resolved URL, display only
+  image_keys: string[];  // relative keys array, stored in DB
+  image_urls: string[];  // resolved URLs array, display only
+  color_hex: string;     // optional hex color for colour-type variants
   uploading: boolean;
 };
 
@@ -49,7 +50,7 @@ function genId(prefix: string): string {
 }
 
 function emptyOption(): VariantOptionDraft {
-  return { id: genId('opt'), name: '', price: 0, stock: 0, image_key: '', image_url: '', uploading: false };
+  return { id: genId('opt'), name: '', price: 0, stock: 0, image_keys: [], image_urls: [], color_hex: '', uploading: false };
 }
 
 function emptyGroup(): VariantGroupDraft {
@@ -189,6 +190,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // defaultImageKey: relative key sent to backend. defaultImageUrl: full URL for preview only.
   const [defaultImageKey, setDefaultImageKey] = useState('');
   const [defaultImageUrl, setDefaultImageUrl] = useState('');
+  // Combo image map: keyed by "optId1__optId2__..." joining one optId per group in group order.
+  // image_keys = relative keys (sent to backend). image_urls = resolved URLs (display only).
+  const [comboImageKeys, setComboImageKeys] = useState<Record<string, string[]>>({});
+  const [comboImageUrls, setComboImageUrls] = useState<Record<string, string[]>>({});
+  const [uploadingComboKey, setUploadingComboKey] = useState<string | null>(null);
   // Care items — flexible list of {icon_key, icon_url, title, description}
   type CareItemDraft = { title: string; description: string; icon_key: string; icon_url: string; uploading: boolean };
   const [careItems, setCareItems] = useState<CareItemDraft[]>([]);
@@ -271,8 +277,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             stock: Number(opt.stock ?? 0),
             // images are already resolved URLs from the API; store first as preview
             // backend /admin/raw returns relative keys — handled in rawProduct effect
-            image_key: '',
-            image_url: (opt.images?.[0]) || '',
+            image_keys: [],
+            image_urls: opt.images?.filter(Boolean) || [],
+            color_hex: opt.color_hex || '',
             uploading: false,
           })),
         }))
@@ -282,6 +289,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     }
     setDefaultImageKey('');
     setDefaultImageUrl('');
+    setComboImageKeys({});
+    setComboImageUrls({});
     setVariantError(null);
   }, [reset]);
   // Seed default_image from the raw admin endpoint (relative key, not resolved URL).
@@ -298,6 +307,20 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setDefaultImageKey(v.default_image || '');
     setDefaultImageUrl(resolveImageUrl(v.default_image));
 
+    // Seed combo image_map from raw product
+    if (v.image_map && typeof v.image_map === 'object') {
+      const seedKeys: Record<string, string[]> = {};
+      const seedUrls: Record<string, string[]> = {};
+      Object.entries(v.image_map as Record<string, string[]>).forEach(([key, imgs]) => {
+        if (Array.isArray(imgs) && imgs.length > 0) {
+          seedKeys[key] = imgs.filter(Boolean);
+          seedUrls[key] = imgs.filter(Boolean).map((k: string) => resolveImageUrl(k));
+        }
+      });
+      setComboImageKeys(seedKeys);
+      setComboImageUrls(seedUrls);
+    }
+
     // Seed per-option image keys from raw variant_groups
     if (Array.isArray(v.variant_groups)) {
       setVariantGroups(prev => prev.map((group) => {
@@ -308,8 +331,14 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           options: group.options.map((opt) => {
             const rawOpt = rawGroup.options?.find((ro: any) => ro.id === opt.id);
             if (!rawOpt) return opt;
-            const rawKey: string = (rawOpt.images?.[0]) || '';
-            return { ...opt, image_key: rawKey, image_url: rawKey ? resolveImageUrl(rawKey) : opt.image_url };
+            const rawKeys: string[] = (rawOpt.images || []).filter(Boolean);
+            const rawUrls = rawKeys.map((k: string) => resolveImageUrl(k));
+            return {
+              ...opt,
+              image_keys: rawKeys.length ? rawKeys : opt.image_keys,
+              image_urls: rawKeys.length ? rawUrls : opt.image_urls,
+              color_hex: rawOpt.color_hex || opt.color_hex,
+            };
           }),
         };
       }));
@@ -350,6 +379,12 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       }
 
       if (cleanGroups.length > 0 || defaultImageKey.trim()) {
+        // Build image_map: only include combos that actually have images
+        const imageMap: Record<string, string[]> = {};
+        Object.entries(comboImageKeys).forEach(([key, keys]) => {
+          if (keys.length > 0) imageMap[key] = keys;
+        });
+
         variants = {
           variant_groups: cleanGroups.map(group => ({
             id: group.id,
@@ -361,10 +396,12 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                 name: o.name.trim(),
                 price: Number(o.price || 0),
                 stock: Number(o.stock || 0),
-                // Store image as array (backend expects images[])
-                ...(o.image_key.trim() ? { images: [o.image_key.trim()] } : {}),
+                // Per-option images — used as colour fallback on product page
+                ...(o.image_keys.length ? { images: o.image_keys } : {}),
+                ...(o.color_hex.trim() ? { color_hex: o.color_hex.trim() } : {}),
               })),
           })),
+          ...(Object.keys(imageMap).length ? { image_map: imageMap } : {}),
           default_image: defaultImageKey || undefined,
         };
       }
@@ -521,16 +558,88 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         g.id !== groupId ? g : {
           ...g,
           options: g.options.map(o =>
-            o.id !== optionId ? o : { ...o, image_key: data.key, image_url: data.url }
+            o.id !== optionId ? o : {
+              ...o,
+              image_keys: [...o.image_keys, data.key],
+              image_urls: [...o.image_urls, data.url],
+            }
           ),
         }
       ));
-      toast.success('Option image uploaded');
+      toast.success('Image uploaded');
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload option image');
+      toast.error(err.response?.data?.detail || 'Failed to upload image');
     } finally {
       setUploadingOptionImage(null);
     }
+  }
+
+  function handleRemoveOptionImage(groupId: string, optionId: string, index: number) {
+    setVariantGroups(prev => prev.map(g =>
+      g.id !== groupId ? g : {
+        ...g,
+        options: g.options.map(o =>
+          o.id !== optionId ? o : {
+            ...o,
+            image_keys: o.image_keys.filter((_, i) => i !== index),
+            image_urls: o.image_urls.filter((_, i) => i !== index),
+          }
+        ),
+      }
+    ));
+  }
+
+  // ─── Cartesian product helper ────────────────────────────────────────────
+  // Returns rows of { key: "optId1__optId2__...", label: "Name1 / Name2 / ..." }
+  // Only includes named, named options. Capped at COMBO_CAP rows.
+  const COMBO_CAP = 50;
+  function buildComboRows(groups: VariantGroupDraft[]): { key: string; label: string }[] {
+    const namedGroups = groups
+      .map(g => ({ ...g, options: g.options.filter(o => o.name.trim()) }))
+      .filter(g => g.label.trim() && g.options.length > 0);
+    if (namedGroups.length === 0) return [];
+    // Cartesian product
+    let rows: { key: string; label: string }[] = [{ key: '', label: '' }];
+    for (const group of namedGroups) {
+      const next: { key: string; label: string }[] = [];
+      for (const row of rows) {
+        for (const opt of group.options) {
+          next.push({
+            key: row.key ? `${row.key}__${opt.id}` : opt.id,
+            label: row.label ? `${row.label} / ${opt.name}` : opt.name,
+          });
+        }
+      }
+      rows = next;
+    }
+    return rows;
+  }
+
+  // ─── Combo image upload / remove ────────────────────────────────────────
+  async function handleComboImageUpload(comboKey: string, file?: File) {
+    if (!file) return;
+    const current = comboImageKeys[comboKey] || [];
+    if (current.length >= 8) { toast.error('Limit of 8 images per combination'); return; }
+    setUploadingComboKey(comboKey);
+    try {
+      const squared = await cropToSquare(file);
+      const fd = new FormData();
+      fd.append('image', squared);
+      if (editProduct?.id) fd.append('product_id', String(editProduct.id));
+      const { data } = await api.post<{ key: string; url: string }>('/products/variant-image', fd);
+      setComboImageKeys(prev => ({ ...prev, [comboKey]: [...(prev[comboKey] || []), data.key] }));
+      setComboImageUrls(prev => ({ ...prev, [comboKey]: [...(prev[comboKey] || []), data.url] }));
+      toast.success('Combination image uploaded');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to upload combination image');
+    } finally {
+      setUploadingComboKey(null);
+    }
+  }
+
+  function handleRemoveComboImage(comboKey: string, index: number) {
+    setComboImageKeys(prev => ({ ...prev, [comboKey]: (prev[comboKey] || []).filter((_, i) => i !== index) }));
+    setComboImageUrls(prev => ({ ...prev, [comboKey]: (prev[comboKey] || []).filter((_, i) => i !== index) }));
   }
 
   async function handleDefaultImageUpload(file?: File) {
@@ -1035,27 +1144,95 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
                       {/* Options */}
                       <div className="px-3 pb-3 space-y-2">
-                        {group.options.map((opt) => (
-                          <div key={opt.id} className="rounded-lg border border-gray-200 bg-white p-2.5">
-                            <div className="flex gap-2 items-center flex-wrap">
-                              {/* Image thumbnail */}
-                              <div className="h-10 w-10 rounded border overflow-hidden bg-gray-50 shrink-0 flex items-center justify-center">
-                                {opt.image_url
-                                  ? <img src={opt.image_url} alt={opt.name || 'option'} className="h-full w-full object-cover" />
-                                  : <ImageIcon size={14} className="text-gray-300" />}
-                              </div>
+                        {group.options.map((opt) => {
+                          const isColourGroup = /colou?r/i.test(group.label);
+                          return (
+                          <div key={opt.id} className="rounded-lg border border-gray-200 bg-white p-2.5 space-y-2">
+                            {/* Row 1: image/color + name + remove */}
+                            <div className="flex gap-2 items-center">
+                              {isColourGroup ? (
+                                /* Color swatch picker */
+                                <label
+                                  className="relative h-10 w-10 rounded-full border-2 border-gray-300 overflow-hidden shrink-0 cursor-pointer hover:border-primary/60 transition shadow-sm"
+                                  title={opt.color_hex ? `Colour: ${opt.color_hex}` : 'Click to pick a colour'}
+                                  style={{ backgroundColor: opt.color_hex || '#e5e7eb' }}
+                                >
+                                  <input
+                                    type="color"
+                                    value={opt.color_hex || '#000000'}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                        ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, color_hex: v }),
+                                      }));
+                                    }}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  />
+                                </label>
+                              ) : (
+                                /* Clickable image thumbnail / upload trigger — shows first image */
+                                <label
+                                  className={`relative h-10 w-10 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 shrink-0 flex items-center justify-center cursor-pointer hover:border-primary/60 transition group ${uploadingOptionImage === opt.id ? 'opacity-60 pointer-events-none' : ''}`}
+                                  title={opt.image_urls[0] ? 'Add more images below' : 'Upload image'}
+                                >
+                                  {uploadingOptionImage === opt.id ? (
+                                    <Loader2 size={14} className="animate-spin text-primary" />
+                                  ) : opt.image_urls[0] ? (
+                                    <>
+                                      <img src={opt.image_urls[0]} alt={opt.name || 'option'} className="h-full w-full object-cover" />
+                                      <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center">{opt.image_urls.length}</span>
+                                    </>
+                                  ) : (
+                                    <div className="flex flex-col items-center gap-0.5 text-primary/60">
+                                      <Upload size={13} />
+                                      <span className="text-[8px] font-medium leading-none">Image</span>
+                                    </div>
+                                  )}
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    className="hidden"
+                                    onChange={(e) => { void handleOptionImageUpload(group.id, opt.id, e.target.files?.[0]); e.target.value = ''; }}
+                                  />
+                                </label>
+                              )}
+
                               {/* Name */}
-                              <input
-                                value={opt.name}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
-                                    ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, name: v }),
-                                  }));
-                                }}
-                                placeholder='Name (e.g. "4 Inch", "100 gm", "Terracotta")'
-                                className={`${inputClass} flex-1 min-w-32`}
-                              />
+                              <div className="flex-1 flex flex-col gap-1">
+                                <input
+                                  value={opt.name}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                      ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, name: v }),
+                                    }));
+                                  }}
+                                  placeholder={isColourGroup ? 'Colour name (e.g. "Forest Green")' : 'Name (e.g. "4 Inch", "100 gm")'}
+                                  className={`${inputClass} flex-1`}
+                                />
+                                {isColourGroup && (
+                                  <span className="text-[10px] text-gray-400 pl-1">
+                                    {opt.color_hex ? opt.color_hex : 'Click the circle to pick a colour'}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Remove option */}
+                              <button
+                                type="button"
+                                onClick={() => setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                  ...g, options: g.options.filter(o => o.id !== opt.id),
+                                }))}
+                                disabled={group.options.length <= 1}
+                                className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0 disabled:opacity-30"
+                                aria-label="Remove option"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+
+                            {/* Row 2: price + stock + (colour: image upload) */}
+                            <div className="flex gap-2 items-center flex-wrap pl-12">
                               {/* Price */}
                               <div className="flex items-center gap-1 shrink-0">
                                 <span className="text-xs text-gray-500">₹</span>
@@ -1070,7 +1247,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                                     }));
                                   }}
                                   placeholder="Price"
-                                  className="w-24 px-2 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                  className="w-24 px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                                 />
                               </div>
                               {/* Stock */}
@@ -1087,50 +1264,34 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                                     }));
                                   }}
                                   placeholder="Stock"
-                                  className="w-20 px-2 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                  className="w-20 px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                                 />
                               </div>
-                              {/* Image upload */}
-                              <label
-                                className={`inline-flex items-center gap-1 px-2 py-2 rounded-lg border bg-gray-50 text-[11px] font-medium text-primary cursor-pointer hover:bg-green-50 shrink-0 ${uploadingOptionImage === opt.id ? 'opacity-60 pointer-events-none' : ''}`}
-                                title="Upload option image"
-                              >
-                                {uploadingOptionImage === opt.id
-                                  ? <Loader2 size={12} className="animate-spin" />
-                                  : <Upload size={12} />}
-                                <input
-                                  type="file"
-                                  accept="image/jpeg,image/png,image/webp"
-                                  className="hidden"
-                                  onChange={(e) => { void handleOptionImageUpload(group.id, opt.id, e.target.files?.[0]); e.target.value = ''; }}
-                                />
-                              </label>
-                              {/* Remove option */}
-                              <button
-                                type="button"
-                                onClick={() => setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
-                                  ...g, options: g.options.filter(o => o.id !== opt.id),
-                                }))}
-                                disabled={group.options.length <= 1}
-                                className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0 disabled:opacity-30"
-                                aria-label="Remove option"
-                              >
-                                <X size={14} />
-                              </button>
+
+                              {/* Colour variants: quick add-photo button (full management in table below) */}
+                              {isColourGroup && (
+                                <label
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-gray-50 text-[11px] font-medium text-primary cursor-pointer hover:bg-green-50 shrink-0 ${uploadingOptionImage === opt.id ? 'opacity-60 pointer-events-none' : ''}`}
+                                  title="Upload colour photo"
+                                >
+                                  {uploadingOptionImage === opt.id
+                                    ? <Loader2 size={12} className="animate-spin" />
+                                    : opt.image_urls[0]
+                                    ? <img src={opt.image_urls[0]} alt="" className="h-4 w-4 rounded object-cover" />
+                                    : <Upload size={12} />}
+                                  <span>{opt.image_urls.length > 0 ? `${opt.image_urls.length} photo${opt.image_urls.length > 1 ? 's' : ''}` : 'Add photo'}</span>
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    className="hidden"
+                                    onChange={(e) => { void handleOptionImageUpload(group.id, opt.id, e.target.files?.[0]); e.target.value = ''; }}
+                                  />
+                                </label>
+                              )}
                             </div>
-                            {opt.image_key && (
-                              <button
-                                type="button"
-                                onClick={() => setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
-                                  ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, image_key: '', image_url: '' }),
-                                }))}
-                                className="text-[10px] text-red-500 hover:text-red-600 font-medium mt-1.5 block"
-                              >
-                                Remove image
-                              </button>
-                            )}
                           </div>
-                        ))}
+                        );
+                        })}
 
                         {/* Add Option */}
                         <button
@@ -1156,6 +1317,117 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                   <Plus size={15} />
                   Add Variant Type
                 </button>
+
+                {/* ── Variant Combinations Image Table ────────────────────────────── */}
+                {(() => {
+                  const comboRows = buildComboRows(variantGroups);
+                  if (comboRows.length === 0) return null;
+                  const overCap = comboRows.length > COMBO_CAP;
+                  const visibleRows = overCap ? comboRows.slice(0, COMBO_CAP) : comboRows;
+                  const hasAnyComboImage = Object.values(comboImageUrls).some(a => a.length > 0);
+                  return (
+                    <div className="border-t pt-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-semibold text-gray-700 block">Variant Combinations &amp; Images</span>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            Upload a photo for each combination — shown in the gallery when that exact combo is selected.
+                            Combinations without a photo fall back to the colour option's image, then the default image.
+                          </p>
+                        </div>
+                        {hasAnyComboImage && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!confirm('Clear all combination images?')) return;
+                              setComboImageKeys({});
+                              setComboImageUrls({});
+                            }}
+                            className="text-xs text-red-500 hover:text-red-600 font-medium border border-red-200 px-2 py-1 rounded hover:bg-red-50 transition shrink-0"
+                          >
+                            Clear all combo images
+                          </button>
+                        )}
+                      </div>
+
+                      {overCap && (
+                        <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 flex gap-2 items-start text-xs text-amber-800">
+                          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                          <span>
+                            {comboRows.length} combinations total — showing first {COMBO_CAP}. Reduce options or groups to see all combinations.
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="overflow-x-auto border rounded-lg bg-gray-50/50">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-gray-100 text-gray-600 border-b">
+                            <tr>
+                              <th className="p-3 font-medium">Combination</th>
+                              <th className="p-3 font-medium">
+                                Images
+                                <span className="font-normal text-gray-400 ml-1">(optional — falls back to colour / default image)</span>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {visibleRows.map((row) => {
+                              const imgs = comboImageUrls[row.key] || [];
+                              const keys = comboImageKeys[row.key] || [];
+                              return (
+                                <tr key={row.key} className="border-b last:border-0 bg-white">
+                                  <td className="p-3 font-semibold text-gray-800 whitespace-nowrap align-top pt-4">
+                                    {row.label}
+                                  </td>
+                                  <td className="p-3">
+                                    <div className="flex flex-col gap-2">
+                                      {imgs.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {imgs.map((url, idx) => (
+                                            <div key={idx} className="relative group h-12 w-12 rounded border overflow-hidden bg-gray-50 shrink-0">
+                                              <img src={url} alt="" className="h-full w-full object-cover" />
+                                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleRemoveComboImage(row.key, idx)}
+                                                  className="p-0.5 text-red-400 hover:text-red-300 bg-black/40 rounded text-[9px] leading-none"
+                                                  title="Remove"
+                                                >✕</button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                      {imgs.length === 0 && (
+                                        <p className="text-[10px] text-gray-400 italic">No image — will use fallback</p>
+                                      )}
+                                      {keys.length < 8 && (
+                                        <label
+                                          className={`inline-flex items-center gap-1 px-2 py-1 rounded border bg-white text-[11px] font-medium text-primary cursor-pointer hover:bg-green-50 self-start transition ${uploadingComboKey === row.key ? 'opacity-60 pointer-events-none' : ''}`}
+                                        >
+                                          {uploadingComboKey === row.key
+                                            ? <Loader2 size={10} className="animate-spin" />
+                                            : <Upload size={10} />}
+                                          {uploadingComboKey === row.key ? 'Uploading…' : 'Add Image'}
+                                          <input
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp"
+                                            className="hidden"
+                                            onChange={(e) => { void handleComboImageUpload(row.key, e.target.files?.[0]); e.target.value = ''; }}
+                                          />
+                                        </label>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Default Fallback Image */}
                 <div className="border-t pt-4 space-y-2">
@@ -1257,7 +1529,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           <button
             type="button"
             onClick={handleSubmit(onSubmit)}
-            disabled={!formReady || submitting || uploadingOptionImage !== null || uploadingDefaultImage || careItems.some(c => c.uploading)}
+            disabled={!formReady || submitting || uploadingOptionImage !== null || uploadingDefaultImage || uploadingComboKey !== null || careItems.some(c => c.uploading)}
             className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 transition"
           >
             {!formReady

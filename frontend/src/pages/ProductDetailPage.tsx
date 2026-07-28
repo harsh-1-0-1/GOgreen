@@ -443,16 +443,44 @@ export default function ProductDetailPage() {
     : product.stock_qty;
   const effectiveStock = isFinite(selectedStock) ? selectedStock : product.stock_qty;
 
-  // Image swapping (Task 4): use first image of any selected option, fallback to default_image
-  const selectedOptionImages = Object.values(selectedOptions)
-    .flatMap((optId) => optionById[optId]?.images ?? [])
-    .filter(Boolean);
-  const defaultVariantImage = (product.variants as any)?.default_image;
+  // Image swapping — mirrors old image_map[comboKey] system, adapted for new opt-ID keys.
+  //
+  // Priority chain:
+  //   1. image_map[optId1__optId2__...] — exact combo match (set in admin combinations table)
+  //   2. Colour option's per-option images — fallback when only colour distinguishes the photo
+  //   3. default_image — catch-all variant fallback
+  //   4. product.images — plain product gallery
+  //
+  // Combo key = selected optionIds joined by '__' in variant_group order.
+  const comboKey = variantGroups
+    .map((g: any) => selectedOptions[g.id])
+    .filter(Boolean)
+    .join('__');
+
+  const imageMap: Record<string, string[]> = (product.variants as any)?.image_map ?? {};
+  const comboImages: string[] = (imageMap[comboKey] ?? []).filter(Boolean);
+
+  // Colour fallback: images on any selected option that belongs to a colour group
+  const colourFallbackImages: string[] = variantGroups
+    .filter((g: any) => /colou?r/i.test(g.label))
+    .flatMap((g: any) => {
+      const optId = selectedOptions[g.id];
+      return optId ? (optionById[optId]?.images ?? []).filter(Boolean) : [];
+    });
+
+  const defaultVariantImage: string = (product.variants as any)?.default_image ?? '';
+
   let galleryImages: string[];
-  if (selectedOptionImages.length > 0) {
+  if (comboImages.length > 0) {
+    // Combo image(s) first, rest of product gallery appended (deduped)
     galleryImages = [
-      ...selectedOptionImages,
-      ...(product.images ?? []).filter((img) => !selectedOptionImages.includes(img)),
+      ...comboImages,
+      ...(product.images ?? []).filter((img) => !comboImages.includes(img)),
+    ];
+  } else if (colourFallbackImages.length > 0) {
+    galleryImages = [
+      ...colourFallbackImages,
+      ...(product.images ?? []).filter((img) => !colourFallbackImages.includes(img)),
     ];
   } else if (defaultVariantImage) {
     galleryImages = [defaultVariantImage, ...(product.images ?? [])];
@@ -581,50 +609,145 @@ export default function ProductDetailPage() {
               <p className="text-sm text-red-500 font-medium">Out of Stock</p>
             )}
 
-            {/* Flexible Variant Picker — loops over variant_groups, no category logic */}
+            {/* Flexible Variant Picker — smart rendering per group type */}
             {hasGroups && (
               <div className="space-y-4">
-                {variantGroups.map((group: any) => (
-                  <div key={group.id}>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                      {group.label}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {(group.options ?? []).map((opt: any) => {
-                        const isSelected = selectedOptions[group.id] === opt.id;
-                        const outOfStock = Number(opt.stock ?? 0) <= 0;
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            disabled={outOfStock}
-                            onClick={() => selectOption(group.id, opt.id)}
-                            className={`relative px-4 py-2 rounded-full border-2 text-sm font-semibold transition
-                              ${isSelected
-                                ? 'bg-primary border-primary text-white shadow-sm'
-                                : outOfStock
-                                  ? 'border-gray-200 text-gray-300 cursor-not-allowed line-through'
-                                  : 'border-gray-300 text-gray-700 hover:border-primary hover:text-primary bg-white'
-                              }`}
-                          >
-                            {/* Option image as small swatch if present */}
-                            {opt.images?.[0] && (
-                              <span className="inline-block w-5 h-5 rounded-full overflow-hidden mr-1.5 align-middle border border-white/30">
-                                <img src={opt.images[0]} alt="" className="w-full h-full object-cover" loading="lazy" />
-                              </span>
-                            )}
-                            {opt.name}
-                            {Number(opt.price) > 0 && (
-                              <span className={`ml-1.5 text-xs font-normal ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
-                                ₹{opt.price}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
+                {variantGroups.map((group: any) => {
+                  const isColourGroup = /colou?r/i.test(group.label);
+                  const hasOptionImages = (group.options ?? []).some((o: any) => o.images?.[0]);
+                  // Render mode: colour → circular swatches; has images → image cards; else → pill chips
+                  const renderMode: 'colour' | 'image-card' | 'pill' =
+                    isColourGroup ? 'colour' : hasOptionImages ? 'image-card' : 'pill';
+
+                  return (
+                    <div key={group.id}>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                        {group.label}
+                      </p>
+
+                      {/* ── Colour swatches ─────────────────────────────── */}
+                      {renderMode === 'colour' && (
+                        <div className="flex flex-wrap gap-2.5">
+                          {(group.options ?? []).map((opt: any) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            const outOfStock = Number(opt.stock ?? 0) <= 0;
+                            // hex is the source of truth for the swatch fill — same as old color.hex system
+                            const hex: string = opt.color_hex || '';
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                disabled={outOfStock}
+                                onClick={() => selectOption(group.id, opt.id)}
+                                title={opt.name}
+                                aria-label={opt.name}
+                                className={`relative h-9 w-9 rounded-full border-2 transition focus:outline-none
+                                  ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200 hover:border-primary/40'}
+                                  ${outOfStock ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
+                                `}
+                                style={{ backgroundColor: hex || '#e5e7eb' }}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* ── Image cards (pot type, style, etc.) ─────────── */}
+                      {renderMode === 'image-card' && (
+                        <div className="flex flex-wrap gap-2">
+                          {(group.options ?? []).map((opt: any) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            const outOfStock = Number(opt.stock ?? 0) <= 0;
+                            const priceDelta = Number(opt.price ?? 0);
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                disabled={outOfStock}
+                                onClick={() => selectOption(group.id, opt.id)}
+                                className={`relative flex flex-col items-center rounded-xl border-2 p-2 w-[88px] transition focus:outline-none
+                                  ${isSelected
+                                    ? 'border-primary bg-primary/5 shadow-sm'
+                                    : outOfStock
+                                      ? 'border-gray-200 opacity-50 cursor-not-allowed'
+                                      : 'border-gray-200 hover:border-primary/60 bg-white cursor-pointer'
+                                  }`}
+                              >
+                                <div className="h-14 w-14 rounded-lg overflow-hidden bg-gray-50 mb-1.5 shrink-0">
+                                  {opt.images?.[0] ? (
+                                    <img
+                                      src={opt.images[0]}
+                                      alt={opt.name}
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="h-full w-full flex items-center justify-center text-gray-300">
+                                      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                                        <path d="M21 15l-5-5L5 21"/>
+                                      </svg>
+                                    </div>
+                                  )}
+                                </div>
+                                <span className={`text-[11px] font-semibold text-center leading-tight line-clamp-2 ${isSelected ? 'text-primary' : 'text-gray-800'}`}>
+                                  {opt.name}
+                                </span>
+                                {priceDelta > 0 && (
+                                  <span className={`text-[10px] mt-0.5 font-medium ${isSelected ? 'text-primary/80' : 'text-gray-400'}`}>
+                                    +₹{priceDelta}
+                                  </span>
+                                )}
+                                {priceDelta === 0 && (
+                                  <span className={`text-[10px] mt-0.5 font-medium ${isSelected ? 'text-primary/80' : 'text-gray-400'}`}>
+                                    Included
+                                  </span>
+                                )}
+                                {outOfStock && (
+                                  <span className="text-[9px] text-red-400 font-semibold mt-0.5">Out of stock</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* ── Pill chips (size, weight, etc.) ─────────────── */}
+                      {renderMode === 'pill' && (
+                        <div className="flex flex-wrap gap-2">
+                          {(group.options ?? []).map((opt: any) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            const outOfStock = Number(opt.stock ?? 0) <= 0;
+                            const priceDelta = Number(opt.price ?? 0);
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                disabled={outOfStock}
+                                onClick={() => selectOption(group.id, opt.id)}
+                                className={`px-4 py-2 rounded-full border-2 text-sm font-semibold transition focus:outline-none
+                                  ${isSelected
+                                    ? 'bg-primary border-primary text-white shadow-sm'
+                                    : outOfStock
+                                      ? 'border-gray-200 text-gray-300 cursor-not-allowed line-through'
+                                      : 'border-gray-200 text-gray-700 hover:border-primary hover:text-primary bg-white'
+                                  }`}
+                              >
+                                {opt.name}
+                                {priceDelta > 0 && (
+                                  <span className={`ml-1.5 text-xs font-normal ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
+                                    +₹{priceDelta}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 

@@ -52,6 +52,7 @@ export interface VariantOption {
   price: number;
   stock: number;
   images?: string[];
+  color_hex?: string;
 }
 
 export interface VariantGroup {

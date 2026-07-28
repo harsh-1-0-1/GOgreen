@@ -19,6 +19,9 @@ class VariantOption(BaseModel):
     price: float = Field(ge=0)
     stock: int = Field(ge=0, default=0)
     images: Optional[List[str]] = None  # relative keys, resolved to URLs in serializer
+    color_hex: Optional[str] = None     # hex colour for colour-type variant swatches (e.g. "#ff0000")
+
+    model_config = {"extra": "allow"}   # preserve any future fields without stripping them
 
     @field_validator("name")
     @classmethod
@@ -34,6 +37,8 @@ class VariantGroup(BaseModel):
     label: str = Field(min_length=1)
     required: bool = True
     options: List[VariantOption] = Field(min_length=1)
+
+    model_config = {"extra": "allow"}
 
     @field_validator("label")
     @classmethod
@@ -58,19 +63,11 @@ class ProductVariantsNew(BaseModel):
     """New flexible variant structure - replaces old colors/pot_types/sizes."""
     variant_groups: List[VariantGroup] = []
     default_image: Optional[str] = None  # relative key, resolved to URL in serializer
+    # Combo image map: keyed by "optId1__optId2__..." joining one optId per group in order.
+    # Values are lists of relative image keys, resolved to URLs in the serializer.
+    image_map: Optional[dict] = None
 
-    @field_validator("variant_groups")
-    @classmethod
-    def validate_groups(cls, v: List[VariantGroup]) -> List[VariantGroup]:
-        # Check for duplicate group IDs
-        group_ids = [grp.id for grp in v]
-        if len(group_ids) != len(set(group_ids)):
-            raise ValueError("Duplicate variant group IDs")
-        # Check for duplicate option IDs across all groups
-        all_option_ids = [opt.id for grp in v for opt in grp.options]
-        if len(all_option_ids) != len(set(all_option_ids)):
-            raise ValueError("Duplicate option IDs across variant groups")
-        return v
+    model_config = {"extra": "allow"}
 
 
 class ProductCreate(BaseModel):
