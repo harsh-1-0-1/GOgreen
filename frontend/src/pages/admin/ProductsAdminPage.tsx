@@ -303,9 +303,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setVariantError(null);
   }, [reset]);
   // Seed default_image from the raw admin endpoint (relative key, not resolved URL).
-  // Runs once per product load; guard prevents re-seeding on background refetches.
+  // Must wait for formInitialized so that variantGroups is already populated before
+  // we patch image_keys into options — otherwise prev.map() iterates an empty array.
+  // Guard (rawProductSeededId) prevents re-seeding on background refetches.
   useEffect(() => {
-    if (!isEdit || !rawProduct) return;
+    if (!isEdit || !rawProduct || !formInitialized) return;
     const incomingId = rawProduct.id ?? null;
     if (rawProductSeededId === incomingId) return;
     setRawProductSeededId(incomingId);
@@ -351,7 +353,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         };
       }));
     }
-  }, [isEdit, rawProduct, rawProductSeededId]);
+  }, [isEdit, rawProduct, rawProductSeededId, formInitialized]);
 
   useEffect(() => {
     if (!isEdit) return;
