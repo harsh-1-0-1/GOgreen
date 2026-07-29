@@ -108,7 +108,6 @@ function selectProductTypeBanner(
       const target = normalizeBannerTarget(banner.target_path);
       return !target || target === '*';
     }) ||
-    banners[0] ||
     null
   );
 }
