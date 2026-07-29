@@ -43,6 +43,67 @@ function findCategoryName(categories: Category[] | undefined, categoryId: number
   return (search(categories) || 'Plants').toUpperCase();
 }
 
+function ProductDescription({ description }: { description: string | null }) {
+  if (!description?.trim()) return null;
+
+  const blocks: Array<{ type: 'paragraph'; text: string } | { type: 'list'; items: string[] }> = [];
+  let paragraphLines: string[] = [];
+  let bulletItems: string[] = [];
+
+  const flushParagraph = () => {
+    if (!paragraphLines.length) return;
+    blocks.push({ type: 'paragraph', text: paragraphLines.join(' ') });
+    paragraphLines = [];
+  };
+
+  const flushList = () => {
+    if (!bulletItems.length) return;
+    blocks.push({ type: 'list', items: bulletItems });
+    bulletItems = [];
+  };
+
+  description.split(/\r?\n/).forEach((rawLine) => {
+    const line = rawLine.trim();
+    const bulletMatch = line.match(/^(?:[-*•])\s+(.+)$/);
+
+    if (!line) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+
+    if (bulletMatch) {
+      flushParagraph();
+      bulletItems.push(bulletMatch[1].trim());
+      return;
+    }
+
+    flushList();
+    paragraphLines.push(line);
+  });
+
+  flushParagraph();
+  flushList();
+
+  return (
+    <div className="space-y-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+      {blocks.map((block, index) => {
+        if (block.type === 'list') {
+          return (
+            <ul key={index} className="list-disc pl-5 space-y-1 marker:text-primary">
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>{item}</li>
+              ))}
+            </ul>
+          );
+        }
+
+        return <p key={index}>{block.text}</p>;
+      })}
+    </div>
+  );
+}
+
 function MobileGallery({
   images,
   activeIndex,
@@ -435,7 +496,9 @@ export default function ProductDetailPage() {
     return sum + Number(optionById[optId]?.price ?? 0);
   }, 0);
   const displayPrice = hasGroups && hasAnySelection ? selectedOptionsPrice : product.price;
-  const displayOriginalPrice = product.original_price && !hasGroups ? product.original_price : null;
+  const displayOriginalPrice = Number(product.original_price ?? 0) > displayPrice
+    ? Number(product.original_price)
+    : null;
   const discount = displayOriginalPrice && displayOriginalPrice > displayPrice
     ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
     : null;
@@ -768,10 +831,6 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {product.description && (
-              <p className="text-sm sm:text-base text-gray-600 leading-relaxed">{product.description}</p>
-            )}
-
             {/* Desktop add to cart */}
             {!isUnavailable && (
               <div className="hidden md:flex items-center gap-4">
@@ -827,6 +886,8 @@ export default function ProductDetailPage() {
                 </button>
               </div>
             )}
+
+            <ProductDescription description={product.description} />
 
             <CareTips tips={product.care_tips || []} />
           </div>

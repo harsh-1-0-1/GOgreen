@@ -796,7 +796,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     placeholder="Provide details about the plant, its beauty, growth habits, etc."
                     className={inputClass}
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">HTML/Markdown and paragraphs are supported.</p>
+                  <p className="text-[11px] text-gray-400 mt-1">Use blank lines for paragraphs and start lines with - for bullet points.</p>
                 </div>
               </div>
             )}
