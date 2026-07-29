@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -257,7 +257,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const { fields: tagFields, append: addTag, remove: removeTag } = useFieldArray({ control, name: 'tags' });
   const { fields: tipFields, append: addTip, remove: removeTip } = useFieldArray({ control, name: 'care_tips' });
 
-  const applyProductToForm = useCallback((p: Product) => {
+  const applyProductToForm = (p: Product) => {
     reset({
       name: p.name || '',
       description: p.description || '',
@@ -312,7 +312,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setCareCardImageUrl(p.care_card_image || '');
     setCareCardImageKey('');  // will be overwritten by rawProduct effect
     setFaqItems((p as any).faqs || []);
-  }, [reset]);
+  };
   // Seed default_image from the raw admin endpoint (relative key, not resolved URL).
   // Must wait for formInitialized so that variantGroups is already populated before
   // we patch image_keys into options — otherwise prev.map() iterates an empty array.
