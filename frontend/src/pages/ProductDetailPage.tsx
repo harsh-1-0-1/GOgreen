@@ -496,9 +496,16 @@ export default function ProductDetailPage() {
     return sum + Number(optionById[optId]?.price ?? 0);
   }, 0);
   const displayPrice = hasGroups && hasAnySelection ? selectedOptionsPrice : product.price;
-  const displayOriginalPrice = Number(product.original_price ?? 0) > displayPrice
-    ? Number(product.original_price)
+  const basePrice = Number(product.price ?? 0);
+  const baseOriginalPrice = Number(product.original_price ?? 0);
+  const scaledVariantOriginalPrice = hasGroups && basePrice > 0 && baseOriginalPrice > basePrice
+    ? Math.round(displayPrice * (baseOriginalPrice / basePrice))
     : null;
+  const displayOriginalPrice = baseOriginalPrice > displayPrice
+    ? baseOriginalPrice
+    : scaledVariantOriginalPrice && scaledVariantOriginalPrice > displayPrice
+      ? scaledVariantOriginalPrice
+      : null;
   const discount = displayOriginalPrice && displayOriginalPrice > displayPrice
     ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
     : null;
@@ -673,7 +680,7 @@ export default function ProductDetailPage() {
               <span className="text-2xl sm:text-3xl font-bold text-primary">₹{displayPrice}</span>
               {displayOriginalPrice && displayOriginalPrice > displayPrice && (
                 <>
-                  <span className="text-base sm:text-lg text-gray-400 line-through">₹{displayOriginalPrice}</span>
+                  <span className="text-base sm:text-lg text-red-500 line-through">₹{displayOriginalPrice}</span>
                   <span className="text-xs sm:text-sm font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded">
                     {discount}% OFF
                   </span>
