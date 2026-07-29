@@ -25,7 +25,8 @@ import toast from 'react-hot-toast';
 
 import api from '@/lib/api';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import type { Banner } from '@/types';
+import { useCategories } from '@/hooks/useCategories';
+import type { Banner, Category } from '@/types';
 
 const PLACEMENTS = [
   {
@@ -109,14 +110,14 @@ const PLACEMENTS = [
   {
     key: 'product_detail',
     label: '📦 Product Detail Page Banner',
-    description: 'A wide promotional banner displayed on the product detail page, just above the FAQ section.',
-    helpText: 'Recommended size: 1400x350px. Great for cross-sell, related collections, or care tip promotions.',
+    description: 'A wide promotional banner displayed on product detail pages, just above the FAQ section.',
+    helpText: 'Recommended size: 1400x350px. Choose a product type for type-specific banners, or fallback for all products.',
   },
   {
     key: 'product_spec',
     label: '📋 Product Spec Banner',
     description: 'A wide promotional banner displayed on the product detail page, just above the Product Specification section.',
-    helpText: 'Recommended size: 1400x350px. Good for warranty info, certifications, or care kit upsells.',
+    helpText: 'Recommended size: 1400x350px. Choose a product type for type-specific spec banners, or fallback for all products.',
   },
 ] as const;
 
@@ -145,6 +146,10 @@ const bannerSchema = z
   );
 
 type BannerFormData = z.infer<typeof bannerSchema>;
+
+function topLevelCategories(categories: Category[] | undefined): Category[] {
+  return categories?.filter((category) => category.is_active) ?? [];
+}
 
 const inputClass =
   'w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors';
@@ -207,8 +212,8 @@ function SortableBannerRow({
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-gray-800 truncate">{banner.title}</p>
         <p className="text-xs text-gray-400 truncate">
-          {banner.placement === 'page' && banner.target_path
-            ? `Target: ${banner.target_path}`
+          {(banner.placement === 'page' || banner.placement === 'product_detail' || banner.placement === 'product_spec') && banner.target_path
+            ? `${banner.placement === 'product_detail' || banner.placement === 'product_spec' ? 'Type' : 'Target'}: ${banner.target_path}`
             : banner.subtitle || banner.cta_link || '—'}
         </p>
       </div>
@@ -483,10 +488,6 @@ function BannerDrawer({
 }) {
   const isEdit = !!banner;
 
-  const activePlacementDetails = useMemo(() => {
-    return PLACEMENTS.find((p) => p.key === (banner?.placement || placement)) || PLACEMENTS[0];
-  }, [banner, placement]);
-
   const {
     register,
     handleSubmit,
@@ -516,6 +517,8 @@ function BannerDrawer({
   });
 
   useBodyScrollLock(true);
+  const { data: categories } = useCategories();
+  const productTypeOptions = topLevelCategories(categories);
 
   const [submitting, setSubmitting] = useState(false);
   const [imageMode, setImageMode] = useState<'upload' | 'url'>('upload');
@@ -533,6 +536,10 @@ function BannerDrawer({
   const watchedTextColor = watch('text_color');
   const watchedCtaText = watch('cta_text');
   const watchedPlacement = watch('placement');
+
+  const activePlacementDetails = useMemo(() => {
+    return PLACEMENTS.find((p) => p.key === watchedPlacement) || PLACEMENTS[0];
+  }, [watchedPlacement]);
 
   const previewImageSrc = useMemo(() => {
     if (filePreview) return filePreview;
@@ -662,6 +669,39 @@ function BannerDrawer({
               />
               <p className="text-[10px] text-gray-400 mt-0.5">
                 Exact page path for this banner. Leave blank or use * to make it the fallback banner.
+              </p>
+              {errors.target_path && (
+                <p className="text-xs text-red-500 mt-1">
+                  {errors.target_path.message}
+                </p>
+              )}
+            </div>
+          )}
+
+          {(watchedPlacement === 'product_detail' || watchedPlacement === 'product_spec') && (
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Product Type
+              </label>
+              {productTypeOptions.length > 0 ? (
+                <select {...register('target_path')} className={inputClass}>
+                  <option value="">Fallback for all product types</option>
+                  <option value="*">Fallback (*)</option>
+                  {productTypeOptions.map((category) => (
+                    <option key={category.id} value={category.slug}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  {...register('target_path')}
+                  className={inputClass}
+                  placeholder="e.g. plants, pots, seeds, or * for fallback"
+                />
+              )}
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                The banner appears on products under this main category. Leave blank or use * as the fallback banner.
               </p>
               {errors.target_path && (
                 <p className="text-xs text-red-500 mt-1">

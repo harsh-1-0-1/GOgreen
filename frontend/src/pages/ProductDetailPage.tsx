@@ -21,7 +21,7 @@ import { useBanners } from '@/hooks/useBanners';
 import { STORE_LEGAL } from '@/lib/branding';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
-import type { Category } from '@/types';
+import type { Banner, Category } from '@/types';
 import { useStories } from '@/hooks/useStories';
 import { StoriesCarousel } from '@/components/stories/StoriesCarousel';
 
@@ -41,6 +41,76 @@ function findCategoryName(categories: Category[] | undefined, categoryId: number
   };
 
   return (search(categories) || 'Plants').toUpperCase();
+}
+
+function findCategoryTrail(categories: Category[] | undefined, categoryId: number): Category[] {
+  if (!categories?.length) return [];
+
+  const search = (list: Category[], trail: Category[]): Category[] | null => {
+    for (const cat of list) {
+      const nextTrail = [...trail, cat];
+      if (cat.id === categoryId) return nextTrail;
+      if (cat.children?.length) {
+        const match = search(cat.children, nextTrail);
+        if (match) return match;
+      }
+    }
+    return null;
+  };
+
+  return search(categories, []) ?? [];
+}
+
+function normalizeBannerTarget(value: string | number | null | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+/, '')
+    .replace(/^products\?category=/, '')
+    .replace(/^products\//, '')
+    .replace(/^category\//, '')
+    .replace(/^(product_detail|category|type):/, '')
+    .replace(/\s+/g, '-');
+}
+
+function selectProductTypeBanner(
+  banners: Banner[],
+  categories: Category[] | undefined,
+  categoryId: number,
+): Banner | null {
+  if (!banners.length) return null;
+
+  const trail = findCategoryTrail(categories, categoryId);
+  const currentCategory = trail.at(-1);
+  const rootCategory = trail[0];
+  const currentTargets = currentCategory
+    ? [
+        normalizeBannerTarget(currentCategory.id),
+        normalizeBannerTarget(currentCategory.slug),
+        normalizeBannerTarget(currentCategory.name),
+      ]
+    : [];
+  const rootTargets = rootCategory
+    ? [
+        normalizeBannerTarget(rootCategory.id),
+        normalizeBannerTarget(rootCategory.slug),
+        normalizeBannerTarget(rootCategory.name),
+      ]
+    : [];
+
+  const findByTargets = (targets: string[]) =>
+    banners.find((banner) => targets.includes(normalizeBannerTarget(banner.target_path)));
+
+  return (
+    findByTargets(currentTargets) ||
+    findByTargets(rootTargets) ||
+    banners.find((banner) => {
+      const target = normalizeBannerTarget(banner.target_path);
+      return !target || target === '*';
+    }) ||
+    banners[0] ||
+    null
+  );
 }
 
 function ProductDescription({ description }: { description: string | null }) {
@@ -378,8 +448,6 @@ function CareTips({ tips }: { tips: string[] }) {
   );
 }
 
-import type { Banner } from '@/types';
-
 function InlineBanner({ banner: b, fallbackImg, hasCta }: {
   banner: Banner;
   fallbackImg: string;
@@ -613,6 +681,8 @@ export default function ProductDetailPage() {
   }
 
   const similarProducts = similar?.items.filter((p) => p.id !== product.id).slice(0, 4) ?? [];
+  const productDetailBanner = selectProductTypeBanner(productDetailBanners, categories, product.category_id);
+  const productSpecBanner = selectProductTypeBanner(productSpecBanners, categories, product.category_id);
   const mrp = displayOriginalPrice ?? displayPrice;
   const productSpecs = [
     { label: 'Name', value: product.name },
@@ -624,16 +694,11 @@ export default function ProductDetailPage() {
     { label: 'Manufactured by', value: STORE_LEGAL.manufacturedBy },
   ];
 
-  // Shared renderer for product-page inline banners (spec + faq placements).
-  // Returns null when no active banner exists so the space collapses cleanly.
-  function renderInlineBanner(banners: typeof productDetailBanners, fallbackImg: string) {
-    if (!banners.length) return null;
-    const b = banners[0];
-    const img = b.image_url || fallbackImg;
-    const hasCta = b.cta_text && b.cta_link;
-    return (
-      <InlineBanner banner={b} fallbackImg={img} hasCta={!!hasCta} />
-    );
+  function renderInlineBannerItem(banner: Banner | null, fallbackImg: string) {
+    if (!banner) return null;
+    const img = banner.image_url || fallbackImg;
+    const hasCta = banner.cta_text && banner.cta_link;
+    return <InlineBanner banner={banner} fallbackImg={img} hasCta={!!hasCta} />;
   }
 
   return (
@@ -906,7 +971,7 @@ export default function ProductDetailPage() {
 
         <HowToGuide product={product} />
 
-        {renderInlineBanner(productSpecBanners, 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&q=80')}
+        {renderInlineBannerItem(productSpecBanner, 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&q=80')}
 
         <ProductSpecification specs={productSpecs} />
 
@@ -935,7 +1000,7 @@ export default function ProductDetailPage() {
         <ProductReviews productId={product.id} />
 
         {/* Product detail page ad banner — admin controlled via Banners › Product Detail Page Banner */}
-        {renderInlineBanner(productDetailBanners, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&q=80')}
+        {renderInlineBannerItem(productDetailBanner, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&q=80')}
 
         <ProductFaq />
       </div>
