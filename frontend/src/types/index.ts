@@ -17,10 +17,9 @@ export interface Category {
   children?: Category[];
 }
 
-export interface CareItem {
-  icon?: string | null;
-  title: string;
-  description: string;
+export interface FAQItem {
+  question: string;
+  answer: string;
 }
 
 export interface Product {
@@ -38,11 +37,14 @@ export interface Product {
   how_to_guide: string | null;
   sunlight: string | null;
   watering: string | null;
-  care_items?: CareItem[] | null;
   badge: string | null;
   is_active: boolean;
   created_at: string;
   variants: ProductVariants | null;
+  promise_banner_image?: string | null;
+  why_plantoga_banner_image?: string | null;
+  care_card_image?: string | null;
+  faqs?: FAQItem[] | null;
 }
 
 // New flexible variant system types

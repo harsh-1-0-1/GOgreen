@@ -964,9 +964,9 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        <PlantCareCard items={product.care_items} />
+        <PlantCareCard careCardImage={product.care_card_image} />
 
-        <PlantogaPromise />
+        <PlantogaPromise bannerImage={product.promise_banner_image} />
 
         <HowToGuide product={product} />
 
@@ -976,7 +976,7 @@ export default function ProductDetailPage() {
 
         <StoriesCarousel stories={stories} />
 
-        <WhyPlantoga />
+        <WhyPlantoga bannerImage={product.why_plantoga_banner_image} />
 
         {/* Similar products */}
         {similarProducts.length > 0 && (
@@ -1001,7 +1001,7 @@ export default function ProductDetailPage() {
         {/* Product detail page ad banner — admin controlled via Banners › Product Detail Page Banner */}
         {renderInlineBannerItem(productDetailBanner, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&q=80')}
 
-        <ProductFaq />
+        <ProductFaq faqs={product.faqs} />
       </div>
 
     </div>

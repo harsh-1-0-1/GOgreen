@@ -5,13 +5,6 @@ import uuid
 from pydantic import BaseModel, Field, field_serializer, field_validator
 
 
-class CareItem(BaseModel):
-    """A single tile in the product care card (icon + title + description)."""
-    icon: Optional[str] = None   # relative storage key, resolved to full URL in serializer
-    title: str
-    description: str
-
-
 class VariantOption(BaseModel):
     """A single option within a variant group (e.g., '4 Inch' at ₹1499)."""
     id: str = Field(default_factory=lambda: f"opt_{uuid.uuid4().hex[:8]}")
@@ -70,6 +63,12 @@ class ProductVariantsNew(BaseModel):
     model_config = {"extra": "allow"}
 
 
+class FAQItem(BaseModel):
+    """A single FAQ entry."""
+    question: str
+    answer: str
+
+
 class ProductCreate(BaseModel):
     name: str
     description: str | None = None
@@ -82,10 +81,13 @@ class ProductCreate(BaseModel):
     how_to_guide: str | None = None
     sunlight: str | None = None
     watering: str | None = None
-    care_items: Optional[List[CareItem]] = None
     badge: str | None = None
     is_active: bool = True
     variants: dict | None = None
+    promise_banner_image: str | None = None  # relative storage key
+    why_plantoga_banner_image: str | None = None  # relative storage key
+    care_card_image: str | None = None  # relative storage key
+    faqs: Optional[List[FAQItem]] = None
 
     @field_validator("variants")
     @classmethod
@@ -106,13 +108,16 @@ class ProductUpdate(BaseModel):
     how_to_guide: str | None = None
     sunlight: str | None = None
     watering: str | None = None
-    care_items: Optional[List[CareItem]] = None
     badge: str | None = None
     is_active: bool | None = None
     # null  → field omitted from update (existing variants are preserved).
     # {}    → explicitly clear all variant data.
     # {...} → replace variants with the provided structure.
     variants: dict | None = None
+    promise_banner_image: str | None = None  # relative key; null clears, omit to preserve
+    why_plantoga_banner_image: str | None = None  # relative key; null clears, omit to preserve
+    care_card_image: str | None = None  # relative key; null clears, omit to preserve
+    faqs: Optional[List[FAQItem]] = None
 
     @field_validator("variants")
     @classmethod
@@ -135,11 +140,14 @@ class ProductResponse(BaseModel):
     how_to_guide: str | None
     sunlight: str | None
     watering: str | None
-    care_items: Optional[List[dict]] = None   # dicts so the serializer can mutate icon keys
     badge: str | None
     is_active: bool
     created_at: datetime
     variants: dict | None = None
+    promise_banner_image: str | None = None
+    why_plantoga_banner_image: str | None = None
+    care_card_image: str | None = None
+    faqs: Optional[List[dict]] = None
     # ⚠️ NOTE on variants field image storage:
     # Despite field names like "image_url", variants store RELATIVE KEYS in the database
     # (e.g. "plantoga/product-variants/42/abc.webp"), NOT full URLs.
@@ -153,16 +161,29 @@ class ProductResponse(BaseModel):
         from app.utils.image_upload import resolve_image_url
         return [resolve_image_url(img) for img in images] if images else []
 
-    @field_serializer("care_items")
-    def serialize_care_items(self, items: Optional[List[dict]]) -> Optional[List[dict]]:
-        """Resolve each care item's icon key to a full CDN/static URL."""
-        if not items:
+    @field_serializer("promise_banner_image")
+    def serialize_promise_banner_image(self, key: str | None) -> str | None:
+        """Resolve relative storage key to full CDN/static URL."""
+        if not key:
             return None
         from app.utils.image_upload import resolve_image_url
-        return [
-            {**item, "icon": resolve_image_url(item["icon"]) if item.get("icon") else None}
-            for item in items
-        ]
+        return resolve_image_url(key)
+
+    @field_serializer("why_plantoga_banner_image")
+    def serialize_why_plantoga_banner_image(self, key: str | None) -> str | None:
+        """Resolve relative storage key to full CDN/static URL."""
+        if not key:
+            return None
+        from app.utils.image_upload import resolve_image_url
+        return resolve_image_url(key)
+
+    @field_serializer("care_card_image")
+    def serialize_care_card_image(self, key: str | None) -> str | None:
+        """Resolve relative storage key to full CDN/static URL."""
+        if not key:
+            return None
+        from app.utils.image_upload import resolve_image_url
+        return resolve_image_url(key)
 
     @field_serializer("variants")
     def serialize_variants(self, variants: dict | None) -> dict | None:
