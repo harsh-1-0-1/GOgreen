@@ -103,11 +103,19 @@ export default function CategoryHighlightGrid() {
                         />
                       )}
                     </div>
-                    {card.subtitle && (
+                    {card.title && (
                       <span
                         className="text-center text-[clamp(1rem,4vw,1.65rem)] font-semibold leading-tight"
                         style={{ color: card.text_color || '#16A34A' }}
                       >
+                        {card.title}
+                      </span>
+                    )}
+                    {card.subtitle && (
+                      <span
+                        className="text-center text-[clamp(0.75rem,3vw,1rem)] text-gray-500 leading-tight"
+                      >
+                        {card.subtitle}
                       </span>
                     )}
                   </Link>

@@ -129,6 +129,22 @@ export default function HeroBanner() {
               <div className="relative h-full flex items-stretch">
                 <div className="relative z-10 w-full md:w-[48%] lg:w-[44%] flex items-center px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28 py-10 md:py-0">
                   <div className="text-center md:text-left max-w-md w-full space-y-5 md:space-y-6">
+                    {slide.title && (
+                      <h2
+                        className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold leading-tight"
+                        style={{ color: textColor }}
+                      >
+                        {slide.title}
+                      </h2>
+                    )}
+                    {slide.subtitle && (
+                      <p
+                        className="text-sm sm:text-base md:text-lg leading-relaxed"
+                        style={{ color: textColor, opacity: 0.9 }}
+                      >
+                        {slide.subtitle}
+                      </p>
+                    )}
                     {slide.cta_text && slide.cta_link && (
                       <div className="flex flex-col sm:flex-row items-center md:items-start gap-3">
                         <Link
