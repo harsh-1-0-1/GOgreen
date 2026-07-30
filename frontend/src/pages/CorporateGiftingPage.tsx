@@ -53,7 +53,6 @@ export default function CorporateGiftingPage() {
                         }}
                       />
                     ) : null}
-                    <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/20 to-transparent" />
                     <div className="relative flex min-h-[150px] max-w-2xl flex-col justify-center px-5 py-6 sm:min-h-[190px] sm:px-8">
                       {banner.badge_text && (
                         <span className="mb-3 w-fit rounded-full bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">

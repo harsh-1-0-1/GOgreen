@@ -457,17 +457,17 @@ function InlineBanner({ banner: b, fallbackImg, hasCta }: {
       className="mt-10 sm:mt-14 rounded-2xl overflow-hidden relative"
       style={{ backgroundColor: b.bg_color || '#1B4332' }}
     >
-      <img src={fallbackImg} alt={b.title} className="w-full h-[280px] sm:h-[350px] object-cover" loading="lazy" />
-      <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent flex items-center px-6 sm:px-10 gap-4">
+      <img src={fallbackImg} alt={b.title} className="w-full aspect-square object-cover" loading="lazy" />
+      <div className="absolute inset-0 flex items-center px-6 sm:px-10 gap-4">
         <div className="flex-1 min-w-0">
           <p
-            className="text-lg sm:text-2xl font-bold leading-tight line-clamp-2"
+            className="text-lg sm:text-2xl font-bold leading-tight line-clamp-2 [text-shadow:0_1px_4px_rgba(0,0,0,0.6)]"
             style={{ color: b.text_color || '#ffffff' }}
           >
             {b.title}
           </p>
           {b.subtitle && (
-            <p className="text-white/80 text-xs sm:text-sm mt-1 line-clamp-1">{b.subtitle}</p>
+            <p className="text-white/80 text-xs sm:text-sm mt-1 line-clamp-1 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">{b.subtitle}</p>
           )}
         </div>
         {hasCta && b.cta_link && (

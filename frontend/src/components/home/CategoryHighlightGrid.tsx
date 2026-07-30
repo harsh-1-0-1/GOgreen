@@ -102,7 +102,6 @@ export default function CategoryHighlightGrid() {
                           }}
                         />
                       )}
-                      <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-black/35 via-black/10 to-transparent" />
                       <h3 className="absolute inset-x-2 top-4 text-center text-[clamp(1.1rem,5vw,2rem)] font-medium leading-tight text-white drop-shadow-sm sm:top-5">
                         {card.title}
                       </h3>

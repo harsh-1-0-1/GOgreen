@@ -126,8 +126,6 @@ export default function HeroBanner() {
                   }}
                 />
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent md:hidden" />
-
               <div className="relative h-full flex items-stretch">
                 <div className="relative z-10 w-full md:w-[48%] lg:w-[44%] flex items-center px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28 py-10 md:py-0">
                   <div className="text-center md:text-left max-w-md w-full space-y-5 md:space-y-6">
@@ -198,12 +196,7 @@ export default function HeroBanner() {
                       }}
                     />
                   )}
-                  <div
-                    className="absolute inset-y-0 left-0 w-24 pointer-events-none"
-                    style={{
-                      background: `linear-gradient(to right, ${slide.bg_color}, transparent)`,
-                    }}
-                  />
+
                 </div>
 
                 {slide.badge_text && (

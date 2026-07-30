@@ -117,7 +117,7 @@ const PLACEMENTS = [
     key: 'product_spec',
     label: '📋 Product Spec Banner',
     description: 'A wide promotional banner displayed on the product detail page, just above the Product Specification section.',
-    helpText: 'Recommended size: 1400x350px. Choose a product type for type-specific spec banners, or fallback for all products.',
+    helpText: 'Recommended size: 600x600px (square). Choose a product type for type-specific spec banners, or fallback for all products.',
   },
 ] as const;
 
@@ -403,8 +403,7 @@ function HighlightCardPreview({
               }}
             />
           ) : null}
-          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/60 to-transparent" />
-          <h3 className="absolute inset-x-2 bottom-4 text-center text-sm font-semibold leading-tight text-white">
+          <h3 className="absolute inset-x-2 bottom-4 text-center text-sm font-semibold leading-tight text-white drop-shadow-sm">
             {title || 'Combos'}
           </h3>
         </div>
@@ -451,7 +450,6 @@ function TrendingBannerPreview({
             }}
           />
         ) : null}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
         <h3
           className="absolute left-3 top-3 max-w-[80%] text-xs font-bold leading-tight text-white drop-shadow"
           style={{ color: textColor || '#FFFFFF' }}

@@ -120,9 +120,6 @@ function TrendingPromoBanner({
                 className="absolute inset-0 h-full w-full object-cover"
                 loading={slideIndex === 0 ? 'eager' : 'lazy'}
               />
-              <div className="absolute inset-0 bg-gradient-to-br from-black/45 via-black/10 to-transparent" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
-
               {sideImages.map((src, index) => (
                 <img
                   key={`${src}-${index}`}
