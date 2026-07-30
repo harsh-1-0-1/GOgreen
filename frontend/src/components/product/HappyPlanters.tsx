@@ -8,7 +8,7 @@ export default function HappyPlanters({ fallbackImages }: { fallbackImages: stri
   const scrollerRef = useRef<HTMLDivElement>(null);
   const managedImages = banners
     .filter((banner) => banner.image_url)
-    .map((banner) => ({ src: banner.image_url!, alt: banner.title || 'A happy Plantoga customer' }));
+    .map((banner) => ({ src: banner.image_url!, alt: '' }));
   const images = managedImages.length
     ? managedImages
     : fallbackImages.map((src, index) => ({ src, alt: `Plantoga plant ${index + 1}` }));

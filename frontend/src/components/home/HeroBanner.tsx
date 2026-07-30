@@ -129,43 +129,6 @@ export default function HeroBanner() {
               <div className="relative h-full flex items-stretch">
                 <div className="relative z-10 w-full md:w-[48%] lg:w-[44%] flex items-center px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28 py-10 md:py-0">
                   <div className="text-center md:text-left max-w-md w-full space-y-5 md:space-y-6">
-                    {slide.badge_text && (
-                      <div className="md:hidden">
-                        <span className="inline-block px-4 py-1.5 bg-accent/90 backdrop-blur-sm rounded-full text-xs font-bold text-[#1B4332] shadow">
-                          {slide.badge_text}
-                        </span>
-                      </div>
-                    )}
-
-                    <h2
-                      className={clsx(
-                        'font-bold leading-[1.15] tracking-tight',
-                        'text-[2rem] sm:text-[2.4rem] md:text-[2.8rem] lg:text-[3.2rem] xl:text-[3.6rem]',
-                        dark
-                          ? 'text-white'
-                          : 'text-white md:text-[#1B4332]',
-                      )}
-                      style={{ color: undefined }}
-                    >
-                      <span className="hidden md:inline" style={{ color: textColor }}>
-                        {slide.title}
-                      </span>
-                      <span className="md:hidden">{slide.title}</span>
-                    </h2>
-
-                    {slide.subtitle && (
-                      <p
-                        className={clsx(
-                          'text-[15px] md:text-[16px] lg:text-[17px] leading-relaxed',
-                          dark
-                            ? 'text-white/80'
-                            : 'text-white/90 md:text-gray-500',
-                        )}
-                      >
-                        {slide.subtitle}
-                      </p>
-                    )}
-
                     {slide.cta_text && slide.cta_link && (
                       <div className="flex flex-col sm:flex-row items-center md:items-start gap-3">
                         <Link
@@ -188,7 +151,7 @@ export default function HeroBanner() {
                   {slide.image_url && (
                     <img
                       src={slide.image_url}
-                      alt={slide.title}
+                      alt=""
                       className="w-full h-full object-cover object-center"
                       loading={i === 0 ? 'eager' : 'lazy'}
                       onError={(e) => {
@@ -207,9 +170,6 @@ export default function HeroBanner() {
                       backgroundColor: '#F4A261',
                     }}
                   >
-                    <span className="text-[11px] font-extrabold text-[#1B4332] leading-tight text-center px-5">
-                      {slide.badge_text}
-                    </span>
                   </div>
                 )}
               </div>
