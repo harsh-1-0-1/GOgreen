@@ -145,21 +145,6 @@ export default function HeroBanner() {
                         {slide.subtitle}
                       </p>
                     )}
-                    {slide.cta_text && slide.cta_link && (
-                      <div className="flex flex-col sm:flex-row items-center md:items-start gap-3">
-                        <Link
-                          to={slide.cta_link}
-                          className={clsx(
-                            'inline-flex items-center justify-center px-8 py-3 rounded-lg font-semibold text-[14px] md:text-[15px] transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md',
-                            dark
-                              ? 'bg-white text-[#1B4332] hover:bg-gray-100'
-                              : 'bg-accent text-[#1B4332] hover:bg-accent/90',
-                          )}
-                        >
-                          {slide.cta_text}
-                        </Link>
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -189,6 +174,22 @@ export default function HeroBanner() {
                   </div>
                 )}
               </div>
+
+              {slide.cta_text && slide.cta_link && (
+                <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-10 flex flex-col sm:flex-row items-center gap-3">
+                  <Link
+                    to={slide.cta_link}
+                    className={clsx(
+                      'inline-flex items-center justify-center px-8 py-3 rounded-lg font-semibold text-[14px] md:text-[15px] transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md',
+                      dark
+                        ? 'bg-white text-[#1B4332] hover:bg-gray-100'
+                        : 'bg-accent text-[#1B4332] hover:bg-accent/90',
+                    )}
+                  >
+                    {slide.cta_text}
+                  </Link>
+                </div>
+              )}
             </div>
           );
         })}

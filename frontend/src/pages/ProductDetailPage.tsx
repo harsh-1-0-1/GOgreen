@@ -447,29 +447,37 @@ function CareTips({ tips }: { tips: string[] }) {
   );
 }
 
-function InlineBanner({ banner: b, fallbackImg, hasCta }: {
+function InlineBanner({ banner: b, fallbackImg, hasCta, naturalSize = false }: {
   banner: Banner;
   fallbackImg: string;
   hasCta: boolean;
+  naturalSize?: boolean;
 }) {
   return (
     <div
       className="mt-10 sm:mt-14 rounded-2xl overflow-hidden relative"
       style={{ backgroundColor: b.bg_color || '#1B4332' }}
     >
-      <img src={fallbackImg} alt="" className="w-full aspect-square object-cover" loading="lazy" />
-      <div className="absolute inset-0 flex items-center px-6 sm:px-10 gap-4">
-        <div className="flex-1 min-w-0">
-        </div>
-        {hasCta && b.cta_link && (
+      <img
+        src={fallbackImg}
+        alt=""
+        className={
+          naturalSize
+            ? 'block mx-auto max-w-full h-auto'
+            : 'block w-full aspect-square object-cover'
+        }
+        loading="lazy"
+      />
+      {hasCta && b.cta_link && (
+        <div className="absolute bottom-4 right-4 sm:bottom-5 sm:right-6 z-10">
           <a
             href={b.cta_link}
-            className="shrink-0 px-4 py-2 rounded-full text-xs sm:text-sm font-semibold bg-white text-gray-900 hover:bg-gray-100 transition whitespace-nowrap"
+            className="inline-flex items-center justify-center px-4 py-2 rounded-full text-xs sm:text-sm font-semibold bg-white text-gray-900 hover:bg-gray-100 transition whitespace-nowrap shadow-md"
           >
             {b.cta_text}
           </a>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -689,6 +697,13 @@ export default function ProductDetailPage() {
     const img = banner.image_url || fallbackImg;
     const hasCta = banner.cta_text && banner.cta_link;
     return <InlineBanner banner={banner} fallbackImg={img} hasCta={!!hasCta} />;
+  }
+
+  function renderFaqBannerItem(banner: Banner | null, fallbackImg: string) {
+    if (!banner) return null;
+    const img = banner.image_url || fallbackImg;
+    const hasCta = banner.cta_text && banner.cta_link;
+    return <InlineBanner banner={banner} fallbackImg={img} hasCta={!!hasCta} naturalSize />;
   }
 
   return (
@@ -990,7 +1005,7 @@ export default function ProductDetailPage() {
         <ProductReviews productId={product.id} />
 
         {/* Product detail page ad banner — admin controlled via Banners › Product Detail Page Banner */}
-        {renderInlineBannerItem(productDetailBanner, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&q=80')}
+        {renderFaqBannerItem(productDetailBanner, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&q=80')}
 
         <ProductFaq faqs={product.faqs} />
       </div>

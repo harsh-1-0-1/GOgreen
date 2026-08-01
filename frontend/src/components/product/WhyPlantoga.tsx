@@ -91,7 +91,7 @@ export default function WhyPlantoga({ bannerImage }: { bannerImage?: string | nu
         <img
           src={bannerImage}
           alt="Plantoga vs the rest"
-          className="w-full h-auto object-cover"
+          className="mx-auto max-w-full h-auto"
         />
       </section>
     );
