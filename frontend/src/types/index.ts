@@ -17,10 +17,9 @@ export interface Category {
   children?: Category[];
 }
 
-export interface CareItem {
-  icon?: string | null;
-  title: string;
-  description: string;
+export interface FAQItem {
+  question: string;
+  answer: string;
 }
 
 export interface Product {
@@ -38,13 +37,39 @@ export interface Product {
   how_to_guide: string | null;
   sunlight: string | null;
   watering: string | null;
-  care_items?: CareItem[] | null;
   badge: string | null;
   is_active: boolean;
   created_at: string;
   variants: ProductVariants | null;
+  promise_banner_image?: string | null;
+  why_plantoga_banner_image?: string | null;
+  care_card_image?: string | null;
+  faqs?: FAQItem[] | null;
 }
 
+// New flexible variant system types
+export interface VariantOption {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  images?: string[];
+  color_hex?: string;
+}
+
+export interface VariantGroup {
+  id: string;
+  label: string;
+  required?: boolean;
+  options: VariantOption[];
+}
+
+export interface ProductVariants {
+  variant_groups: VariantGroup[];
+  default_image?: string;
+}
+
+// Old variant types - kept for backward compatibility during migration
 export interface ProductVariantColor {
   name: string;
   hex: string;
@@ -60,13 +85,14 @@ export interface ProductVariantPotType {
 }
 
 export interface ProductVariantSize {
-  name: string;        // e.g. "Small", "Medium", "Large"
-  slug: string;        // e.g. "small", "medium", "large"
+  name: string;
+  slug: string;
   price_modifier: number;
-  description?: string; // e.g. "6–12 inches"
+  description?: string;
 }
 
-export interface ProductVariants {
+// Old format - deprecated but kept for backward compatibility
+export interface ProductVariantsOld {
   colors: ProductVariantColor[];
   pot_types: ProductVariantPotType[];
   sizes?: ProductVariantSize[];
@@ -112,6 +138,26 @@ export interface ReviewListResponse {
   limit: number;
 }
 
+// Variant snapshot entry for order history display
+export interface VariantSnapshotEntry {
+  label: string;
+  name: string;
+  price: number;
+}
+
+// Selected options can be:
+// - Old format: { "color": "terracotta", "pot_type": "ceramic" }
+// - New format: ["opt_1", "opt_2"]
+// - Or with snapshot: { "option_ids": ["opt_1"], "snapshot": [{label, name, price}] }
+export type SelectedOptions = 
+  | Record<string, string>  // Old format
+  | string[]                // New format (list of option IDs)
+  | {                       // New format with snapshot (from orders)
+      option_ids: string[];
+      snapshot: VariantSnapshotEntry[];
+    }
+  | null;
+
 export interface CartItemProduct {
   id: number;
   name: string;
@@ -119,14 +165,14 @@ export interface CartItemProduct {
   price: number;
   original_price: number | null;
   images: string[];
-  variants: ProductVariants | null;
+  variants: ProductVariants | ProductVariantsOld | null;
 }
 
 export interface CartItem {
   id: number;
   product_id: number;
   quantity: number;
-  selected_options: Record<string, string> | null;
+  selected_options: SelectedOptions;
   product: CartItemProduct;
   line_total: number;
   resolved_image_url: string;
@@ -163,7 +209,7 @@ export interface OrderItem {
   product_name: string | null;
   quantity: number;
   unit_price: number;
-  selected_options: Record<string, string> | null;
+  selected_options: SelectedOptions;
   resolved_image_url: string | null;
 }
 

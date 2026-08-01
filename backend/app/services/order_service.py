@@ -59,7 +59,7 @@ async def _reserve_product_for_order(
     db: AsyncSession,
     product_id: int,
     quantity: int,
-    selected_options: dict | None,
+    selected_options: dict | list | None,
 ) -> dict:
     product_result = await db.execute(
         select(Product).where(Product.id == product_id).with_for_update()
@@ -71,15 +71,57 @@ async def _reserve_product_for_order(
     details = resolve_variant_details(
         product, selected_options, quantity, validate_stock=True,
     )
-    combo_key = details["combo_key"]
+    combo_key = details.get("combo_key")
+    variant_snapshot = details.get("variant_snapshot", [])
+    
     if combo_key:
+        # Old format: Update stock in variants.stock map
         variants = product.variants or {}
         variants["stock"][combo_key] = int(variants["stock"].get(combo_key, 0)) - quantity
         product.variants = variants
         product.stock_qty = sum(int(v or 0) for v in variants.get("stock", {}).values())
         flag_modified(product, "variants")
+    elif variant_snapshot:
+        # New format: Decrement stock per selected option
+        variants = product.variants or {}
+        variant_groups = variants.get("variant_groups", [])
+        selected_ids = details.get("selected_options", [])
+        
+        for group in variant_groups:
+            for option in group.get("options", []):
+                if option.get("id") in selected_ids:
+                    current_stock = int(option.get("stock", 0))
+                    option["stock"] = max(0, current_stock - quantity)
+        
+        product.variants = variants
+        flag_modified(product, "variants")
+        # Recalculate stock_qty as: min over groups of (sum of option stocks in that group).
+        #
+        # Why this formula — derived directly from the decrement code above:
+        # A purchase of (S, Red) decrements ONLY S.stock and ONLY Red.stock.
+        # Option stocks are therefore independent shared marginals: Red's 3 units can
+        # be consumed by (S,Red) OR (M,Red) — they share the same pool.
+        #
+        # Consequence: a group's total capacity = sum of its options' stocks, because
+        # those options are mutually exclusive choices whose pools don't overlap.
+        # The binding group is whichever has the smallest total capacity (min across groups).
+        #
+        # Counterexample that eliminates "min of per-group max":
+        #   Group A (sizes): S:5, M:5  → capacity 10
+        #   Group B (colors): Red:3, Blue:3 → capacity 6
+        #   Sellable: 3×(S,Red) + 3×(M,Blue) = 6 total. Correct answer: 6.
+        #   min(max(5,5), max(3,3)) = 5 — wrong, understates real capacity by 1.
+        #   min(10, 6) = 6 — correct.
+        #
+        # Counterexample that eliminates "sum all options across all groups":
+        #   Same setup: sum = 10+6 = 16 — obviously wrong, double-counts.
+        group_totals = [
+            sum(int(opt.get("stock", 0)) for opt in grp.get("options", []))
+            for grp in variant_groups
+        ]
+        product.stock_qty = min(group_totals) if group_totals else 0
     else:
-        # Atomic SQL update for simple products
+        # Simple product: Atomic SQL update
         update_stmt = (
             update(Product)
             .where(Product.id == product_id, Product.stock_qty >= quantity)
@@ -90,16 +132,24 @@ async def _reserve_product_for_order(
             raise ValueError(
                 f"Insufficient stock for '{product.name}': requested {quantity}"
             )
-        # Refresh ORM object from DB to sync with the atomic SQL update.
-        # Manually adjusting the attribute would use a stale base value,
-        # causing SQLAlchemy to overwrite the correct DB value on next flush.
         await db.refresh(product, ["stock_qty"])
+
+    # CRITICAL: Prepare selected_options with denormalized snapshot for order history
+    # Format: {"option_ids": [...], "snapshot": [{label, name, price}, ...]}
+    # This ensures order history displays correctly even if product is edited later
+    order_selected_options = details.get("selected_options")
+    if variant_snapshot:
+        # New format: Store both IDs and snapshot
+        order_selected_options = {
+            "option_ids": order_selected_options if isinstance(order_selected_options, list) else [],
+            "snapshot": variant_snapshot,
+        }
 
     return {
         "product_id": product.id,
         "quantity": quantity,
         "unit_price": details["unit_price"],
-        "selected_options": details["selected_options"],
+        "selected_options": order_selected_options,
         "resolved_image_url": details["resolved_image_url"],
     }
 

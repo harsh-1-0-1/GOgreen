@@ -342,3 +342,142 @@ async def test_duplicate_carts_are_consolidated(client: AsyncClient):
     assert resp2.json()["item_count"] == 2
     assert len(resp2.json()["items"]) == 1  # same product → merged into one item
 
+
+
+# ---------------------------------------------------------------------------
+# variant_groups pricing unit tests
+# ---------------------------------------------------------------------------
+# These test _resolve_variant_groups_details directly (no DB/HTTP needed).
+# The pricing model: price = sum of all required groups' selected option prices.
+# If this function is refactored, these tests will catch silent regressions.
+# NOTE: These are sync unit tests — not marked asyncio despite the file-level mark.
+# Use pytest.ini's asyncio_mode or per-test overrides if needed.
+
+from app.services.cart_service import _resolve_variant_groups_details
+
+
+LEAF_VARIANTS = {
+    "variant_groups": [
+        {
+            "id": "vg_colour",
+            "label": "colour",
+            "required": True,
+            "options": [
+                {"id": "opt_red",   "name": "red",   "price": 100.0, "stock": 10, "images": None, "color_hex": "#ff0000"},
+                {"id": "opt_blue",  "name": "blue",  "price": 100.0, "stock": 20, "images": None, "color_hex": "#0000ff"},
+            ],
+        },
+        {
+            "id": "vg_pot",
+            "label": "pot",
+            "required": True,
+            "options": [
+                {"id": "opt_krish", "name": "krish", "price": 100.0,  "stock": 100, "images": None, "color_hex": None},
+                {"id": "opt_type1", "name": "type1", "price": 1000.0, "stock": 15,  "images": None, "color_hex": None},
+            ],
+        },
+        {
+            "id": "vg_size",
+            "label": "size",
+            "required": True,
+            "options": [
+                {"id": "opt_4inch", "name": "4inch", "price": 1000.0, "stock": 6,  "images": None, "color_hex": None},
+                {"id": "opt_6inch", "name": "6inch", "price": 1500.0, "stock": 6,  "images": None, "color_hex": None},
+                {"id": "opt_8inch", "name": "8inch", "price": 1600.0, "stock": 8,  "images": None, "color_hex": None},
+            ],
+        },
+    ],
+    "default_image": None,
+    "image_map": None,
+}
+
+
+class _MockProduct:
+    """Minimal product stub for unit-testing resolve functions."""
+    def __init__(self, price: float, stock_qty: int, variants: dict):
+        self.id = 999
+        self.name = "Test Product"
+        self.price = price
+        self.stock_qty = stock_qty
+        self.images = ["https://example.com/img.jpg"]
+        self.variants = variants
+
+
+def test_variant_groups_price_sums_all_required_groups():
+    """red(100) + krish(100) + 4inch(1000) = 1200."""
+    p = _MockProduct(price=450.0, stock_qty=50, variants=LEAF_VARIANTS)
+    sel = {"vg_colour": "opt_red", "vg_pot": "opt_krish", "vg_size": "opt_4inch"}
+    d = _resolve_variant_groups_details(p, sel)
+    assert d["unit_price"] == 1200.0, f"Expected 1200.0, got {d['unit_price']}"
+
+
+def test_variant_groups_price_second_combo():
+    """red(100) + type1(1000) + 8inch(1600) = 2700."""
+    p = _MockProduct(price=450.0, stock_qty=50, variants=LEAF_VARIANTS)
+    sel = {"vg_colour": "opt_red", "vg_pot": "opt_type1", "vg_size": "opt_8inch"}
+    d = _resolve_variant_groups_details(p, sel)
+    assert d["unit_price"] == 2700.0, f"Expected 2700.0, got {d['unit_price']}"
+
+
+def test_variant_groups_stock_is_min_across_required_groups():
+    """min(red=10, krish=100, 4inch=6) = 6."""
+    p = _MockProduct(price=450.0, stock_qty=50, variants=LEAF_VARIANTS)
+    sel = {"vg_colour": "opt_red", "vg_pot": "opt_krish", "vg_size": "opt_4inch"}
+    d = _resolve_variant_groups_details(p, sel)
+    assert d["available_stock"] == 6, f"Expected 6, got {d['available_stock']}"
+
+
+def test_variant_groups_missing_required_group_raises():
+    """Omitting a required group selection must raise ValueError."""
+    p = _MockProduct(price=450.0, stock_qty=50, variants=LEAF_VARIANTS)
+    # Only two of three required groups provided
+    sel = {"vg_colour": "opt_red", "vg_pot": "opt_krish"}
+    with pytest.raises(ValueError, match="Please select an option for"):
+        _resolve_variant_groups_details(p, sel, validate_stock=True)
+
+
+def test_variant_groups_invalid_option_id_raises():
+    """A tampered/unknown option id must raise ValueError."""
+    p = _MockProduct(price=450.0, stock_qty=50, variants=LEAF_VARIANTS)
+    sel = {"vg_colour": "opt_red", "vg_pot": "opt_krish", "vg_size": "opt_FAKE"}
+    with pytest.raises(ValueError, match="Invalid option selected"):
+        _resolve_variant_groups_details(p, sel, validate_stock=True)
+
+
+def test_variant_groups_zero_required_falls_back_to_product_price():
+    """Products with no required groups use product.price as display price."""
+    no_required_variants = {
+        "variant_groups": [
+            {
+                "id": "vg_colour", "label": "Pot Colour", "required": None,
+                "options": [
+                    {"id": "o1", "name": "White", "price": 0, "stock": 10, "images": None, "color_hex": "#ffffff"},
+                ],
+            },
+        ],
+        "default_image": None,
+        "image_map": None,
+    }
+    p = _MockProduct(price=249.0, stock_qty=10, variants=no_required_variants)
+    d = _resolve_variant_groups_details(p, {})
+    assert d["unit_price"] == 249.0, f"Expected 249.0 (product.price), got {d['unit_price']}"
+    assert d["available_stock"] == 10, f"Expected stock_qty=10, got {d['available_stock']}"
+
+
+def test_variant_groups_out_of_stock_raises_when_validating():
+    """Selecting an option with stock=0 should raise when validate_stock=True."""
+    low_stock_variants = {
+        "variant_groups": [
+            {
+                "id": "vg_size", "label": "Size", "required": True,
+                "options": [
+                    {"id": "o1", "name": "Small", "price": 99.0, "stock": 0, "images": None, "color_hex": None},
+                ],
+            },
+        ],
+        "default_image": None,
+        "image_map": None,
+    }
+    p = _MockProduct(price=99.0, stock_qty=0, variants=low_stock_variants)
+    with pytest.raises(ValueError, match="out of stock"):
+        _resolve_variant_groups_details(p, {"vg_size": "o1"}, validate_stock=True)

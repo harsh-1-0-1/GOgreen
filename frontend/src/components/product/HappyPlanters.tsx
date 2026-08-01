@@ -8,7 +8,7 @@ export default function HappyPlanters({ fallbackImages }: { fallbackImages: stri
   const scrollerRef = useRef<HTMLDivElement>(null);
   const managedImages = banners
     .filter((banner) => banner.image_url)
-    .map((banner) => ({ src: banner.image_url!, alt: banner.title || 'A happy Plantoga customer' }));
+    .map((banner) => ({ src: banner.image_url!, alt: '' }));
   const images = managedImages.length
     ? managedImages
     : fallbackImages.map((src, index) => ({ src, alt: `Plantoga plant ${index + 1}` }));
@@ -50,7 +50,6 @@ export default function HappyPlanters({ fallbackImages }: { fallbackImages: stri
         {images.map((image, index) => (
           <figure key={`${image.src}-${index}`} className="relative aspect-[4/5] w-[68vw] max-w-[280px] shrink-0 snap-start overflow-hidden rounded-2xl bg-[#EAF3ED] sm:w-64">
             <img src={image.src} alt={image.alt} className="h-full w-full object-cover transition duration-500 hover:scale-[1.03]" loading="lazy" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-[#1B4332]/35 to-transparent" />
           </figure>
         ))}
       </div>

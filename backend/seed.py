@@ -92,110 +92,153 @@ CATEGORIES = [
     {"name": "Watering Tools", "slug": "watering-tools", "parent_slug": "plant-care"},
     {"name": "Pest Control", "slug": "pest-control", "parent_slug": "plant-care"},
 ]
-def _make_variants(stock_overrides: dict = {}) -> dict:
-    """Generate a standard variants block for indoor plants."""
+def _make_variants(stock_per_option: int = 10) -> dict:
+    """Standard plant variant: Select Pot Colour + Select Pot Material."""
+    import uuid
+    def oid(): return f"opt_{uuid.uuid4().hex[:8]}"
+
     colors = [
-        {"name": "Terracotta",  "hex": "#C4622D", "slug": "terracotta"},
-        {"name": "Sage Green",  "hex": "#7A9E7E", "slug": "sage-green"},
-        {"name": "White",       "hex": "#F5F5F0", "slug": "white"},
-        {"name": "Charcoal",    "hex": "#4A4A4A", "slug": "charcoal"},
-        {"name": "Dusty Pink",  "hex": "#D4908A", "slug": "dusty-pink"},
+        {"id": oid(), "name": "Terracotta",  "price": 0,   "stock": stock_per_option,
+         "images": ["https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=600&q=80"]},
+        {"id": oid(), "name": "Sage Green",  "price": 0,   "stock": stock_per_option,
+         "images": ["https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80"]},
+        {"id": oid(), "name": "White",       "price": 0,   "stock": stock_per_option,
+         "images": ["https://images.unsplash.com/photo-1485955900006-d5666c72437d?w=600&q=80"]},
+        {"id": oid(), "name": "Charcoal",    "price": 0,   "stock": stock_per_option,
+         "images": ["https://images.unsplash.com/photo-1520412099551-62b6bafeb5bb?w=600&q=80"]},
+        {"id": oid(), "name": "Dusty Pink",  "price": 0,   "stock": stock_per_option,
+         "images": ["https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=600&q=80"]},
     ]
-    pot_types = [
-        {"name": "Plastic",       "slug": "plastic",       "price_modifier": 0},
-        {"name": "Ceramic",       "slug": "ceramic",       "price_modifier": 150},
-        {"name": "Terracotta Pot","slug": "terracotta-pot","price_modifier": 100},
-        {"name": "Metal",         "slug": "metal",         "price_modifier": 200},
-        {"name": "Hanging",       "slug": "hanging",       "price_modifier": 120},
+    materials = [
+        {"id": oid(), "name": "Plastic",       "price": 0,   "stock": stock_per_option},
+        {"id": oid(), "name": "Ceramic",       "price": 150, "stock": stock_per_option},
+        {"id": oid(), "name": "Terracotta Pot","price": 100, "stock": stock_per_option},
+        {"id": oid(), "name": "Metal",         "price": 200, "stock": stock_per_option},
+        {"id": oid(), "name": "Hanging",       "price": 120, "stock": stock_per_option},
     ]
-
-    # Unsplash images mapped by colour slug (same image across pot types per colour)
-    color_images = {
-        "terracotta":  "https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=600&q=80",
-        "sage-green":  "https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80",
-        "white":       "https://images.unsplash.com/photo-1485955900006-d5666c72437d?w=600&q=80",
-        "charcoal":    "https://images.unsplash.com/photo-1520412099551-62b6bafeb5bb?w=600&q=80",
-        "dusty-pink":  "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=600&q=80",
-    }
-
-    image_map = {}
-    stock = {}
-    for c in colors:
-        for p in pot_types:
-            key = f"{c['slug']}__{p['slug']}"
-            image_map[key] = color_images[c["slug"]]
-            stock[key] = stock_overrides.get(key, 10)  # default 10 units
-
     return {
-        "colors": colors,
-        "pot_types": pot_types,
-        "image_map": image_map,
-        "default_image": color_images["sage-green"],
-        "stock": stock,
+        "variant_groups": [
+            {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Pot Colour",   "options": colors},
+            {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Pot Material", "options": materials},
+        ],
+        "default_image": "https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80",
     }
 
 
-def _make_variants_with_sizes(stock_overrides: dict = {}) -> dict:
-    """Generate a 3D variants block: color x pot_type x size."""
+def _make_variants_with_sizes(stock_per_option: int = 10) -> dict:
+    """Plant variant: Select Size + Select Pot Colour + Select Pot Material."""
+    import uuid
+    def oid(): return f"opt_{uuid.uuid4().hex[:8]}"
+
+    sizes = [
+        {"id": oid(), "name": "Small (6–10\")",  "price": 0,   "stock": stock_per_option},
+        {"id": oid(), "name": "Medium (12–18\")", "price": 150, "stock": stock_per_option},
+        {"id": oid(), "name": "Large (24+\")",    "price": 350, "stock": stock_per_option},
+    ]
     colors = [
-        {"name": "Terracotta",  "hex": "#C4622D", "slug": "terracotta"},
-        {"name": "Sage Green",  "hex": "#7A9E7E", "slug": "sage-green"},
-        {"name": "White",       "hex": "#F5F5F0", "slug": "white"},
-        {"name": "Charcoal",    "hex": "#4A4A4A", "slug": "charcoal"},
+        {"id": oid(), "name": "Terracotta",  "price": 0,  "stock": stock_per_option,
+         "images": ["https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=600&q=80"]},
+        {"id": oid(), "name": "Sage Green",  "price": 0,  "stock": stock_per_option,
+         "images": ["https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80"]},
+        {"id": oid(), "name": "White",       "price": 0,  "stock": stock_per_option,
+         "images": ["https://images.unsplash.com/photo-1485955900006-d5666c72437d?w=600&q=80"]},
+        {"id": oid(), "name": "Charcoal",    "price": 0,  "stock": stock_per_option,
+         "images": ["https://images.unsplash.com/photo-1520412099551-62b6bafeb5bb?w=600&q=80"]},
     ]
-    pot_types = [
-        {"name": "Plastic",       "slug": "plastic",       "price_modifier": 0},
-        {"name": "Ceramic",       "slug": "ceramic",       "price_modifier": 150},
-        {"name": "Terracotta Pot","slug": "terracotta-pot","price_modifier": 100},
-        {"name": "Metal",         "slug": "metal",         "price_modifier": 200},
+    materials = [
+        {"id": oid(), "name": "Plastic",       "price": 0,   "stock": stock_per_option},
+        {"id": oid(), "name": "Ceramic",       "price": 150, "stock": stock_per_option},
+        {"id": oid(), "name": "Terracotta Pot","price": 100, "stock": stock_per_option},
+        {"id": oid(), "name": "Metal",         "price": 200, "stock": stock_per_option},
     ]
-    sizes = [
-        {"name": "Small",  "slug": "small",  "price_modifier": 0,   "description": "6–10 inches"},
-        {"name": "Medium", "slug": "medium", "price_modifier": 150, "description": "12–18 inches"},
-        {"name": "Large",  "slug": "large",  "price_modifier": 350, "description": "24+ inches"},
-    ]
-
-    color_images = {
-        "terracotta":  "https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=600&q=80",
-        "sage-green":  "https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80",
-        "white":       "https://images.unsplash.com/photo-1485955900006-d5666c72437d?w=600&q=80",
-        "charcoal":    "https://images.unsplash.com/photo-1520412099551-62b6bafeb5bb?w=600&q=80",
-    }
-
-    image_map = {}
-    stock = {}
-    for c in colors:
-        for p in pot_types:
-            for s in sizes:
-                key = f"{c['slug']}__{p['slug']}__{s['slug']}"
-                image_map[key] = color_images[c["slug"]]
-                stock[key] = stock_overrides.get(key, 8)  # default 8 units per combo
-
     return {
-        "colors": colors,
-        "pot_types": pot_types,
-        "sizes": sizes,
-        "image_map": image_map,
-        "default_image": color_images["sage-green"],
-        "stock": stock,
+        "variant_groups": [
+            {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Plant Size",   "options": sizes},
+            {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Pot Colour",   "options": colors},
+            {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Pot Material", "options": materials},
+        ],
+        "default_image": "https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80",
     }
 
 
-def _make_size_only_variants(stock_overrides: dict = {}) -> dict:
-    """Generate a size-only variants block (no colors / pot types)."""
+def _make_size_only_variants(stock_per_option: int = 15) -> dict:
+    """Plant size-only variant: Select Size."""
+    import uuid
+    def oid(): return f"opt_{uuid.uuid4().hex[:8]}"
+
     sizes = [
-        {"name": "Small",  "slug": "small",  "price_modifier": 0,   "description": "6–10 inches"},
-        {"name": "Medium", "slug": "medium", "price_modifier": 200, "description": "12–18 inches"},
-        {"name": "Large",  "slug": "large",  "price_modifier": 500, "description": "24+ inches"},
+        {"id": oid(), "name": "Small (6–10\")",  "price": 0,   "stock": stock_per_option},
+        {"id": oid(), "name": "Medium (12–18\")", "price": 200, "stock": stock_per_option},
+        {"id": oid(), "name": "Large (24+\")",    "price": 500, "stock": stock_per_option},
     ]
-    stock = {s["slug"]: stock_overrides.get(s["slug"], 12) for s in sizes}
     return {
-        "colors": [],
-        "pot_types": [],
-        "sizes": sizes,
-        "image_map": {},
+        "variant_groups": [
+            {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Plant Size", "options": sizes},
+        ],
         "default_image": "",
-        "stock": stock,
+    }
+
+
+def _make_seed_variants() -> dict:
+    """Seed packet variant: Select Packet Size."""
+    import uuid
+    def oid(): return f"opt_{uuid.uuid4().hex[:8]}"
+
+    return {
+        "variant_groups": [
+            {
+                "id": f"vg_{uuid.uuid4().hex[:8]}",
+                "label": "Select Packet Size",
+                "options": [
+                    {"id": oid(), "name": "Small Packet (25 seeds)",  "price": 0,   "stock": 50},
+                    {"id": oid(), "name": "Medium Packet (50 seeds)", "price": 40,  "stock": 30},
+                    {"id": oid(), "name": "Large Packet (100 seeds)", "price": 90,  "stock": 20},
+                ],
+            }
+        ],
+    }
+
+
+def _make_pot_variants(base_price: int) -> dict:
+    """Standalone pot variant: Select Pot Size + Select Colour."""
+    import uuid
+    def oid(): return f"opt_{uuid.uuid4().hex[:8]}"
+
+    sizes = [
+        {"id": oid(), "name": "Small (4–6\")",    "price": base_price,           "stock": 20},
+        {"id": oid(), "name": "Medium (8–10\")",  "price": round(base_price * 1.4), "stock": 15},
+        {"id": oid(), "name": "Large (12–14\")",  "price": round(base_price * 1.9), "stock": 10},
+    ]
+    colours = [
+        {"id": oid(), "name": "White",      "price": 0,  "stock": 15},
+        {"id": oid(), "name": "Terracotta", "price": 0,  "stock": 15},
+        {"id": oid(), "name": "Black",      "price": 0,  "stock": 12},
+        {"id": oid(), "name": "Green",      "price": 0,  "stock": 10},
+    ]
+    return {
+        "variant_groups": [
+            {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Pot Size", "options": sizes},
+            {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Colour",   "options": colours},
+        ],
+    }
+
+
+def _make_care_variants(unit_label: str, options: list) -> dict:
+    """Generic care product variant (fertiliser weight, tool size, capacity, etc.)."""
+    import uuid
+    def oid(): return f"opt_{uuid.uuid4().hex[:8]}"
+
+    return {
+        "variant_groups": [
+            {
+                "id": f"vg_{uuid.uuid4().hex[:8]}",
+                "label": unit_label,
+                "options": [
+                    {"id": oid(), "name": o["name"], "price": o["price"], "stock": o.get("stock", 20)}
+                    for o in options
+                ],
+            }
+        ],
     }
 
 
@@ -207,21 +250,21 @@ PRODUCTS = [
          "tags": ["air-purifying", "low-maintenance", "indoor", "beginner-friendly", "workspace", "living-room"],
          "care_tips": ["Water when topsoil feels dry", "Prune to encourage bushier growth"],
          "badge": "Bestseller",
-         "variants": _make_variants_with_sizes({"terracotta__plastic__small": 20, "sage-green__ceramic__medium": 15, "charcoal__metal__large": 8})},
+         "variants": _make_variants_with_sizes()},
 
         {"name": "Snake Plant Sansevieria", "cat": "indoor-plants", "price": 399,
          "desc": "Hardy succulent that thrives on neglect and purifies air at night.",
          "sunlight": "Low to Bright Indirect", "watering": "Every 2 weeks",
          "tags": ["air-purifying", "low-maintenance", "bedroom", "beginner-friendly", "workspace"],
          "care_tips": ["Avoid overwatering", "Tolerates low light well"], "badge": "Trending",
-         "variants": _make_variants_with_sizes({"white__ceramic__medium": 18, "charcoal__metal__large": 6, "terracotta__plastic__small": 25})},
+         "variants": _make_variants_with_sizes()},
 
         {"name": "Peace Lily", "cat": "indoor-plants", "price": 549,
          "desc": "Elegant white-flowering plant that removes toxins from indoor air.",
          "sunlight": "Low to Medium Indirect", "watering": "Twice a week",
          "tags": ["air-purifying", "flowering", "indoor", "beginner-friendly", "living-room", "exotic"],
          "care_tips": ["Keep soil moist but not soggy", "Mist leaves in dry weather"],
-         "variants": _make_variants_with_sizes({"white__ceramic__medium": 20, "white__terracotta-pot__small": 15, "sage-green__plastic__large": 0})},
+         "variants": _make_variants_with_sizes()},
 
         {"name": "Pothos Marble Queen", "cat": "indoor-plants", "price": 199,
          "desc": "Variegated trailing plant with stunning white and green leaves.",
@@ -235,42 +278,42 @@ PRODUCTS = [
          "sunlight": "Bright Indirect", "watering": "Twice a week",
          "tags": ["air-purifying", "tropical", "large", "living-room", "vastu-friendly"],
          "care_tips": ["Mist regularly", "Avoid direct sunlight to prevent leaf burn"], "badge": "Popular",
-         "variants": _make_variants_with_sizes({"sage-green__metal__large": 5, "terracotta__terracotta-pot__medium": 12, "charcoal__plastic__small": 20})},
+         "variants": _make_variants_with_sizes()},
 
         {"name": "ZZ Plant", "cat": "indoor-plants", "price": 449,
          "desc": "Glossy-leaved virtually indestructible houseplant.",
          "sunlight": "Low to Bright Indirect", "watering": "Every 2-3 weeks",
          "tags": ["low-maintenance", "modern", "indoor", "beginner-friendly", "workspace", "living-room"],
          "care_tips": ["Drought tolerant – do not overwater", "Wipe leaves for shine"],
-         "variants": _make_variants_with_sizes({"charcoal__metal__medium": 16, "white__ceramic__small": 22, "sage-green__plastic__large": 8})},
+         "variants": _make_variants_with_sizes()},
 
         {"name": "Rubber Plant", "cat": "indoor-plants", "price": 499,
          "desc": "Bold burgundy leaves that make a dramatic statement in any room.",
          "sunlight": "Bright Indirect", "watering": "Once a week",
          "tags": ["statement", "air-purifying", "indoor", "living-room"],
          "care_tips": ["Clean leaves monthly", "Rotate for even growth"],
-         "variants": _make_size_only_variants({"small": 30, "medium": 20, "large": 10})},
+         "variants": _make_size_only_variants()},
 
         {"name": "Jade Plant", "cat": "indoor-plants", "price": 349,
          "desc": "Lucky succulent symbolising prosperity and good fortune.",
          "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks",
          "tags": ["succulent", "lucky", "desktop", "low-maintenance", "beginner-friendly", "workspace", "vastu-friendly"],
          "care_tips": ["Let soil dry completely between waterings", "Avoid cold drafts"],
-         "variants": _make_variants({"white__ceramic": 16, "sage-green__terracotta-pot": 8, "dusty-pink__plastic": 5})},
+         "variants": _make_variants()},
 
         {"name": "Spider Plant", "cat": "indoor-plants", "price": 199,
          "desc": "Cheerful cascading foliage with baby plantlets on arching stems.",
          "sunlight": "Bright Indirect", "watering": "Once a week",
          "tags": ["pet-safe", "hanging", "beginner", "low-maintenance", "beginner-friendly", "bedroom", "vastu-friendly"],
          "care_tips": ["Safe for cats and dogs", "Propagate babies in water"],
-         "variants": _make_variants({"sage-green__hanging": 20, "white__hanging": 15, "dusty-pink__hanging": 8, "terracotta__plastic": 0})},
+         "variants": _make_variants()},
 
         {"name": "Philodendron Brasil", "cat": "indoor-plants", "price": 299,
          "desc": "Heart-shaped variegated leaves in lime green and dark green.",
          "sunlight": "Medium to Bright Indirect", "watering": "Once a week",
          "tags": ["trailing", "variegated", "tropical"],
          "care_tips": ["Grows fast in bright light", "Trim leggy vines"],
-         "variants": _make_variants({"sage-green__ceramic": 12, "terracotta__plastic": 18, "charcoal__metal": 0})},
+         "variants": _make_variants()},
     # Outdoor Plants
     {"name": "Bougainvillea", "cat": "outdoor-plants", "price": 349, "desc": "Vibrant paper-like flowers in magenta that bloom year round.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["flowering", "drought-tolerant", "climber", "balcony"], "care_tips": ["Needs 6+ hours of sun", "Prune after each flowering cycle"], "badge": "Bestseller"},
     {"name": "Hibiscus Red", "cat": "outdoor-plants", "price": 299, "desc": "Classic tropical shrub with large scarlet blooms.", "sunlight": "Full Sun", "watering": "Daily in summer", "tags": ["flowering", "tropical", "outdoor", "balcony"], "care_tips": ["Feed monthly during growing season", "Protect from frost"]},
@@ -611,7 +654,16 @@ async def seed() -> None:
             slug = re.sub(r"-+", "-", slug).strip("-")
 
             variants = p.get("variants")
-            stock_qty = sum(variants["stock"].values()) if variants else random.randint(5, 200)
+            if variants and "variant_groups" in variants:
+                # New format: sum stock across all options in the first group
+                all_stocks = [
+                    int(opt.get("stock", 0))
+                    for grp in variants["variant_groups"]
+                    for opt in grp.get("options", [])
+                ]
+                stock_qty = sum(all_stocks) if all_stocks else random.randint(5, 200)
+            else:
+                stock_qty = random.randint(5, 200)
 
             product = Product(
                 name=p["name"],

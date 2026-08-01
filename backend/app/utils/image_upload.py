@@ -70,14 +70,40 @@ def extract_relative_key(url: str | None) -> str | None:
 
 
 def resolve_variants_images(variants: dict | None) -> dict | None:
+    """Resolve relative image keys to full URLs in variant structure.
+    
+    Supports both old format (colors, pot_types, image_map) and 
+    new format (variant_groups with per-option images).
+    """
     if not variants:
         return variants
 
     resolved = dict(variants)
 
+    # Always resolve default_image if present
     if "default_image" in resolved and resolved["default_image"]:
         resolved["default_image"] = resolve_image_url(resolved["default_image"])
 
+    # New format: variant_groups
+    if "variant_groups" in resolved and isinstance(resolved["variant_groups"], list):
+        resolved_groups = []
+        for group in resolved["variant_groups"]:
+            resolved_group = dict(group)
+            if "options" in resolved_group and isinstance(resolved_group["options"], list):
+                resolved_options = []
+                for option in resolved_group["options"]:
+                    resolved_option = dict(option)
+                    # Resolve images array for each option
+                    if "images" in resolved_option and isinstance(resolved_option["images"], list):
+                        resolved_option["images"] = [
+                            resolve_image_url(img) for img in resolved_option["images"]
+                        ]
+                    resolved_options.append(resolved_option)
+                resolved_group["options"] = resolved_options
+            resolved_groups.append(resolved_group)
+        resolved["variant_groups"] = resolved_groups
+
+    # Old format: image_map, pot_types, colors
     if "image_map" in resolved and isinstance(resolved["image_map"], dict):
         resolved["image_map"] = {
             k: [resolve_image_url(img) for img in v] if isinstance(v, list) else []

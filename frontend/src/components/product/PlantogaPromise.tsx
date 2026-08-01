@@ -26,7 +26,19 @@ const PROMISES = [
   },
 ];
 
-export default function PlantogaPromise() {
+export default function PlantogaPromise({ bannerImage }: { bannerImage?: string | null }) {
+  if (bannerImage) {
+    return (
+      <section className="mt-6 sm:mt-8 rounded-2xl overflow-hidden">
+        <img
+          src={bannerImage}
+          alt="The Plantoga Promise"
+          className="w-full h-auto object-cover"
+        />
+      </section>
+    );
+  }
+
   return (
     <section
       className="mt-6 sm:mt-8 rounded-2xl overflow-hidden"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,7 +12,6 @@ import {
   ChevronUp,
   Image as ImageIcon,
   AlertTriangle,
-  HelpCircle,
   Upload,
   Loader2
 } from 'lucide-react';
@@ -25,6 +24,39 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import type { Product, ProductListResponse, ProductVariants } from '@/types';
 
+type ProductFormData = z.infer<typeof productSchema>;
+
+// ─── Flexible Variant Draft Types ──────────────────────────────────────────
+// ⚠️ image_keys = relative storage keys sent to backend. image_urls = preview only.
+type VariantOptionDraft = {
+  id: string;           // stable ID – preserved for existing options, generated for new
+  name: string;
+  price: number;
+  stock: number;
+  image_keys: string[];  // relative keys array, stored in DB
+  image_urls: string[];  // resolved URLs array, display only
+  color_hex: string;     // optional hex color for colour-type variants
+  uploading: boolean;
+};
+
+type VariantGroupDraft = {
+  id: string;           // stable ID – preserved for existing groups, generated for new
+  label: string;
+  options: VariantOptionDraft[];
+};
+
+function genId(prefix: string): string {
+  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function emptyOption(): VariantOptionDraft {
+  return { id: genId('opt'), name: '', price: 0, stock: 0, image_keys: [], image_urls: [], color_hex: '', uploading: false };
+}
+
+function emptyGroup(): VariantGroupDraft {
+  return { id: genId('vg'), label: '', options: [emptyOption()] };
+}
+
 const productSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   description: z.string().optional(),
@@ -33,21 +65,10 @@ const productSchema = z.object({
   stock_qty: z.coerce.number().int().min(0, 'Stock cannot be negative'),
   category_id: z.coerce.number().int().positive('Please select a category'),
   badge: z.string().optional(),
-  sunlight: z.string().optional(),
-  watering: z.string().optional(),
   how_to_guide: z.string().optional(),
   tags: z.array(z.object({ value: z.string() })).optional(),
   care_tips: z.array(z.object({ value: z.string() })).optional(),
 });
-
-type ProductFormData = z.infer<typeof productSchema>;
-// ⚠️ image_key is the relative storage key sent to the backend (e.g. "plantoga/...").
-// image_url is the resolved full URL used only for <img> preview — never sent anywhere.
-type VariantColorDraft = { name: string; hex: string; image_key: string; image_url: string };
-// ⚠️ image_key is the relative storage key sent to the backend (e.g. "plantoga/...").
-// image_url is the resolved full URL used only for <img> preview — never sent anywhere.
-type VariantPotDraft = { name: string; price_modifier: number; image_key: string; image_url: string };
-type VariantSizeDraft = { name: string; price_modifier: number; description: string };
 
 function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -121,6 +142,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     pricing: true,
     details: false,
     images: false,
+    faqs: false,
     variants: false,
     seo: false,
   });
@@ -160,37 +182,49 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setFilePreviews(filePreviews.filter((_, i) => i !== index));
   };
 
-  // Variant States
-  const [colors, setColors] = useState<VariantColorDraft[]>([]);
-  const [pots, setPots] = useState<VariantPotDraft[]>([]);
-  const [uploadingColorImage, setUploadingColorImage] = useState<number | null>(null);
-  const [uploadingPotImage, setUploadingPotImage] = useState<number | null>(null);
+  // Variant States — new flexible variant groups
+  const [variantGroups, setVariantGroups] = useState<VariantGroupDraft[]>([]);
+  const [uploadingOptionImage, setUploadingOptionImage] = useState<string | null>(null); // optionId
   const [uploadingDefaultImage, setUploadingDefaultImage] = useState(false);
-  const [uploadingComboImage, setUploadingComboImage] = useState<string | null>(null);
-  // Care items — flexible list of {icon_key, icon_url, title, description}
-  type CareItemDraft = { title: string; description: string; icon_key: string; icon_url: string; uploading: boolean };
-  const [careItems, setCareItems] = useState<CareItemDraft[]>([]);
-  const [sizes, setSizes] = useState<VariantSizeDraft[]>([]);
   // defaultImageKey: relative key sent to backend. defaultImageUrl: full URL for preview only.
   const [defaultImageKey, setDefaultImageKey] = useState('');
   const [defaultImageUrl, setDefaultImageUrl] = useState('');
-  const [stockByKey, setStockByKey] = useState<Record<string, number>>({});
-  // imageKeysByCombo: relative keys sent to backend. imageUrlsByCombo: full URLs for preview only.
-  const [imageKeysByCombo, setImageKeysByCombo] = useState<Record<string, string[]>>({});
-  const [imageUrlsByCombo, setImageUrlsByCombo] = useState<Record<string, string[]>>({});
-  // rawPotTypes: raw pot_types from the admin raw endpoint, held separately so the
-  // pot-image merge effect runs regardless of which fetch (rawProduct vs freshProduct) wins.
-  const [rawPotTypes, setRawPotTypes] = useState<any[] | null>(null);
-  const [rawColorTypes, setRawColorTypes] = useState<any[] | null>(null);
-  // seeded*Ref: guards the merge effects so they each run exactly once per product load.
-  // Prevents row-count changes (add/remove) from re-seeding and overwriting
-  // images the admin has already uploaded during this edit session.
-  const seededPotImagesRef = useRef(false);
-  const seededColorImagesRef = useRef(false);
-  const seededComboImagesRef = useRef(false);
-  // Track which product ID the seed ran for, so a background refetch of the *same*
-  // product doesn't reset the guard and re-run the merge over already-edited state.
-  const seededForProductIdRef = useRef<number | null>(null);
+  // Combo image map: keyed by "optId1__optId2__..." joining one optId per group in group order.
+  // image_keys = relative keys (sent to backend). image_urls = resolved URLs (display only).
+  const [comboImageKeys, setComboImageKeys] = useState<Record<string, string[]>>({});
+  const [comboImageUrls, setComboImageUrls] = useState<Record<string, string[]>>({});
+  const [uploadingComboKey, setUploadingComboKey] = useState<string | null>(null);
+  // Plantoga Promise banner — per-product image replacing the four hardcoded cards
+  // promiseBannerKey: relative key stored in DB. promiseBannerUrl: resolved URL for preview only.
+  const [promiseBannerKey, setPromiseBannerKey] = useState('');
+  const [promiseBannerUrl, setPromiseBannerUrl] = useState('');
+  const [uploadingPromiseBanner, setUploadingPromiseBanner] = useState(false);
+
+  // Why Plantoga banner — per-product image replacing the comparison table
+  const [whyPlantogaBannerKey, setWhyPlantogaBannerKey] = useState('');
+  const [whyPlantogaBannerUrl, setWhyPlantogaBannerUrl] = useState('');
+  const [uploadingWhyPlantogaBanner, setUploadingWhyPlantogaBanner] = useState(false);
+
+  // Care Card image — per-product image shown above the care card tiles
+  const [careCardImageKey, setCareCardImageKey] = useState('');
+  const [careCardImageUrl, setCareCardImageUrl] = useState('');
+  const [uploadingCareCardImage, setUploadingCareCardImage] = useState(false);
+
+  // Per-product FAQ entries
+  const [faqItems, setFaqItems] = useState<{ question: string; answer: string }[]>([]);
+  const DEFAULT_FAQ = { question: '', answer: '' };
+
+  // Tracks whether the raw product image keys have been seeded into variant state.
+  // Stored as state (not a ref) so that changing it triggers a re-render, which is
+  // required for formReady to update the Save button's disabled state correctly.
+  // The ref-during-render lint error fires if this is a useRef.
+  const [rawProductSeededId, setRawProductSeededId] = useState<number | null>(null);
+
+  // True once form fields are initialized. For edit mode, also wait for rawProduct
+  // to be seeded so option image_keys are populated — saving before that would wipe
+  // existing variant images.
+  const rawProductSeeded = !isEdit || rawProductSeededId === (editProduct?.id ?? null);
+  const formReady = formInitialized && rawProductSeeded;
 
   // Derive a display URL from a relative storage key.
   // Full URLs pass through unchanged (external images, legacy data).
@@ -215,8 +249,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       stock_qty: 0,
       category_id: undefined,
       badge: '',
-      sunlight: '',
-      watering: '',
       how_to_guide: '',
       tags: [],
       care_tips: [],
@@ -225,7 +257,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const { fields: tagFields, append: addTag, remove: removeTag } = useFieldArray({ control, name: 'tags' });
   const { fields: tipFields, append: addTip, remove: removeTip } = useFieldArray({ control, name: 'care_tips' });
 
-  const applyProductToForm = useCallback((p: Product) => {
+  const applyProductToForm = (p: Product) => {
     reset({
       name: p.name || '',
       description: p.description || '',
@@ -234,8 +266,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       stock_qty: p.stock_qty ?? 0,
       category_id: p.category_id,
       badge: p.badge || '',
-      sunlight: p.sunlight || '',
-      watering: p.watering || '',
       how_to_guide: p.how_to_guide || '',
       tags: p.tags?.length ? p.tags.map((value) => ({ value })) : [],
       care_tips: p.care_tips?.length ? p.care_tips.map((value) => ({ value })) : [],
@@ -244,125 +274,118 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setNewImageUrl('');
     setUploadedFiles([]);
     setFilePreviews([]);
-    // Seed care items from raw product data (icons are relative keys at this point)
-    setCareItems(
-      (p.care_items || []).map((item: any) => ({
-        title: item.title || '',
-        description: item.description || '',
-        icon_key: item.icon || '',
-        icon_url: item.icon ? resolveImageUrl(item.icon) : '',
-        uploading: false,
-      }))
-    );
-    setColors(p.variants?.colors?.map((c: any) => ({ name: c.name, hex: c.hex, image_key: '', image_url: '' })) || []);
-    // Pot image keys are seeded by the rawProduct effect (relative keys from DB).
-    // Here we only set structural fields; image_key/image_url start empty.
-    setPots(
-      p.variants?.pot_types?.map((pot: any) => ({
-        name: pot.name,
-        price_modifier: pot.price_modifier,
-        image_key: '',   // populated by rawProduct effect
-        image_url: '',   // populated by rawProduct effect
-      })) || [],
-    );
-    setSizes(
-      p.variants?.sizes?.map((s: any) => ({
-        name: s.name,
-        price_modifier: s.price_modifier,
-        description: s.description || '',
-      })) || [],
-    );
-    // image key/url state seeded by rawProduct effect
+    // Seed variant groups from new format (variant_groups)
+    const vg = (p.variants as any)?.variant_groups;
+    if (Array.isArray(vg)) {
+      setVariantGroups(
+        vg.map((group: any) => ({
+          id: group.id || genId('vg'),
+          label: group.label || '',
+          options: (group.options || []).map((opt: any) => ({
+            id: opt.id || genId('opt'),
+            name: opt.name || '',
+            price: Number(opt.price ?? 0),
+            stock: Number(opt.stock ?? 0),
+            // images are already resolved URLs from the API; store first as preview
+            // backend /admin/raw returns relative keys — handled in rawProduct effect
+            image_keys: [],
+            image_urls: opt.images?.filter(Boolean) || [],
+            color_hex: opt.color_hex || '',
+            uploading: false,
+          })),
+        }))
+      );
+    } else {
+      setVariantGroups([]);
+    }
     setDefaultImageKey('');
     setDefaultImageUrl('');
-    setStockByKey(p.variants?.stock || {});
-    setImageKeysByCombo({});
-    setImageUrlsByCombo({});
-    // Do NOT clear rawPotTypes/rawColorTypes here — they may have already been set by the
-    // rawProduct effect if that fetch resolved before freshProduct. Clearing them here
-    // would prevent the merge effect from ever running in that ordering.
-    // The guard refs are reset here (and also in the rawProduct effect) so the merge
-    // runs exactly once regardless of which fetch wins the race.
-    seededPotImagesRef.current = false;
-    seededColorImagesRef.current = false;
-    seededComboImagesRef.current = false;
+    setComboImageKeys({});
+    setComboImageUrls({});
     setVariantError(null);
-  }, [reset]);
-
-  // Seed image key state from the raw admin endpoint (relative keys, never resolved URLs).
-  // Runs after applyProductToForm and overwrites the empty image fields with real keys.
+    // Promise banner URL comes pre-resolved from the public API response.
+    // The raw key is seeded separately from rawProduct in the useEffect below.
+    setPromiseBannerUrl(p.promise_banner_image || '');
+    setPromiseBannerKey('');  // will be overwritten by rawProduct effect
+    setWhyPlantogaBannerUrl(p.why_plantoga_banner_image || '');
+    setWhyPlantogaBannerKey('');  // will be overwritten by rawProduct effect
+    setCareCardImageUrl(p.care_card_image || '');
+    setCareCardImageKey('');  // will be overwritten by rawProduct effect
+    setFaqItems((p as any).faqs || []);
+  };
+  // Seed default_image from the raw admin endpoint (relative key, not resolved URL).
+  // Must wait for formInitialized so that variantGroups is already populated before
+  // we patch image_keys into options — otherwise prev.map() iterates an empty array.
+  // Guard (rawProductSeededId) prevents re-seeding on background refetches.
   useEffect(() => {
-    if (!isEdit || !rawProduct?.variants) return;
-    const v = rawProduct.variants;
-
-    // Resolve the product id first so the guard check below reflects the correct
-    // product. On a genuine product change the id differs from the stored ref, which
-    // resets all seed guards before they are evaluated — ensuring the new product
-    // always gets a full seed even if the flags were left true by the previous product.
+    if (!isEdit || !rawProduct || !formInitialized) return;
     const incomingId = rawProduct.id ?? null;
-    if (seededForProductIdRef.current !== incomingId) {
-      seededForProductIdRef.current = incomingId;
-      seededPotImagesRef.current = false;
-      seededColorImagesRef.current = false;
-      seededComboImagesRef.current = false;
+    if (rawProductSeededId === incomingId) return;
+    setRawProductSeededId(incomingId);
+
+    const v = (rawProduct as any).variants || {};
+    // Seed default image relative key
+    setDefaultImageKey(v.default_image || '');
+    setDefaultImageUrl(resolveImageUrl(v.default_image));
+
+    // Seed combo image_map from raw product
+    if (v.image_map && typeof v.image_map === 'object') {
+      const seedKeys: Record<string, string[]> = {};
+      const seedUrls: Record<string, string[]> = {};
+      Object.entries(v.image_map as Record<string, string[]>).forEach(([key, imgs]) => {
+        if (Array.isArray(imgs) && imgs.length > 0) {
+          seedKeys[key] = imgs.filter(Boolean);
+          seedUrls[key] = imgs.filter(Boolean).map((k: string) => resolveImageUrl(k));
+        }
+      });
+      setComboImageKeys(seedKeys);
+      setComboImageUrls(seedUrls);
     }
 
-    // Seed default image and combo image_map exactly once per product load.
-    // A background refetch mid-session (window refocus, staleTime elapsing,
-    // network reconnect) must NOT wipe combo/default images the admin has already
-    // uploaded locally but hasn't saved yet — same reasoning as the pot/color guards.
-    if (!seededComboImagesRef.current) {
-      setDefaultImageKey(v.default_image || '');
-      setDefaultImageUrl(resolveImageUrl(v.default_image));
-
-      const rawImageMap = v.image_map || {};
-      const loadedKeys: Record<string, string[]> = {};
-      const loadedUrls: Record<string, string[]> = {};
-      for (const [k, val] of Object.entries(rawImageMap)) {
-        loadedKeys[k] = val;
-        loadedUrls[k] = val.map(key => resolveImageUrl(key));
-      }
-      setImageKeysByCombo(loadedKeys);
-      setImageUrlsByCombo(loadedUrls);
-      seededComboImagesRef.current = true;
+    // Seed per-option image keys from raw variant_groups
+    if (Array.isArray(v.variant_groups)) {
+      setVariantGroups(prev => prev.map((group) => {
+        const rawGroup = v.variant_groups.find((rg: any) => rg.id === group.id);
+        if (!rawGroup) return group;
+        return {
+          ...group,
+          options: group.options.map((opt) => {
+            const rawOpt = rawGroup.options?.find((ro: any) => ro.id === opt.id);
+            if (!rawOpt) return opt;
+            const rawKeys: string[] = (rawOpt.images || []).filter(Boolean);
+            const rawUrls = rawKeys.map((k: string) => resolveImageUrl(k));
+            return {
+              ...opt,
+              image_keys: rawKeys.length ? rawKeys : opt.image_keys,
+              image_urls: rawKeys.length ? rawUrls : opt.image_urls,
+              color_hex: rawOpt.color_hex || opt.color_hex,
+            };
+          }),
+        };
+      }));
     }
 
-    // Store raw pot types separately so the merge effect below can run
-    // regardless of whether rawProduct or applyProductToForm resolved first.
-    setRawPotTypes(v.pot_types || []);
-    setRawColorTypes(v.colors || []);
-  // resolveImageUrl is stable (defined inside component but no deps) — safe to omit
-   
-  }, [isEdit, rawProduct]);
+    // Seed promise banner raw key
+    const rawBannerKey = (rawProduct as any).promise_banner_image || '';
+    setPromiseBannerKey(rawBannerKey);
+    if (rawBannerKey) setPromiseBannerUrl(resolveImageUrl(rawBannerKey));
 
-  // Merge pot image keys into the pots array.
-  // Kept in a separate effect so it fires whenever EITHER rawPotTypes or pots.length
-  // changes — making it order-independent between the two data fetches.
-  // The seededPotImagesRef guard ensures this runs exactly ONCE per product load.
-  // Without it, adding/removing a pot row would re-fire and overwrite any images
-  // the admin already uploaded during this edit session.
-  useEffect(() => {
-    if (!rawPotTypes || pots.length === 0 || seededPotImagesRef.current) return;
-    setPots(prev => prev.map((pot, i) => {
-      const rawKey: string = rawPotTypes[i]?.image_url || '';
-      return { ...pot, image_key: rawKey, image_url: resolveImageUrl(rawKey) };
-    }));
-    seededPotImagesRef.current = true; // never re-seed after this for the current product
-  // pots.length (not pots) — only retrigger when rows are added/removed, not on every keystroke
-   
-  }, [rawPotTypes, pots.length]);
+    // Seed why plantoga banner raw key
+    const rawWhyBannerKey = (rawProduct as any).why_plantoga_banner_image || '';
+    setWhyPlantogaBannerKey(rawWhyBannerKey);
+    if (rawWhyBannerKey) setWhyPlantogaBannerUrl(resolveImageUrl(rawWhyBannerKey));
 
-  // Merge color image keys into the colors array — same pattern as pots.
-  useEffect(() => {
-    if (!rawColorTypes || colors.length === 0 || seededColorImagesRef.current) return;
-    setColors(prev => prev.map((color, i) => {
-      const rawKey: string = rawColorTypes[i]?.image_url || '';
-      return { ...color, image_key: rawKey, image_url: resolveImageUrl(rawKey) };
-    }));
-    seededColorImagesRef.current = true;
-  // colors.length (not colors) — only retrigger when rows are added/removed
-   
-  }, [rawColorTypes, colors.length]);
+    // Seed care card image raw key
+    const rawCareCardKey = (rawProduct as any).care_card_image || '';
+    setCareCardImageKey(rawCareCardKey);
+    if (rawCareCardKey) setCareCardImageUrl(resolveImageUrl(rawCareCardKey));
+
+    // Seed FAQs from raw product
+    const rawFaqs = (rawProduct as any).faqs;
+    if (Array.isArray(rawFaqs) && rawFaqs.length > 0) {
+      setFaqItems(rawFaqs.map((f: any) => ({ question: f.question || '', answer: f.answer || '' })));
+    }
+  }, [isEdit, rawProduct, rawProductSeededId, formInitialized]);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -379,103 +402,91 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       setVariantError(null);
       let variants: ProductVariants | null = null;
 
-      // Handle custom variant setup
-      if (colors.length || pots.length || sizes.length || defaultImageKey.trim()) {
-        const cleanColors = colors
-          .filter((c) => c.name.trim())
-          .map(c => ({ name: c.name.trim(), hex: c.hex, slug: slugify(c.name), image_url: (c.image_key || '').trim() }));
-
-        const cleanPots = pots
-          .filter((p) => p.name.trim())
-          .map(p => ({
-            name: p.name.trim(),
-            slug: slugify(p.name),
-            price_modifier: Number(p.price_modifier || 0),
-            // image_url field in DB holds a relative key — send the key, not the display URL
-            image_url: (p.image_key || '').trim(),
-          }));
-
-        const cleanSizes = sizes
-          .filter((s) => s.name.trim())
-          .map(s => ({ name: s.name.trim(), slug: slugify(s.name), price_modifier: Number(s.price_modifier || 0), description: s.description.trim() }));
-
-        if (colors.length > 0 && !cleanColors.length) {
-          setVariantError('Please fill in names for the added colors.');
+      // Build new variant_groups payload
+      const cleanGroups = variantGroups.filter(g => g.label.trim());
+      
+      // Validate each group has a label and at least one named option
+      for (const group of cleanGroups) {
+        if (!group.label.trim()) {
+          setVariantError('Each variant type must have a label (e.g. "Select Size").');
           setSubmitting(false);
           return;
         }
-        if (pots.length > 0 && !cleanPots.length) {
-          setVariantError('Please fill in names for the added pot types.');
-          setSubmitting(false);
-          return;
-        }
-        if (sizes.length > 0 && !cleanSizes.length) {
-          setVariantError('Please fill in names for the added sizes.');
-          setSubmitting(false);
-          return;
-        }
-
-        // Size-only mode: no colors/pots, just sizes
-        if (cleanSizes.length > 0 && !cleanColors.length && !cleanPots.length) {
-          variants = {
-            colors: [],
-            pot_types: [],
-            sizes: cleanSizes,
-            default_image: defaultImageKey,
-            image_map: {},
-            stock: Object.fromEntries(cleanSizes.map(s => [s.slug, Number(stockByKey[s.slug] || 0)])),
-          };
-        } else if (cleanColors.length && cleanPots.length) {
-          // Color + pot (+ optional size) combinations
-          let rowKeys: string[];
-          if (cleanSizes.length) {
-            rowKeys = cleanColors.flatMap(color =>
-              cleanPots.flatMap(pot =>
-                cleanSizes.map(size => `${color.slug}__${pot.slug}__${size.slug}`)
-              )
-            );
-          } else {
-            rowKeys = cleanColors.flatMap((color) => cleanPots.map((pot) => `${color.slug}__${pot.slug}`));
-          }
-          variants = {
-            colors: cleanColors,
-            pot_types: cleanPots,
-            ...(cleanSizes.length ? { sizes: cleanSizes } : {}),
-            default_image: defaultImageKey,
-            image_map: Object.fromEntries(rowKeys.map((key) => [key, imageKeysByCombo[key] || []])),
-            stock: Object.fromEntries(rowKeys.map((key) => [key, Number(stockByKey[key] || 0)])),
-          };
-        } else if (cleanColors.length || cleanPots.length) {
-          setVariantError('To create combinations, please specify both at least one Color and one Pot Type. Otherwise, configure them in basic info.');
+        const cleanOpts = group.options.filter(o => o.name.trim());
+        if (cleanOpts.length === 0) {
+          setVariantError(`Variant type "${group.label}" must have at least one option.`);
           setSubmitting(false);
           return;
         }
       }
 
-      const totalStock = variants
-        ? Object.values(variants.stock).reduce((sum, qty) => sum + Number(qty || 0), 0)
+      if (cleanGroups.length > 0 || defaultImageKey.trim()) {
+        // Build image_map: only include combos that actually have images
+        const imageMap: Record<string, string[]> = {};
+        Object.entries(comboImageKeys).forEach(([key, keys]) => {
+          if (keys.length > 0) imageMap[key] = keys;
+        });
+
+        variants = {
+          variant_groups: cleanGroups.map(group => ({
+            id: group.id,
+            label: group.label.trim(),
+            options: group.options
+              .filter(o => o.name.trim())
+              .map(o => ({
+                id: o.id,
+                name: o.name.trim(),
+                price: Number(o.price || 0),
+                stock: Number(o.stock || 0),
+                // Per-option images — used as colour fallback on product page
+                ...(o.image_keys.length ? { images: o.image_keys } : {}),
+                ...(o.color_hex.trim() ? { color_hex: o.color_hex.trim() } : {}),
+              })),
+          })),
+          ...(Object.keys(imageMap).length ? { image_map: imageMap } : {}),
+          default_image: defaultImageKey || undefined,
+        };
+      }
+
+      // Total stock: min over groups of (sum of option stocks in that group).
+      //
+      // Derived from the order decrement code in order_service.py:
+      //   buying (S, Red) decrements ONLY S.stock and ONLY Red.stock — Blue and M untouched.
+      //   Option stocks are independent shared marginals. Red's 3 units can be consumed by
+      //   (S,Red) or (M,Red) interchangeably — they share the same pool.
+      //
+      //   → A group's total capacity = sum of its options (mutually exclusive, non-overlapping).
+      //   → Binding constraint = the group with the smallest total capacity (min across groups).
+      //
+      // Worked example that distinguishes this from "min of per-group max":
+      //   sizes [S:5, M:5] + colours [Red:3, Blue:3]
+      //   Sellable: 3×(S,Red) + 3×(M,Blue) = 6 units.
+      //   min(sum(5,5), sum(3,3)) = min(10,6) = 6  ✓
+      //   min(max(5,5), max(3,3)) = 5  ✗  — understates by 1
+      //
+      // If no variants, fall through to the form field value.
+      const totalStock = variants?.variant_groups?.length
+        ? Math.min(
+            ...variants.variant_groups.map((g) =>
+              g.options.reduce((sum: number, o: any) => sum + Number(o.stock || 0), 0)
+            )
+          )
         : data.stock_qty;
 
-      const cleanCareItems = careItems
-        .map((c) => ({
-          icon: c.icon_key || null,
-          title: c.title.trim(),
-          description: c.description.trim(),
-        }))
-        .filter((c) => c.title || c.description || c.icon);
-
-      const invalidCareItem = cleanCareItems.find(
-        (c) =>
-          !c.title ||
-          !c.description,
-      );
-      if (invalidCareItem) {
-        toast.error('Please enter a title and description for each care tile.');
-        setSubmitting(false);
-        return;
-      }
-
-      const payload = {
+      type ProductPayload = {
+        name: string;
+        description: string;
+        price: number;
+        original_price: number | null;
+        stock_qty: number;
+        category_id: number;
+        badge: string | null;
+        how_to_guide: string | null;
+        tags: string[];
+        care_tips: string[];
+        variants?: ProductVariants;
+      };
+      const payload: ProductPayload = {
         name: data.name,
         description: data.description || '',
         price: data.price,
@@ -483,14 +494,13 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         stock_qty: totalStock,
         category_id: data.category_id,
         badge: data.badge || null,
-        sunlight: data.sunlight || null,
-        watering: data.watering || null,
-        care_items: cleanCareItems,
         how_to_guide: data.how_to_guide?.trim() || null,
         tags: data.tags?.map((t) => t.value).filter(Boolean) || [],
         care_tips: data.care_tips?.map((t) => t.value).filter(Boolean) || [],
-        variants,
       };
+      if (variants !== null) {
+        payload.variants = variants;
+      }
 
       if (editProduct) {
         // Upload any newly selected files first
@@ -510,6 +520,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         const updatePayload = {
           ...payload,
           images: finalImages,
+          promise_banner_image: promiseBannerKey || null,
+          why_plantoga_banner_image: whyPlantogaBannerKey || null,
+          care_card_image: careCardImageKey || null,
+          faqs: faqItems.filter(f => f.question.trim() && f.answer.trim()),
         };
         const { data: updatedProduct } = await api.put<Product>(`/products/${editProduct.id}`, updatePayload);
         toast.success('Product updated successfully!');
@@ -530,10 +544,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         // Still invalidate so stale data is refreshed in the background
         qc.invalidateQueries({ queryKey: ['products'] });
         qc.invalidateQueries({ queryKey: ['product', updatedProduct.slug] });
-        // Invalidate the raw admin cache so the next edit re-fetches fresh relative
-        // image keys from the DB. Without this, the 5-minute staleTime means the old
-        // (pre-save) image_map is used to seed imageKeysByCombo on re-open, making
-        // newly-saved variant combination images appear to disappear.
+        // Invalidate the raw admin cache so the next edit re-fetches fresh image keys.
         qc.invalidateQueries({ queryKey: ['product-raw', editProduct.id] });
       } else {
         // New creation uses FormData to support file uploads
@@ -547,11 +558,13 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         fd.append('tags', JSON.stringify(payload.tags));
         fd.append('care_tips', JSON.stringify(payload.care_tips));
         if (payload.badge) fd.append('badge', payload.badge);
-        if (payload.sunlight) fd.append('sunlight', payload.sunlight);
-        if (payload.watering) fd.append('watering', payload.watering);
-        if (payload.care_items?.length) fd.append('care_items', JSON.stringify(payload.care_items));
         if (payload.how_to_guide) fd.append('how_to_guide', payload.how_to_guide);
         if (payload.variants) fd.append('variants', JSON.stringify(payload.variants));
+        if (promiseBannerKey) fd.append('promise_banner_image', promiseBannerKey);
+        if (whyPlantogaBannerKey) fd.append('why_plantoga_banner_image', whyPlantogaBannerKey);
+        if (careCardImageKey) fd.append('care_card_image', careCardImageKey);
+        const cleanFaqs = faqItems.filter(f => f.question.trim() && f.answer.trim());
+        if (cleanFaqs.length) fd.append('faqs', JSON.stringify(cleanFaqs));
         fd.append('image_urls', JSON.stringify(productImages));
 
         // Add file uploads
@@ -574,46 +587,105 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   }
 
   const inputClass = "w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
-  
-  const activeColors = colors.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), slug: slugify(c.name) }));
-  const activePots = pots.filter(p => p.name.trim()).map(p => ({ name: p.name.trim(), slug: slugify(p.name) }));
-  const activeSizes = sizes.filter(s => s.name.trim()).map(s => ({ name: s.name.trim(), slug: slugify(s.name) }));
 
-  async function handleColorImageUpload(index: number, file?: File) {
+  // hasVariants: true if any groups exist or default image is set
+  const hasVariants = variantGroups.length > 0 || defaultImageKey.trim().length > 0;
+
+  async function handleOptionImageUpload(groupId: string, optionId: string, file?: File) {
     if (!file) return;
-    setUploadingColorImage(index);
+    setUploadingOptionImage(optionId);
     try {
       const squared = await cropToSquare(file);
       const fd = new FormData();
       fd.append('image', squared);
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/variant-image', fd);
-      setColors(current => current.map((color, i) => i === index ? { ...color, image_key: data.key, image_url: data.url } : color));
-      toast.success('Color image uploaded');
+      setVariantGroups(prev => prev.map(g =>
+        g.id !== groupId ? g : {
+          ...g,
+          options: g.options.map(o =>
+            o.id !== optionId ? o : {
+              ...o,
+              image_keys: [...o.image_keys, data.key],
+              image_urls: [...o.image_urls, data.url],
+            }
+          ),
+        }
+      ));
+      toast.success('Image uploaded');
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload color image');
+      toast.error(err.response?.data?.detail || 'Failed to upload image');
     } finally {
-      setUploadingColorImage(null);
+      setUploadingOptionImage(null);
     }
   }
 
-  async function handlePotImageUpload(index: number, file?: File) {
+  function handleRemoveOptionImage(groupId: string, optionId: string, index: number) {
+    setVariantGroups(prev => prev.map(g =>
+      g.id !== groupId ? g : {
+        ...g,
+        options: g.options.map(o =>
+          o.id !== optionId ? o : {
+            ...o,
+            image_keys: o.image_keys.filter((_, i) => i !== index),
+            image_urls: o.image_urls.filter((_, i) => i !== index),
+          }
+        ),
+      }
+    ));
+  }
+
+  // ─── Cartesian product helper ────────────────────────────────────────────
+  // Returns rows of { key: "optId1__optId2__...", label: "Name1 / Name2 / ..." }
+  // Only includes named, named options. Capped at COMBO_CAP rows.
+  const COMBO_CAP = 50;
+  function buildComboRows(groups: VariantGroupDraft[]): { key: string; label: string }[] {
+    const namedGroups = groups
+      .map(g => ({ ...g, options: g.options.filter(o => o.name.trim()) }))
+      .filter(g => g.label.trim() && g.options.length > 0);
+    if (namedGroups.length === 0) return [];
+    // Cartesian product
+    let rows: { key: string; label: string }[] = [{ key: '', label: '' }];
+    for (const group of namedGroups) {
+      const next: { key: string; label: string }[] = [];
+      for (const row of rows) {
+        for (const opt of group.options) {
+          next.push({
+            key: row.key ? `${row.key}__${opt.id}` : opt.id,
+            label: row.label ? `${row.label} / ${opt.name}` : opt.name,
+          });
+        }
+      }
+      rows = next;
+    }
+    return rows;
+  }
+
+  // ─── Combo image upload / remove ────────────────────────────────────────
+  async function handleComboImageUpload(comboKey: string, file?: File) {
     if (!file) return;
-    setUploadingPotImage(index);
+    const current = comboImageKeys[comboKey] || [];
+    if (current.length >= 8) { toast.error('Limit of 8 images per combination'); return; }
+    setUploadingComboKey(comboKey);
     try {
       const squared = await cropToSquare(file);
       const fd = new FormData();
       fd.append('image', squared);
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/variant-image', fd);
-      // key → stored in payload; url → display only
-      setPots(current => current.map((pot, i) => i === index ? { ...pot, image_key: data.key, image_url: data.url } : pot));
-      toast.success('Pot image uploaded');
+      setComboImageKeys(prev => ({ ...prev, [comboKey]: [...(prev[comboKey] || []), data.key] }));
+      setComboImageUrls(prev => ({ ...prev, [comboKey]: [...(prev[comboKey] || []), data.url] }));
+      toast.success('Combination image uploaded');
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload pot image');
+      toast.error(err.response?.data?.detail || 'Failed to upload combination image');
     } finally {
-      setUploadingPotImage(null);
+      setUploadingComboKey(null);
     }
+  }
+
+  function handleRemoveComboImage(comboKey: string, index: number) {
+    setComboImageKeys(prev => ({ ...prev, [comboKey]: (prev[comboKey] || []).filter((_, i) => i !== index) }));
+    setComboImageUrls(prev => ({ ...prev, [comboKey]: (prev[comboKey] || []).filter((_, i) => i !== index) }));
   }
 
   async function handleDefaultImageUpload(file?: File) {
@@ -636,116 +708,61 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     }
   }
 
-  async function handleCareIconUpload(index: number, file?: File) {
+  async function handlePromiseBannerUpload(file?: File) {
     if (!file) return;
-    setCareItems(prev => prev.map((c, i) => i === index ? { ...c, uploading: true } : c));
+    setUploadingPromiseBanner(true);
     try {
-      const squared = await cropToSquare(file);
       const fd = new FormData();
-      fd.append('image', squared);
-      if (editProduct?.id) fd.append('product_id', String(editProduct.id));
-      const { data } = await api.post<{ key: string; url: string }>('/products/variant-image', fd);
-      setCareItems(prev => prev.map((c, i) => i === index ? { ...c, icon_key: data.key, icon_url: data.url, uploading: false } : c));
-      toast.success('Care icon uploaded');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload care icon');
-      setCareItems(prev => prev.map((c, i) => i === index ? { ...c, uploading: false } : c));
-    }
-  }
-
-  async function handleComboImageUpload(comboKey: string, file?: File) {
-    if (!file) return;
-
-    const currentKeys = imageKeysByCombo[comboKey] || [];
-    if (currentKeys.length >= 8) {
-      toast.error('Limit of 8 images reached for this combination');
-      return;
-    }
-
-    setUploadingComboImage(comboKey);
-    try {
-      const squared = await cropToSquare(file);
-      const fd = new FormData();
-      fd.append('image', squared);
+      fd.append('image', file);
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/upload-image', fd);
-      // key → stored in payload; url → display only
-      setImageKeysByCombo(prev => ({
-        ...prev,
-        [comboKey]: [...(prev[comboKey] || []), data.key]
-      }));
-      setImageUrlsByCombo(prev => ({
-        ...prev,
-        [comboKey]: [...(prev[comboKey] || []), data.url]
-      }));
-      toast.success('Combination image uploaded');
+      setPromiseBannerKey(data.key);
+      setPromiseBannerUrl(data.url);
+      toast.success('Promise banner uploaded');
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload combination image');
+      toast.error(err.response?.data?.detail || 'Failed to upload banner image');
     } finally {
-      setUploadingComboImage(null);
+      setUploadingPromiseBanner(false);
     }
   }
 
-  function handleRemoveComboImage(comboKey: string, index: number) {
-    setImageKeysByCombo(prev => ({
-      ...prev,
-      [comboKey]: (prev[comboKey] || []).filter((_, i) => i !== index)
-    }));
-    setImageUrlsByCombo(prev => ({
-      ...prev,
-      [comboKey]: (prev[comboKey] || []).filter((_, i) => i !== index)
-    }));
-  }
-
-  function handleMoveComboImage(comboKey: string, index: number, direction: 'up' | 'down') {
-    const keys = [...(imageKeysByCombo[comboKey] || [])];
-    const urls = [...(imageUrlsByCombo[comboKey] || [])];
-    if (direction === 'up' && index > 0) {
-      const tempKey = keys[index];
-      keys[index] = keys[index - 1];
-      keys[index - 1] = tempKey;
-
-      const tempUrl = urls[index];
-      urls[index] = urls[index - 1];
-      urls[index - 1] = tempUrl;
-    } else if (direction === 'down' && index < keys.length - 1) {
-      const tempKey = keys[index];
-      keys[index] = keys[index + 1];
-      keys[index + 1] = tempKey;
-
-      const tempUrl = urls[index];
-      urls[index] = urls[index + 1];
-      urls[index + 1] = tempUrl;
+  async function handleWhyPlantogaBannerUpload(file?: File) {
+    if (!file) return;
+    setUploadingWhyPlantogaBanner(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      if (editProduct?.id) fd.append('product_id', String(editProduct.id));
+      const { data } = await api.post<{ key: string; url: string }>('/products/upload-image', fd);
+      setWhyPlantogaBannerKey(data.key);
+      setWhyPlantogaBannerUrl(data.url);
+      toast.success('Why Plantoga banner uploaded');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to upload banner image');
+    } finally {
+      setUploadingWhyPlantogaBanner(false);
     }
-
-    setImageKeysByCombo(prev => ({ ...prev, [comboKey]: keys }));
-    setImageUrlsByCombo(prev => ({ ...prev, [comboKey]: urls }));
-  }
-  
-  // Build variant rows for the stock/image matrix
-  let variantRows: { key: string; label: string }[] = [];
-  if (activeColors.length && activePots.length && activeSizes.length) {
-    // 3D: color + pot + size
-    variantRows = activeColors.flatMap(color =>
-      activePots.flatMap(pot =>
-        activeSizes.map(size => ({
-          key: `${color.slug}__${pot.slug}__${size.slug}`,
-          label: `${color.name} / ${pot.name} / ${size.name}`,
-        }))
-      )
-    );
-  } else if (activeColors.length && activePots.length) {
-    // 2D: color + pot
-    variantRows = activeColors.flatMap((color) => activePots.map((pot) => ({
-      key: `${color.slug}__${pot.slug}`,
-      label: `${color.name} / ${pot.name}`,
-    })));
-  } else if (activeSizes.length && !activeColors.length && !activePots.length) {
-    // Size-only
-    variantRows = activeSizes.map(size => ({ key: size.slug, label: size.name }));
   }
 
-  const hasVariants = colors.length > 0 || pots.length > 0 || sizes.length > 0 || defaultImageKey.trim().length > 0;
+  async function handleCareCardImageUpload(file?: File) {
+    if (!file) return;
+    setUploadingCareCardImage(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      if (editProduct?.id) fd.append('product_id', String(editProduct.id));
+      const { data } = await api.post<{ key: string; url: string }>('/products/upload-image', fd);
+      setCareCardImageKey(data.key);
+      setCareCardImageUrl(data.url);
+      toast.success('Care card image uploaded');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to upload care card image');
+    } finally {
+      setUploadingCareCardImage(false);
+    }
+  }
+
+  // ─── end of handlers ──────────────────────────────────────────────────────
 
   if (isEdit && (isLoadingProduct || !formInitialized)) {
     return (
@@ -833,7 +850,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     placeholder="Provide details about the plant, its beauty, growth habits, etc."
                     className={inputClass}
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">HTML/Markdown and paragraphs are supported.</p>
+                  <p className="text-[11px] text-gray-400 mt-1">Use blank lines for paragraphs and start lines with - for bullet points.</p>
                 </div>
               </div>
             )}
@@ -908,110 +925,34 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             </button>
             {openSections.details && (
               <div className="p-5 border-t border-gray-100 space-y-4 bg-white">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Sunlight Requirement</label>
-                    <input
-                      {...register('sunlight')}
-                      placeholder="e.g., Bright indirect light, partial shade"
-                      className={inputClass}
-                    />
-                    <p className="text-[11px] text-gray-400 mt-1">Where to place the plant for best health.</p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Watering Cycle</label>
-                    <input
-                      {...register('watering')}
-                      placeholder="e.g., Once a week, when soil is dry"
-                      className={inputClass}
-                    />
-                    <p className="text-[11px] text-gray-400 mt-1">How often the plant needs watering.</p>
-                  </div>
-                </div>
-
-                {/* Care items — repeatable list */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-700 block">🌿 Care Card Tiles</label>
-                      <p className="text-[11px] text-gray-400">Shown as a card on the product page. Add tiles like Light, Water, Soil, etc.</p>
+                {/* Care Card Image */}
+                <div className="border-t pt-4 space-y-2">
+                  <label className="text-xs font-semibold text-gray-700 block">Care Card Image</label>
+                  <p className="text-[10px] text-gray-400">Optional image displayed above the care card tiles.</p>
+                  <div className="flex gap-3 items-center">
+                    <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
+                      {careCardImageUrl
+                        ? <img src={careCardImageUrl} alt="Care card" className="h-full w-full object-cover" />
+                        : <ImageIcon size={22} className="text-gray-300" />}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setCareItems(prev => [...prev, { title: '', description: '', icon_key: '', icon_url: '', uploading: false }])}
-                      className="px-2.5 py-1 text-xs text-primary font-medium hover:bg-primary-light/10 border border-primary/20 rounded transition"
-                    >
-                      + Add Tile
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    {careItems.map((item, index) => (
-                      <div key={index} className="rounded-xl border border-gray-200 p-3 bg-gray-50/40 space-y-2">
-                        <div className="flex gap-2 items-start">
-                          {/* Icon preview + upload */}
-                          <div className="shrink-0 flex flex-col items-center gap-1">
-                            <label
-                              className={`group relative h-12 w-12 rounded-lg border border-gray-200 overflow-hidden bg-[#f5f5f0] flex items-center justify-center cursor-pointer transition hover:border-primary/50 hover:bg-primary-light/5 focus-within:ring-2 focus-within:ring-primary/20 ${item.uploading ? 'pointer-events-none opacity-80' : ''}`}
-                              title={item.icon_key ? 'Replace care icon' : 'Upload care icon'}
-                              aria-label={item.icon_key ? 'Replace care icon' : 'Upload care icon'}
-                            >
-                              {item.uploading ? (
-                                <Loader2 size={18} className="animate-spin text-primary" />
-                              ) : item.icon_url ? (
-                                <>
-                                  <img src={item.icon_url} alt="Care icon" className="h-12 w-12 rounded-lg object-contain" />
-                                  <span className="absolute inset-0 bg-black/35 text-white text-[9px] font-medium opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 flex items-center justify-center transition">
-                                    Change
-                                  </span>
-                                </>
-                              ) : (
-                                <div className="flex flex-col items-center gap-0.5 text-primary">
-                                  <Upload size={15} />
-                                  <span className="text-[9px] font-medium">Icon</span>
-                                </div>
-                              )}
-                              <input
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                className="sr-only"
-                                disabled={item.uploading}
-                                onChange={(e) => { void handleCareIconUpload(index, e.target.files?.[0]); e.target.value = ''; }}
-                              />
-                            </label>
-                            {item.icon_key && (
-                              <button type="button" onClick={() => setCareItems(prev => prev.map((c, i) => i === index ? { ...c, icon_key: '', icon_url: '' } : c))}
-                                className="text-[10px] text-red-500 hover:text-red-600">Remove</button>
-                            )}
-                            <span className="max-w-20 text-center text-[9px] leading-tight text-gray-400">Square icon recommended, e.g. 128x128px</span>
-                          </div>
-                          {/* Title + description */}
-                          <div className="flex-1 space-y-1.5">
-                            <input
-                              value={item.title}
-                              onChange={(e) => setCareItems(prev => prev.map((c, i) => i === index ? { ...c, title: e.target.value } : c))}
-                              placeholder="Title (e.g. Light, Water, Soil)"
-                              className={`${inputClass} bg-white`}
-                            />
-                            <input
-                              value={item.description}
-                              onChange={(e) => setCareItems(prev => prev.map((c, i) => i === index ? { ...c, description: e.target.value } : c))}
-                              placeholder="Description (e.g. Indirect light)"
-                              className={`${inputClass} bg-white`}
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCareItems(prev => prev.filter((_, i) => i !== index))}
-                            className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0 mt-0.5"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {careItems.length === 0 && (
-                      <p className="text-xs text-gray-400 italic text-center py-2">No care tiles added yet. Click "+ Add Tile" to add one.</p>
-                    )}
+                    <div className="flex-1">
+                      <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingCareCardImage ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <Upload size={14} />
+                        {uploadingCareCardImage ? 'Uploading…' : careCardImageKey ? 'Change image' : 'Upload image'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => { void handleCareCardImageUpload(e.target.files?.[0]); e.target.value = ''; }}
+                        />
+                      </label>
+                      {careCardImageKey && (
+                        <button type="button" onClick={() => { setCareCardImageKey(''); setCareCardImageUrl(''); }}
+                          className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium">
+                          Remove image
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -1024,7 +965,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary resize-y"
                   />
                   <p className="text-[11px] text-gray-400 mt-1">
-                    Shown as a green card on the product page. Leave blank to auto-build from sunlight, watering, and care tips.
+                    Shown as a green card on the product page. Leave blank to auto-build from care tips.
                   </p>
                 </div>
 
@@ -1156,11 +1097,137 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     <p className="text-xs text-gray-400 italic text-center py-4 border rounded-xl bg-gray-50/50 mt-4">No images added yet.</p>
                   )}
                 </div>
+
+                {/* Plantoga Promise Banner */}
+                <div className="border-t pt-4 space-y-2">
+                  <label className="text-xs font-semibold text-gray-700 block">Plantoga Promise Banner</label>
+                  <p className="text-[10px] text-gray-400">Replaces the four trust cards when set.</p>
+                  <div className="flex gap-3 items-center">
+                    <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
+                      {promiseBannerUrl
+                        ? <img src={promiseBannerUrl} alt="Promise banner" className="h-full w-full object-cover" />
+                        : <ImageIcon size={22} className="text-gray-300" />}
+                    </div>
+                    <div className="flex-1">
+                      <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingPromiseBanner ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <Upload size={14} />
+                        {uploadingPromiseBanner ? 'Uploading…' : promiseBannerKey ? 'Change banner' : 'Upload banner'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => { void handlePromiseBannerUpload(e.target.files?.[0]); e.target.value = ''; }}
+                        />
+                      </label>
+                      {promiseBannerKey && (
+                        <button type="button" onClick={() => { setPromiseBannerKey(''); setPromiseBannerUrl(''); }}
+                          className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium">
+                          Remove banner
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Why Plantoga Banner */}
+                <div className="border-t pt-4 space-y-2">
+                  <label className="text-xs font-semibold text-gray-700 block">Why Plantoga Banner</label>
+                  <p className="text-[10px] text-gray-400">Replaces the "Plantoga vs the rest" comparison table when set.</p>
+                  <div className="flex gap-3 items-center">
+                    <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
+                      {whyPlantogaBannerUrl
+                        ? <img src={whyPlantogaBannerUrl} alt="Why Plantoga banner" className="h-full w-full object-cover" />
+                        : <ImageIcon size={22} className="text-gray-300" />}
+                    </div>
+                    <div className="flex-1">
+                      <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingWhyPlantogaBanner ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <Upload size={14} />
+                        {uploadingWhyPlantogaBanner ? 'Uploading…' : whyPlantogaBannerKey ? 'Change banner' : 'Upload banner'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => { void handleWhyPlantogaBannerUpload(e.target.files?.[0]); e.target.value = ''; }}
+                        />
+                      </label>
+                      {whyPlantogaBannerKey && (
+                        <button type="button" onClick={() => { setWhyPlantogaBannerKey(''); setWhyPlantogaBannerUrl(''); }}
+                          className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium">
+                          Remove banner
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Section 5: Variants */}
+          {/* Section 5: FAQs */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleSection('faqs')}
+              className="w-full flex items-center justify-between px-5 py-4 font-semibold text-sm text-gray-800 hover:bg-gray-50 text-left"
+            >
+              <span className="flex items-center gap-2">❓ <span>FAQs</span></span>
+              {openSections.faqs ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {openSections.faqs && (
+              <div className="p-5 border-t border-gray-100 space-y-4 bg-white">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block">Product FAQs</label>
+                      <p className="text-[11px] text-gray-400">Questions & answers shown on the product page. Leave empty to show default FAQs.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFaqItems(prev => [...prev, { ...DEFAULT_FAQ }])}
+                      className="px-2.5 py-1 text-xs text-primary font-medium hover:bg-primary-light/10 border border-primary/20 rounded transition"
+                    >
+                      + Add FAQ
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {faqItems.map((item, index) => (
+                      <div key={index} className="rounded-xl border border-gray-200 p-3 bg-gray-50/40 space-y-2">
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 space-y-1.5">
+                            <input
+                              value={item.question}
+                              onChange={(e) => setFaqItems(prev => prev.map((f, i) => i === index ? { ...f, question: e.target.value } : f))}
+                              placeholder="Question (e.g. How do I care for my plant?)"
+                              className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                            <textarea
+                              value={item.answer}
+                              onChange={(e) => setFaqItems(prev => prev.map((f, i) => i === index ? { ...f, answer: e.target.value } : f))}
+                              placeholder="Answer"
+                              rows={2}
+                              className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary resize-y"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setFaqItems(prev => prev.filter((_, i) => i !== index))}
+                            className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0 mt-0.5"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {faqItems.length === 0 && (
+                      <p className="text-xs text-gray-400 italic text-center py-2">No FAQs added yet. Default FAQs will be shown on the product page.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 6: Variants */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <button
               type="button"
@@ -1173,7 +1240,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             {openSections.variants && (
               <div className="p-5 border-t border-gray-100 space-y-5 bg-white">
                 <div className="rounded-lg bg-green-50 border border-green-100 p-3 text-xs text-green-800 leading-relaxed">
-                  <strong>How variants work:</strong> Add different colors (e.g. Terracotta, Teal) and pot types (e.g. Ceramic, Plastic). The system automatically combines them so you can manage stock and custom images for each!
+                  <strong>How variants work:</strong> Click &ldquo;+ Add Variant Type&rdquo;, type a label (e.g. &ldquo;Select Size&rdquo;, &ldquo;Select Packet Size&rdquo;), then add options with name, price, and stock. Admin controls all labels — no category rules.
                 </div>
 
                 {variantError && (
@@ -1183,252 +1250,327 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                   </div>
                 )}
 
-                {/* Colors Setup */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-semibold text-gray-700 block">1. Color Variants</span>
-                      <span className="text-[10px] text-gray-400">Add the available pot/plant colors</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setColors(prev => [...prev, { name: '', hex: '#2D6A4F', image_key: '', image_url: '' }])}
-                      className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
-                    >
-                      + Add Color
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {colors.map((color, index) => (
-                      <div key={index} className="rounded-xl border border-gray-200 p-3 space-y-3 bg-gray-50/40">
-                        <div className="flex gap-2 items-center">
-                          <input
-                            value={color.name}
-                            onChange={(e) => { const v = e.target.value; setColors(prev => prev.map((c, i) => i === index ? { ...c, name: v } : c)); }}
-                            placeholder="Color Name (e.g., Terracotta)"
-                            className={`${inputClass} flex-1 bg-white`}
-                          />
-                          <input
-                            type="color"
-                            value={color.hex}
-                            onChange={(e) => { const v = e.target.value; setColors(prev => prev.map((c, i) => i === index ? { ...c, hex: v } : c)); }}
-                            className="h-9 w-9 border border-gray-200 rounded-lg cursor-pointer bg-transparent p-0 shrink-0"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setColors(prev => prev.filter((_, i) => i !== index))}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                        <div className="flex gap-3 items-center">
-                          <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
-                            {color.image_url ? (
-                              <img src={color.image_url} alt={`${color.name || 'Color'} preview`} className="h-full w-full object-contain" />
-                            ) : (
-                              <ImageIcon size={22} className="text-gray-300" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingColorImage === index ? 'opacity-60 pointer-events-none' : ''}`}>
-                              <Upload size={14} />
-                              {uploadingColorImage === index ? 'Uploading…' : color.image_key ? 'Change color image' : 'Upload color image'}
-                              <input
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                className="hidden"
-                                onChange={(e) => {
-                                  void handleColorImageUpload(index, e.target.files?.[0]);
-                                  e.target.value = '';
-                                }}
-                              />
-                            </label>
-                            {color.image_key && (
-                              <button
-                                type="button"
-                                onClick={() => setColors(prev => prev.map((c, i) => i === index ? { ...c, image_key: '', image_url: '' } : c))}
-                                className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium"
-                              >
-                                Remove image
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {colors.length === 0 && (
-                      <p className="text-xs text-gray-400 italic text-center py-1">No custom colors.</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Pot Types Setup */}
-                <div className="space-y-2 border-t pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-semibold text-gray-700 block">2. Pot Types</span>
-                      <span className="text-[10px] text-gray-400">Add each pot's name, price, and customer-facing image</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setPots(prev => [...prev, { name: '', price_modifier: 0, image_key: '', image_url: '' }])}
-                      className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
-                    >
-                      + Add Pot Option
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {pots.map((pot, index) => (
-                      <div key={index} className="rounded-xl border border-gray-200 p-3 space-y-3 bg-gray-50/40">
-                        <div className="flex gap-2 items-center">
-                          <input
-                            value={pot.name}
-                            onChange={(e) => { const v = e.target.value; setPots(prev => prev.map((p, i) => i === index ? { ...p, name: v } : p)); }}
-                            placeholder="Pot Type (e.g. Ceramic pot)"
-                            className={`${inputClass} flex-1 bg-white`}
-                          />
-                          <div className="flex items-center gap-1.5 shrink-0 w-32">
-                            <span className="text-xs text-gray-500">₹</span>
-                            <input
-                              type="number"
-                              value={pot.price_modifier}
-                              onChange={(e) => { const v = Number(e.target.value); setPots(prev => prev.map((p, i) => i === index ? { ...p, price_modifier: v } : p)); }}
-                              placeholder="Price +/-"
-                              className={`${inputClass} bg-white`}
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setPots(prev => prev.filter((_, i) => i !== index))}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
-                            aria-label={`Remove ${pot.name || 'pot'} option`}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                        <div className="flex gap-3 items-center">
-                          <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
-                            {pot.image_url ? (
-                              <img src={pot.image_url} alt={`${pot.name || 'Pot'} preview`} className="h-full w-full object-contain" />
-                            ) : (
-                              <ImageIcon size={22} className="text-gray-300" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingPotImage === index ? 'opacity-60 pointer-events-none' : ''}`}>
-                              <Upload size={14} />
-                              {uploadingPotImage === index ? 'Uploading…' : pot.image_key ? 'Change pot image' : 'Upload pot image'}
-                              <input
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                className="hidden"
-                                onChange={(e) => {
-                                  void handlePotImageUpload(index, e.target.files?.[0]);
-                                  e.target.value = '';
-                                }}
-                              />
-                            </label>
-                            {pot.image_key && (
-                              <button
-                                type="button"
-                                onClick={() => setPots(prev => prev.map((p, i) => i === index ? { ...p, image_key: '', image_url: '' } : p))}
-                                className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium"
-                              >
-                                Remove image
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {pots.length === 0 && (
-                      <p className="text-xs text-gray-400 italic text-center py-1">No custom pots.</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Plant Sizes Setup */}
-                <div className="space-y-2 border-t pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-semibold text-gray-700 block">3. Plant Sizes</span>
-                      <span className="text-[10px] text-gray-400">Add size options (Small, Medium, Large) with optional price difference</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSizes(prev => [...prev, { name: '', price_modifier: 0, description: '' }])}
-                      className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
-                    >
-                      + Add Size
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {sizes.map((size, index) => (
-                      <div key={index} className="flex gap-2 items-center">
-                        <select
-                          value={size.name}
-                          onChange={(e) => { const v = e.target.value; setSizes(prev => prev.map((s, i) => i === index ? { ...s, name: v } : s)); }}
-                          className={`${inputClass} flex-1`}
-                        >
-                          <option value="">Select Size</option>
-                          <option value="Small">Small</option>
-                          <option value="Medium">Medium</option>
-                          <option value="Large">Large</option>
-                          <option value="Extra Large">Extra Large</option>
-                        </select>
+                {/* Dynamic Variant Groups */}
+                <div className="space-y-3">
+                  {variantGroups.map((group) => (
+                    <div key={group.id} className="rounded-xl border border-gray-200 bg-gray-50/40 overflow-hidden">
+                      {/* Group header: label + remove */}
+                      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
                         <input
-                          value={size.description}
-                          onChange={(e) => { const v = e.target.value; setSizes(prev => prev.map((s, i) => i === index ? { ...s, description: v } : s)); }}
-                          placeholder="Hint (e.g. 6–12 in)"
-                          className={`${inputClass} w-40`}
+                          value={group.label}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setVariantGroups(prev => prev.map(g => g.id === group.id ? { ...g, label: v } : g));
+                          }}
+                          placeholder='Variant label shown to customer (e.g. "Select Size", "Select Packet Size", "Select Colour")'
+                          className={`${inputClass} flex-1 bg-white font-medium`}
                         />
-                        <div className="flex items-center gap-1.5 shrink-0 w-28">
-                          <span className="text-xs text-gray-500">₹</span>
-                          <input
-                            type="number"
-                            value={size.price_modifier}
-                            onChange={(e) => { const v = Number(e.target.value); setSizes(prev => prev.map((s, i) => i === index ? { ...s, price_modifier: v } : s)); }}
-                            placeholder="+Price"
-                            className={inputClass}
-                          />
-                        </div>
                         <button
                           type="button"
-                          onClick={() => setSizes(prev => prev.filter((_, i) => i !== index))}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
+                          onClick={() => setVariantGroups(prev => prev.filter(g => g.id !== group.id))}
+                          className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0"
+                          aria-label="Remove variant type"
                         >
                           <Trash2 size={15} />
                         </button>
                       </div>
-                    ))}
-                    {sizes.length === 0 && (
-                      <p className="text-xs text-gray-400 italic text-center py-1">No size options. Add sizes like Small, Medium, Large.</p>
-                    )}
-                  </div>
-                  {sizes.length > 0 && !colors.length && !pots.length && (
-                    <p className="text-[10px] text-blue-600 bg-blue-50 rounded-lg px-3 py-1.5">
-                      💡 Size-only mode: Stock will be tracked per size (no color/pot needed).
-                    </p>
-                  )}
-                  {sizes.length > 0 && colors.length > 0 && pots.length > 0 && (
-                    <p className="text-[10px] text-amber-700 bg-amber-50 rounded-lg px-3 py-1.5">
-                      ⚠️ 3D mode: Stock will be tracked per Color × Pot × Size combination.
-                    </p>
-                  )}
+
+                      {/* Options */}
+                      <div className="px-3 pb-3 space-y-2">
+                        {group.options.map((opt) => {
+                          const isColourGroup = /colou?r/i.test(group.label);
+                          return (
+                          <div key={opt.id} className="rounded-lg border border-gray-200 bg-white p-2.5 space-y-2">
+                            {/* Row 1: image/color + name + remove */}
+                            <div className="flex gap-2 items-center">
+                              {isColourGroup ? (
+                                /* Color swatch picker */
+                                <label
+                                  className="relative h-10 w-10 rounded-full border-2 border-gray-300 overflow-hidden shrink-0 cursor-pointer hover:border-primary/60 transition shadow-sm"
+                                  title={opt.color_hex ? `Colour: ${opt.color_hex}` : 'Click to pick a colour'}
+                                  style={{ backgroundColor: opt.color_hex || '#e5e7eb' }}
+                                >
+                                  <input
+                                    type="color"
+                                    value={opt.color_hex || '#000000'}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                        ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, color_hex: v }),
+                                      }));
+                                    }}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  />
+                                </label>
+                              ) : (
+                                /* Clickable image thumbnail / upload trigger — shows first image */
+                                <label
+                                  className={`relative h-10 w-10 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 shrink-0 flex items-center justify-center cursor-pointer hover:border-primary/60 transition group ${uploadingOptionImage === opt.id ? 'opacity-60 pointer-events-none' : ''}`}
+                                  title={opt.image_urls[0] ? 'Add more images below' : 'Upload image'}
+                                >
+                                  {uploadingOptionImage === opt.id ? (
+                                    <Loader2 size={14} className="animate-spin text-primary" />
+                                  ) : opt.image_urls[0] ? (
+                                    <>
+                                      <img src={opt.image_urls[0]} alt={opt.name || 'option'} className="h-full w-full object-cover" />
+                                      <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center">{opt.image_urls.length}</span>
+                                    </>
+                                  ) : (
+                                    <div className="flex flex-col items-center gap-0.5 text-primary/60">
+                                      <Upload size={13} />
+                                      <span className="text-[8px] font-medium leading-none">Image</span>
+                                    </div>
+                                  )}
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    className="hidden"
+                                    onChange={(e) => { void handleOptionImageUpload(group.id, opt.id, e.target.files?.[0]); e.target.value = ''; }}
+                                  />
+                                </label>
+                              )}
+
+                              {/* Name */}
+                              <div className="flex-1 flex flex-col gap-1">
+                                <input
+                                  value={opt.name}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                      ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, name: v }),
+                                    }));
+                                  }}
+                                  placeholder={isColourGroup ? 'Colour name (e.g. "Forest Green")' : 'Name (e.g. "4 Inch", "100 gm")'}
+                                  className={`${inputClass} flex-1`}
+                                />
+                                {isColourGroup && (
+                                  <span className="text-[10px] text-gray-400 pl-1">
+                                    {opt.color_hex ? opt.color_hex : 'Click the circle to pick a colour'}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Remove option */}
+                              <button
+                                type="button"
+                                onClick={() => setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                  ...g, options: g.options.filter(o => o.id !== opt.id),
+                                }))}
+                                disabled={group.options.length <= 1}
+                                className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0 disabled:opacity-30"
+                                aria-label="Remove option"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+
+                            {/* Row 2: price + stock + (colour: image upload) */}
+                            <div className="flex gap-2 items-center flex-wrap pl-12">
+                              {/* Price */}
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="text-xs text-gray-500">₹</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={opt.price}
+                                  onChange={(e) => {
+                                    const v = Number(e.target.value);
+                                    setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                      ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, price: v }),
+                                    }));
+                                  }}
+                                  placeholder="Price"
+                                  className="w-24 px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                />
+                              </div>
+                              {/* Stock */}
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="text-xs text-gray-500">Qty</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={opt.stock}
+                                  onChange={(e) => {
+                                    const v = Number(e.target.value);
+                                    setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                      ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, stock: v }),
+                                    }));
+                                  }}
+                                  placeholder="Stock"
+                                  className="w-20 px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                />
+                              </div>
+
+                              {/* Colour variants: quick add-photo button (full management in table below) */}
+                              {isColourGroup && (
+                                <label
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-gray-50 text-[11px] font-medium text-primary cursor-pointer hover:bg-green-50 shrink-0 ${uploadingOptionImage === opt.id ? 'opacity-60 pointer-events-none' : ''}`}
+                                  title="Upload colour photo"
+                                >
+                                  {uploadingOptionImage === opt.id
+                                    ? <Loader2 size={12} className="animate-spin" />
+                                    : opt.image_urls[0]
+                                    ? <img src={opt.image_urls[0]} alt="" className="h-4 w-4 rounded object-cover" />
+                                    : <Upload size={12} />}
+                                  <span>{opt.image_urls.length > 0 ? `${opt.image_urls.length} photo${opt.image_urls.length > 1 ? 's' : ''}` : 'Add photo'}</span>
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    className="hidden"
+                                    onChange={(e) => { void handleOptionImageUpload(group.id, opt.id, e.target.files?.[0]); e.target.value = ''; }}
+                                  />
+                                </label>
+                              )}
+                            </div>
+                          </div>
+                        );
+                        })}
+
+                        {/* Add Option */}
+                        <button
+                          type="button"
+                          onClick={() => setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                            ...g, options: [...g.options, emptyOption()],
+                          }))}
+                          className="w-full py-1.5 border border-dashed border-primary/30 rounded-lg text-xs text-primary font-medium hover:bg-green-50/50 hover:border-primary/50 transition"
+                        >
+                          + Add Option
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+
+                {/* Add Variant Type */}
+                <button
+                  type="button"
+                  onClick={() => setVariantGroups(prev => [...prev, emptyGroup()])}
+                  className="w-full py-2.5 border-2 border-dashed border-primary/25 rounded-xl text-sm font-semibold text-primary hover:bg-green-50/50 hover:border-primary/50 transition flex items-center justify-center gap-2"
+                >
+                  <Plus size={15} />
+                  Add Variant Type
+                </button>
+
+                {/* ── Variant Combinations Image Table ────────────────────────────── */}
+                {(() => {
+                  const comboRows = buildComboRows(variantGroups);
+                  if (comboRows.length === 0) return null;
+                  const overCap = comboRows.length > COMBO_CAP;
+                  const visibleRows = overCap ? comboRows.slice(0, COMBO_CAP) : comboRows;
+                  const hasAnyComboImage = Object.values(comboImageUrls).some(a => a.length > 0);
+                  return (
+                    <div className="border-t pt-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-semibold text-gray-700 block">Variant Combinations &amp; Images</span>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            Upload a photo for each combination — shown in the gallery when that exact combo is selected.
+                            Combinations without a photo fall back to the colour option's image, then the default image.
+                          </p>
+                        </div>
+                        {hasAnyComboImage && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!confirm('Clear all combination images?')) return;
+                              setComboImageKeys({});
+                              setComboImageUrls({});
+                            }}
+                            className="text-xs text-red-500 hover:text-red-600 font-medium border border-red-200 px-2 py-1 rounded hover:bg-red-50 transition shrink-0"
+                          >
+                            Clear all combo images
+                          </button>
+                        )}
+                      </div>
+
+                      {overCap && (
+                        <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 flex gap-2 items-start text-xs text-amber-800">
+                          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                          <span>
+                            {comboRows.length} combinations total — showing first {COMBO_CAP}. Reduce options or groups to see all combinations.
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="overflow-x-auto border rounded-lg bg-gray-50/50">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-gray-100 text-gray-600 border-b">
+                            <tr>
+                              <th className="p-3 font-medium">Combination</th>
+                              <th className="p-3 font-medium">
+                                Images
+                                <span className="font-normal text-gray-400 ml-1">(optional — falls back to colour / default image)</span>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {visibleRows.map((row) => {
+                              const imgs = comboImageUrls[row.key] || [];
+                              const keys = comboImageKeys[row.key] || [];
+                              return (
+                                <tr key={row.key} className="border-b last:border-0 bg-white">
+                                  <td className="p-3 font-semibold text-gray-800 whitespace-nowrap align-top pt-4">
+                                    {row.label}
+                                  </td>
+                                  <td className="p-3">
+                                    <div className="flex flex-col gap-2">
+                                      {imgs.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {imgs.map((url, idx) => (
+                                            <div key={idx} className="relative group h-12 w-12 rounded border overflow-hidden bg-gray-50 shrink-0">
+                                              <img src={url} alt="" className="h-full w-full object-cover" />
+                                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleRemoveComboImage(row.key, idx)}
+                                                  className="p-0.5 text-red-400 hover:text-red-300 bg-black/40 rounded text-[9px] leading-none"
+                                                  title="Remove"
+                                                >✕</button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                      {imgs.length === 0 && (
+                                        <p className="text-[10px] text-gray-400 italic">No image — will use fallback</p>
+                                      )}
+                                      {keys.length < 8 && (
+                                        <label
+                                          className={`inline-flex items-center gap-1 px-2 py-1 rounded border bg-white text-[11px] font-medium text-primary cursor-pointer hover:bg-green-50 self-start transition ${uploadingComboKey === row.key ? 'opacity-60 pointer-events-none' : ''}`}
+                                        >
+                                          {uploadingComboKey === row.key
+                                            ? <Loader2 size={10} className="animate-spin" />
+                                            : <Upload size={10} />}
+                                          {uploadingComboKey === row.key ? 'Uploading…' : 'Add Image'}
+                                          <input
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp"
+                                            className="hidden"
+                                            onChange={(e) => { void handleComboImageUpload(row.key, e.target.files?.[0]); e.target.value = ''; }}
+                                          />
+                                        </label>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Default Fallback Image */}
                 <div className="border-t pt-4 space-y-2">
-                  <label className="text-xs font-semibold text-gray-700 block">4. Default Variant Image</label>
-                  <p className="text-[10px] text-gray-400">This image is loaded if a specific combination lacks its own image.</p>
+                  <label className="text-xs font-semibold text-gray-700 block">Default Variant Image</label>
+                  <p className="text-[10px] text-gray-400">Fallback shown if a selected option has no image of its own.</p>
                   <div className="flex gap-3 items-center">
                     <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
-                      {defaultImageUrl ? (
-                        <img src={defaultImageUrl} alt="Default variant preview" className="h-full w-full object-cover" />
-                      ) : (
-                        <ImageIcon size={22} className="text-gray-300" />
-                      )}
+                      {defaultImageUrl
+                        ? <img src={defaultImageUrl} alt="Default" className="h-full w-full object-cover" />
+                        : <ImageIcon size={22} className="text-gray-300" />}
                     </div>
                     <div className="flex-1">
                       <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingDefaultImage ? 'opacity-60 pointer-events-none' : ''}`}>
@@ -1438,136 +1580,23 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                           type="file"
                           accept="image/jpeg,image/png,image/webp"
                           className="hidden"
-                          onChange={(e) => {
-                            void handleDefaultImageUpload(e.target.files?.[0]);
-                            e.target.value = '';
-                          }}
+                          onChange={(e) => { void handleDefaultImageUpload(e.target.files?.[0]); e.target.value = ''; }}
                         />
                       </label>
                       {defaultImageKey && (
-                        <button
-                          type="button"
-                          onClick={() => { setDefaultImageKey(''); setDefaultImageUrl(''); }}
-                          className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium"
-                        >
+                        <button type="button" onClick={() => { setDefaultImageKey(''); setDefaultImageUrl(''); }}
+                          className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium">
                           Remove image
                         </button>
                       )}
                     </div>
                   </div>
                 </div>
-
-                {/* Combinations Matrix */}
-                {variantRows.length > 0 && (
-                  <div className="border-t pt-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-gray-700 block">4. Variant Combinations stock & images</span>
-                      {Object.values(imageKeysByCombo).some(arr => arr.length > 0) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!confirm('Clear all combination images? The product gallery images will show instead.')) return;
-                            setImageKeysByCombo({});
-                            setImageUrlsByCombo({});
-                          }}
-                          className="text-xs text-red-500 hover:text-red-600 font-medium border border-red-200 px-2 py-1 rounded hover:bg-red-50 transition"
-                        >
-                          Clear all combo images
-                        </button>
-                      )}
-                    </div>
-                    <div className="overflow-x-auto border rounded-lg bg-gray-50/50">
-                      <table className="w-full text-xs text-left">
-                        <thead className="bg-gray-100 text-gray-600 border-b">
-                          <tr>
-                            <th className="p-3 font-medium">Combination</th>
-                            <th className="p-3 font-medium w-28">Stock Qty</th>
-                            <th className="p-3 font-medium">Images <span className="font-normal text-gray-400">(optional — product gallery used if empty)</span></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {variantRows.map((row) => (
-                            <tr key={row.key} className="border-b last:border-0 bg-white">
-                              <td className="p-3 font-semibold text-gray-800">{row.label}</td>
-                              <td className="p-3">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={stockByKey[row.key] ?? 0}
-                                  onChange={(e) => setStockByKey({ ...stockByKey, [row.key]: Number(e.target.value) })}
-                                  className="w-full px-2 py-1.5 border rounded-lg text-xs"
-                                />
-                              </td>
-                              <td className="p-3">
-                                <div className="flex flex-col gap-2">
-                                  <div className="flex flex-wrap gap-1.5 max-w-sm">
-                                    {(imageUrlsByCombo[row.key] || []).map((url, idx) => (
-                                      <div key={idx} className="relative group h-12 w-12 rounded border overflow-hidden bg-gray-50 shrink-0 flex items-center justify-center">
-                                        <img src={url} alt="" className="h-full w-full object-cover" />
-                                        
-                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
-                                          {idx > 0 && (
-                                            <button
-                                              type="button"
-                                              onClick={() => handleMoveComboImage(row.key, idx, 'up')}
-                                              className="p-0.5 text-white hover:text-gray-250 bg-black/40 rounded text-[9px] leading-none"
-                                              title="Move left"
-                                            >
-                                              ←
-                                            </button>
-                                          )}
-                                          {idx < (imageUrlsByCombo[row.key] || []).length - 1 && (
-                                            <button
-                                              type="button"
-                                              onClick={() => handleMoveComboImage(row.key, idx, 'down')}
-                                              className="p-0.5 text-white hover:text-gray-250 bg-black/40 rounded text-[9px] leading-none"
-                                              title="Move right"
-                                            >
-                                              →
-                                            </button>
-                                          )}
-                                          <button
-                                            type="button"
-                                            onClick={() => handleRemoveComboImage(row.key, idx)}
-                                            className="p-0.5 text-red-400 hover:text-red-350 bg-black/40 rounded text-[9px] leading-none"
-                                            title="Delete image"
-                                          >
-                                            ✕
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  
-                                  {(!imageKeysByCombo[row.key] || imageKeysByCombo[row.key].length < 8) && (
-                                    <label className={`inline-flex items-center gap-1 px-2 py-1 rounded border bg-white text-[11px] font-medium text-primary cursor-pointer hover:bg-green-50 self-start ${uploadingComboImage === row.key ? 'opacity-60 pointer-events-none' : ''}`}>
-                                      <Upload size={10} />
-                                      {uploadingComboImage === row.key ? 'Uploading…' : 'Add Image'}
-                                      <input
-                                        type="file"
-                                        accept="image/jpeg,image/png,image/webp"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                          void handleComboImageUpload(row.key, e.target.files?.[0]);
-                                          e.target.value = '';
-                                        }}
-                                      />
-                                    </label>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>
 
-          {/* Section 6: SEO & Visibility */}
+          {/* Section 7: SEO & Visibility */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <button
               type="button"
@@ -1633,20 +1662,18 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           <button
             type="button"
             onClick={handleSubmit(onSubmit)}
-            disabled={submitting || uploadingColorImage !== null || uploadingPotImage !== null || uploadingDefaultImage || uploadingComboImage !== null || careItems.some(c => c.uploading)}
+            disabled={!formReady || submitting || uploadingOptionImage !== null || uploadingDefaultImage || uploadingComboKey !== null}
             className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 transition"
           >
-            {uploadingColorImage !== null
-              ? 'Uploading Color Image...'
-              : uploadingPotImage !== null
-              ? 'Uploading Pot Image...'
+            {!formReady
+              ? (!formInitialized ? 'Loading...' : 'Loading image keys...')
+              : uploadingOptionImage !== null
+              ? 'Uploading Image...'
               : uploadingDefaultImage
-                ? 'Uploading Default Image...'
-                : uploadingComboImage !== null
-                  ? 'Uploading Combo Image...'
-                  : submitting
-                    ? 'Saving Product...'
-                    : (isEdit ? 'Save Changes' : 'Publish Product')}
+              ? 'Uploading Default Image...'
+              : submitting
+              ? 'Saving Product...'
+              : (isEdit ? 'Save Changes' : 'Publish Product')}
           </button>
         </div>
 

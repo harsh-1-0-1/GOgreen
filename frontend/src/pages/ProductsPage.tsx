@@ -120,9 +120,6 @@ function TrendingPromoBanner({
                 className="absolute inset-0 h-full w-full object-cover"
                 loading={slideIndex === 0 ? 'eager' : 'lazy'}
               />
-              <div className="absolute inset-0 bg-gradient-to-br from-black/45 via-black/10 to-transparent" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
-
               {sideImages.map((src, index) => (
                 <img
                   key={`${src}-${index}`}
@@ -140,20 +137,8 @@ function TrendingPromoBanner({
                 />
               ))}
 
-              <div className="absolute left-6 top-8 max-w-[62%] sm:left-10 sm:top-10 lg:left-12 lg:top-12">
-                <p
-                  className="text-[clamp(2rem,10vw,4.75rem)] font-extrabold leading-[0.98] drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]"
-                  style={{ color: slide.text_color || '#ffeb3b' }}
-                >
-                  {slide.title}
-                </p>
-              </div>
-
               {slide.subtitle && (
                 <div className="absolute right-7 top-10 grid h-24 w-24 rotate-[-10deg] place-items-center rounded-full bg-[#ffeb3b] text-center text-primary shadow-lg [clip-path:polygon(50%_0%,59%_12%,73%_6%,78%_21%,94%_22%,88%_38%,100%_50%,88%_62%,94%_78%,78%_79%,73%_94%,59%_88%,50%_100%,41%_88%,27%_94%,22%_79%,6%_78%,12%_62%,0%_50%,12%_38%,6%_22%,22%_21%,27%_6%,41%_12%)] sm:right-12 sm:top-12 sm:h-32 sm:w-32">
-                  <span className="rotate-[10deg] px-3 text-lg font-bold leading-tight sm:text-2xl">
-                    {slide.subtitle}
-                  </span>
                 </div>
               )}
 

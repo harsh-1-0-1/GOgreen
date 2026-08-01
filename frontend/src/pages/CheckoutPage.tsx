@@ -5,11 +5,12 @@ import { BadgePercent, Banknote, ChevronDown, ChevronUp, CreditCard, LockKeyhole
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { clearDirectCheckoutSession, readDirectCheckoutSession } from '@/lib/directCheckout';
-import type { CheckoutResponse, ProductVariantColor, ProductVariantPotType, ProductVariantSize } from '@/types';
+import type { CheckoutResponse } from '@/types';
 import { useCreateAddress } from '@/hooks/useAddresses';
 import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 import { LOGO_PATH } from '@/lib/branding';
+import { formatSelectedOptions } from '@/lib/variantDisplay';
 
 declare global {
   interface Window {
@@ -54,17 +55,14 @@ function inputClass(hasError?: boolean) {
 
 function optionSummary(item: CheckoutItem) {
   if (!item.selected_options) return null;
-  const color = item.product.variants?.colors?.find((c: ProductVariantColor) => c.slug === item.selected_options?.color)?.name || item.selected_options.color;
-  const pot = item.product.variants?.pot_types?.find((p: ProductVariantPotType) => p.slug === item.selected_options?.pot_type)?.name || item.selected_options.pot_type;
-  const size = item.product.variants?.sizes?.find((s: ProductVariantSize) => s.slug === item.selected_options?.size)?.name || item.selected_options.size;
-  return [color && `Color: ${color}`, pot && `Pot: ${pot}`, size && `Size: ${size}`].filter(Boolean).join(' · ');
+  return formatSelectedOptions(item.selected_options, item.product.variants) || null;
 }
 
 type CheckoutItem = {
   id?: number;
   product_id: number;
   quantity: number;
-  selected_options: Record<string, string> | null;
+  selected_options: import('@/types').SelectedOptions;
   product: any;
   unit_price: number;
   line_total: number;

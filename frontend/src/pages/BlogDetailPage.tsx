@@ -65,7 +65,6 @@ export default function BlogDetailPage() {
           alt={post.title}
           className="w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
       </div>
 
       <div className="max-w-3xl mx-auto px-3 sm:px-4 -mt-16 relative z-10">

@@ -51,7 +51,6 @@ export default function Navbar() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [hidden, setHidden] = useState(false);
@@ -68,12 +67,11 @@ export default function Navbar() {
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const debouncedQuery = useDebounce(searchQuery, 300);
-  const isHome = location.pathname === '/';
   const isProductPage = /^\/products\/[^/]+/.test(location.pathname);
 
-  // Close mobile search when leaving a product page
+  // Close search when leaving a product page
   useEffect(() => {
-    if (!isProductPage) setMobileSearchOpen(false);
+    if (!isProductPage) setSearchOpen(false);
   }, [isProductPage]);
   const { data: mobilePromoBanners = [] } = useBanners('mobile_promo');
   const { data: menuBanners = [] } = useBanners('menu_banner');
@@ -106,9 +104,9 @@ export default function Navbar() {
         else if (diff < -10) setHidden(false); // scroll up → show top navbar
       }
 
-      // Hide mobile search bar on any scroll
+      // Hide search bar on any scroll
       if (Math.abs(currentScrollY - lastScrollY.current) > 5) {
-        setMobileSearchOpen(false);
+        setSearchOpen(false);
       }
 
       lastScrollY.current = currentScrollY;
@@ -117,7 +115,7 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Click-outside to close search suggestions
+  // Click-outside to close search bar & suggestions
   useEffect(() => {
     function onPointerDown(e: PointerEvent) {
       if (
@@ -125,6 +123,7 @@ export default function Navbar() {
         !searchContainerRef.current.contains(e.target as Node)
       ) {
         setSearchFocused(false);
+        setSearchOpen(false);
       }
     }
     document.addEventListener('pointerdown', onPointerDown);
@@ -303,75 +302,6 @@ export default function Navbar() {
           />
         </Link>
 
-        {/* Desktop Search â€” centered, wide pill with embedded button */}
-        <div
-          ref={searchContainerRef}
-          className="hidden lg:block flex-1 min-w-0 max-w-4xl mx-auto relative"
-        >
-          <form onSubmit={handleSearch}>
-            <div className="relative flex items-center">
-              <input
-                type="text"
-                placeholder="Search plants, seeds, pots & more..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    setSearchFocused(false);
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-                className="w-full pl-5 pr-14 py-3 text-sm border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-primary focus:bg-white transition-all duration-200 placeholder:text-gray-400 text-gray-800"
-              />
-              <button
-                type="submit"
-                className="absolute right-1.5 h-8 w-8 bg-primary hover:bg-primary/90 text-white rounded-full flex items-center justify-center transition-colors shadow-sm"
-                aria-label="Search"
-              >
-                <Search size={15} />
-              </button>
-            </div>
-          </form>
-
-          {/* Suggestions dropdown */}
-          {showSuggestions && (
-            <div className="absolute top-full mt-2 left-0 right-0 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-dropdown">
-              {suggestions!.map((product) => (
-                <Link
-                  key={product.id}
-                  to={`/products/${product.slug}`}
-                  onClick={() => {
-                    setSearchFocused(false);
-                    setSearchQuery('');
-                  }}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
-                >
-                  <img
-                    src={product.images?.[0] || 'https://placehold.co/40x40?text=ðŸŒ±'}
-                    alt=""
-                    className="w-10 h-10 rounded-xl object-cover shrink-0 bg-gray-100"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
-                    <p className="text-xs text-primary font-semibold mt-0.5">â‚¹{product.price}</p>
-                  </div>
-                </Link>
-              ))}
-              <Link
-                to={`/products?search=${encodeURIComponent(debouncedQuery)}`}
-                onClick={() => {
-                  setSearchFocused(false);
-                  setSearchQuery('');
-                }}
-                className="flex items-center justify-center gap-2 px-4 py-3 text-sm text-primary font-semibold hover:bg-primary/5 transition-colors"
-              >
-                <Search size={14} /> View all results for &ldquo;{debouncedQuery}&rdquo;
-              </Link>
-            </div>
-          )}
-        </div>
-
         <div className="flex items-center gap-1 ml-auto shrink-0">
 
 
@@ -443,27 +373,25 @@ export default function Navbar() {
             </button>
           )}
 
-          {/* Search icon — mobile product pages only */}
-          {isProductPage && (
-            <button
-              className="lg:hidden flex items-center justify-center w-10 h-10 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
-              onClick={() => {
-                setMobileSearchOpen((prev) => {
-                  const next = !prev;
-                  if (next) {
-                    // Focus the input after state update + DOM paint
-                    setTimeout(() => {
-                      document.querySelector<HTMLInputElement>('.mobile-search-input')?.focus();
-                    }, 50);
-                  }
-                  return next;
-                });
-              }}
-              aria-label="Search"
-            >
-              <Search size={21} />
-            </button>
-          )}
+          {/* Search icon — opens the search bar on all breakpoints */}
+          <button
+            className="flex items-center justify-center w-10 h-10 lg:w-11 lg:h-11 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
+            onClick={() => {
+              setSearchOpen((prev) => {
+                const next = !prev;
+                if (next) {
+                  // Focus the input after state update + DOM paint
+                  setTimeout(() => {
+                    document.querySelector<HTMLInputElement>('.mobile-search-input')?.focus();
+                  }, 50);
+                }
+                return next;
+              });
+            }}
+            aria-label="Search"
+          >
+            <Search size={21} />
+          </button>
 
           {/* Cart â€” visible on all breakpoints */}
           <button
@@ -581,25 +509,74 @@ export default function Navbar() {
       </nav>
 
       {/* ================================================================ */}
-      {/* Mobile search bar                                                */}
-      {/* Visible when product images move downward                        */}
+      {/* Search bar — shown only when the search icon is clicked           */}
       {/* ================================================================ */}
-      <div className={`${isProductPage ? (mobileSearchOpen ? 'block' : 'hidden') : 'lg:hidden'} bg-white px-4 py-3 border-t border-gray-100`}>
+      <div
+        ref={searchContainerRef}
+        className={`${searchOpen ? 'block' : 'hidden'} bg-white px-4 py-3 border-t border-gray-100 relative`}
+      >
+        <div className="mx-auto max-w-4xl">
           <form onSubmit={handleSearch}>
             <div className="relative flex items-center">
               <Search size={16} className="absolute left-4 text-gray-400 pointer-events-none" />
               <input
                 type="text"
-                autoFocus={!isHome}
                 placeholder="Search for plants, seeds, pots..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="mobile-search-input w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-secondary text-sm transition-all placeholder:text-gray-400"
+                onFocus={() => setSearchFocused(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setSearchOpen(false);
+                    setSearchFocused(false);
+                  }
+                }}
+                className="mobile-search-input w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:border-primary focus:bg-white text-sm transition-all placeholder:text-gray-400"
               />
               <button type="submit" className="sr-only">Search</button>
             </div>
           </form>
+
+          {/* Suggestions dropdown */}
+          {showSuggestions && (
+            <div className="absolute top-full mt-2 left-4 right-4 sm:left-6 sm:right-6 lg:left-10 lg:right-10 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-dropdown">
+              {suggestions!.map((product) => (
+                <Link
+                  key={product.id}
+                  to={`/products/${product.slug}`}
+                  onClick={() => {
+                    setSearchOpen(false);
+                    setSearchFocused(false);
+                    setSearchQuery('');
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                >
+                  <img
+                    src={product.images?.[0] || 'https://placehold.co/40x40?text=🌱'}
+                    alt=""
+                    className="w-10 h-10 rounded-xl object-cover shrink-0 bg-gray-100"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
+                    <p className="text-xs text-primary font-semibold mt-0.5">₹{product.price}</p>
+                  </div>
+                </Link>
+              ))}
+              <Link
+                to={`/products?search=${encodeURIComponent(debouncedQuery)}`}
+                onClick={() => {
+                  setSearchOpen(false);
+                  setSearchFocused(false);
+                  setSearchQuery('');
+                }}
+                className="flex items-center justify-center gap-2 px-4 py-3 text-sm text-primary font-semibold hover:bg-primary/5 transition-colors"
+              >
+                <Search size={14} /> View all results for &ldquo;{debouncedQuery}&rdquo;
+              </Link>
+            </div>
+          )}
         </div>
+      </div>
 
       {/* ================================================================ */}
       {/* Mobile drawer (Sidebar)                                          */}

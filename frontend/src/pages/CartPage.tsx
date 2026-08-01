@@ -4,16 +4,11 @@ import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import { useAuthStore } from '@/store/authStore';
 import RecommendationBar from '@/components/cart/RecommendationBar';
+import { formatSelectedOptions } from '@/lib/variantDisplay';
 
 function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
   if (!item.selected_options) return null;
-  const color = item.product.variants?.colors?.find((c) => c.slug === item.selected_options?.color)?.name
-    || item.selected_options.color;
-  const pot = item.product.variants?.pot_types?.find((p) => p.slug === item.selected_options?.pot_type)?.name
-    || item.selected_options.pot_type;
-  const size = item.product.variants?.sizes?.find((s) => s.slug === item.selected_options?.size)?.name
-    || item.selected_options.size;
-  return [color && `Color: ${color}`, pot && `Pot: ${pot}`, size && `Size: ${size}`].filter(Boolean).join(' · ');
+  return formatSelectedOptions(item.selected_options, item.product.variants) || null;
 }
 
 export default function CartPage() {

@@ -21,7 +21,7 @@ import { useBanners } from '@/hooks/useBanners';
 import { STORE_LEGAL } from '@/lib/branding';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
-import type { Category } from '@/types';
+import type { Banner, Category } from '@/types';
 import { useStories } from '@/hooks/useStories';
 import { StoriesCarousel } from '@/components/stories/StoriesCarousel';
 
@@ -41,6 +41,136 @@ function findCategoryName(categories: Category[] | undefined, categoryId: number
   };
 
   return (search(categories) || 'Plants').toUpperCase();
+}
+
+function findCategoryTrail(categories: Category[] | undefined, categoryId: number): Category[] {
+  if (!categories?.length) return [];
+
+  const search = (list: Category[], trail: Category[]): Category[] | null => {
+    for (const cat of list) {
+      const nextTrail = [...trail, cat];
+      if (cat.id === categoryId) return nextTrail;
+      if (cat.children?.length) {
+        const match = search(cat.children, nextTrail);
+        if (match) return match;
+      }
+    }
+    return null;
+  };
+
+  return search(categories, []) ?? [];
+}
+
+function normalizeBannerTarget(value: string | number | null | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+/, '')
+    .replace(/^products\?category=/, '')
+    .replace(/^products\//, '')
+    .replace(/^category\//, '')
+    .replace(/^(product_detail|category|type):/, '')
+    .replace(/\s+/g, '-');
+}
+
+function selectProductTypeBanner(
+  banners: Banner[],
+  categories: Category[] | undefined,
+  categoryId: number,
+): Banner | null {
+  if (!banners.length) return null;
+
+  const trail = findCategoryTrail(categories, categoryId);
+  const currentCategory = trail.at(-1);
+  const rootCategory = trail[0];
+  const currentTargets = currentCategory
+    ? [
+        normalizeBannerTarget(currentCategory.id),
+        normalizeBannerTarget(currentCategory.slug),
+        normalizeBannerTarget(currentCategory.name),
+      ]
+    : [];
+  const rootTargets = rootCategory
+    ? [
+        normalizeBannerTarget(rootCategory.id),
+        normalizeBannerTarget(rootCategory.slug),
+        normalizeBannerTarget(rootCategory.name),
+      ]
+    : [];
+
+  const findByTargets = (targets: string[]) =>
+    banners.find((banner) => targets.includes(normalizeBannerTarget(banner.target_path)));
+
+  return (
+    findByTargets(currentTargets) ||
+    findByTargets(rootTargets) ||
+    banners.find((banner) => {
+      const target = normalizeBannerTarget(banner.target_path);
+      return !target || target === '*';
+    }) ||
+    null
+  );
+}
+
+function ProductDescription({ description }: { description: string | null }) {
+  if (!description?.trim()) return null;
+
+  const blocks: Array<{ type: 'paragraph'; text: string } | { type: 'list'; items: string[] }> = [];
+  let paragraphLines: string[] = [];
+  let bulletItems: string[] = [];
+
+  const flushParagraph = () => {
+    if (!paragraphLines.length) return;
+    blocks.push({ type: 'paragraph', text: paragraphLines.join(' ') });
+    paragraphLines = [];
+  };
+
+  const flushList = () => {
+    if (!bulletItems.length) return;
+    blocks.push({ type: 'list', items: bulletItems });
+    bulletItems = [];
+  };
+
+  description.split(/\r?\n/).forEach((rawLine) => {
+    const line = rawLine.trim();
+    const bulletMatch = line.match(/^(?:[-*•])\s+(.+)$/);
+
+    if (!line) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+
+    if (bulletMatch) {
+      flushParagraph();
+      bulletItems.push(bulletMatch[1].trim());
+      return;
+    }
+
+    flushList();
+    paragraphLines.push(line);
+  });
+
+  flushParagraph();
+  flushList();
+
+  return (
+    <div className="space-y-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+      {blocks.map((block, index) => {
+        if (block.type === 'list') {
+          return (
+            <ul key={index} className="list-disc pl-5 space-y-1 marker:text-primary">
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>{item}</li>
+              ))}
+            </ul>
+          );
+        }
+
+        return <p key={index}>{block.text}</p>;
+      })}
+    </div>
+  );
 }
 
 function MobileGallery({
@@ -317,40 +447,37 @@ function CareTips({ tips }: { tips: string[] }) {
   );
 }
 
-import type { Banner } from '@/types';
-
-function InlineBanner({ banner: b, fallbackImg, hasCta }: {
+function InlineBanner({ banner: b, fallbackImg, hasCta, naturalSize = false }: {
   banner: Banner;
   fallbackImg: string;
   hasCta: boolean;
+  naturalSize?: boolean;
 }) {
   return (
     <div
       className="mt-10 sm:mt-14 rounded-2xl overflow-hidden relative"
       style={{ backgroundColor: b.bg_color || '#1B4332' }}
     >
-      <img src={fallbackImg} alt={b.title} className="w-full h-[280px] sm:h-[350px] object-cover" loading="lazy" />
-      <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent flex items-center px-6 sm:px-10 gap-4">
-        <div className="flex-1 min-w-0">
-          <p
-            className="text-lg sm:text-2xl font-bold leading-tight line-clamp-2"
-            style={{ color: b.text_color || '#ffffff' }}
-          >
-            {b.title}
-          </p>
-          {b.subtitle && (
-            <p className="text-white/80 text-xs sm:text-sm mt-1 line-clamp-1">{b.subtitle}</p>
-          )}
-        </div>
-        {hasCta && b.cta_link && (
+      <img
+        src={fallbackImg}
+        alt=""
+        className={
+          naturalSize
+            ? 'block mx-auto max-w-full h-auto'
+            : 'block w-full aspect-square object-cover'
+        }
+        loading="lazy"
+      />
+      {hasCta && b.cta_link && (
+        <div className="absolute bottom-4 right-4 sm:bottom-5 sm:right-6 z-10">
           <a
             href={b.cta_link}
-            className="shrink-0 px-4 py-2 rounded-full text-xs sm:text-sm font-semibold bg-white text-gray-900 hover:bg-gray-100 transition whitespace-nowrap"
+            className="inline-flex items-center justify-center px-4 py-2 rounded-full text-xs sm:text-sm font-semibold bg-white text-gray-900 hover:bg-gray-100 transition whitespace-nowrap shadow-md"
           >
             {b.cta_text}
           </a>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -363,9 +490,8 @@ export default function ProductDetailPage() {
   const { user, openAuthModal } = useAuthStore();
   const navigate = useNavigate();
   const [qty, setQty] = useState(1);
-  const [selectedColor, setSelectedColor] = useState<string | null>(null);
-  const [selectedPot, setSelectedPot] = useState<string | null>(null);
-  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  // New: selectedOptions maps groupId → optionId for the new flexible variant system
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [galleryActive, setGalleryActive] = useState(0);
 
   const galleryRef = useRef<HTMLDivElement>(null);
@@ -381,59 +507,28 @@ export default function ProductDetailPage() {
     isInitialized.current = false;
   }, [slug]);
 
+  // Auto-select first in-stock option for each group when product loads
   useEffect(() => {
     if (!product) return;
-
-    const colors = product.variants?.colors || [];
-    const pots = product.variants?.pot_types || [];
-    const sizes = product.variants?.sizes || [];
-
-    const hasColors = colors.length > 0;
-    const hasPots = pots.length > 0;
-    const hasSizes = sizes.length > 0;
-
-    const colorOk = !hasColors || selectedColor !== null;
-    const potOk = !hasPots || selectedPot !== null;
-    const sizeOk = !hasSizes || selectedSize !== null;
-
-    if (colorOk && potOk && sizeOk) {
-      if (!isInitialized.current) {
-        isInitialized.current = true;
-      } else {
-        galleryRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }
-    }
-  }, [selectedColor, selectedPot, selectedSize, product]);
-
-  // Reset gallery to slide 0 whenever the variant selection changes.
-  // Deps are the raw state values (not the derived comboKey) so this hook
-  // can live unconditionally above the early returns — comboKey only changes
-  // when one of these three values changes, so behaviour is identical.
-  useEffect(() => { setGalleryActive(0); }, [selectedColor, selectedPot, selectedSize]);
-
-  useEffect(() => {
-    if (!product) return;
-    if (!product.variants) {
-      setSelectedColor(null);
-      setSelectedPot(null);
-      setSelectedSize(null);
+    const groups = (product.variants as any)?.variant_groups;
+    if (!Array.isArray(groups) || groups.length === 0) {
+      setSelectedOptions({});
       setQty(1);
       return;
     }
-    const colors = product.variants.colors || [];
-    const pots = product.variants.pot_types || [];
-    const sizes = product.variants.sizes || [];
-    const firstInStockKey = Object.entries(product.variants.stock || {})
-      .find(([, stock]) => Number(stock) > 0)?.[0];
-    const inStockParts = firstInStockKey?.split('__') || [];
-    setSelectedColor(colors.length ? (inStockParts[0] || colors[0].slug) : null);
-    // Default to the first actual pot type when pot types are available
-    setSelectedPot(pots.length ? (inStockParts[1] || pots[0].slug) : null);
-    setSelectedSize(sizes.length
-      ? (colors.length && pots.length ? inStockParts[2] : inStockParts[0]) || sizes[0].slug
-      : null);
+    const defaults: Record<string, string> = {};
+    for (const group of groups) {
+      // Pick first option that has stock > 0, fallback to first option
+      const firstInStock = group.options?.find((o: any) => Number(o.stock ?? 0) > 0);
+      const firstOption = firstInStock || group.options?.[0];
+      if (firstOption) defaults[group.id] = firstOption.id;
+    }
+    setSelectedOptions(defaults);
     setQty(1);
   }, [product]);
+
+  // Reset gallery when selection changes
+  useEffect(() => { setGalleryActive(0); }, [selectedOptions]);
 
   if (isLoading) return <Spinner className="py-32" />;
   if (isError || !product) {
@@ -445,71 +540,128 @@ export default function ProductDetailPage() {
     );
   }
 
-  const variants = product.variants;
-  const sizes = variants?.sizes || [];
-  const hasColorPotVariants = Boolean(variants?.colors?.length && variants?.pot_types?.length);
-  const isSizeOnly = Boolean(sizes.length && !variants?.colors?.length && !variants?.pot_types?.length);
-  const hasVariants = hasColorPotVariants || isSizeOnly;
+  const variantGroups = (product.variants as any)?.variant_groups ?? [];
+  const hasGroups = variantGroups.length > 0;
 
-  // Build combo key depending on variant mode
-  let comboKey = '';
-  if (hasColorPotVariants && sizes.length) {
-    if (selectedColor && selectedPot && selectedSize) comboKey = `${selectedColor}__${selectedPot}__${selectedSize}`;
-  } else if (hasColorPotVariants) {
-    if (selectedColor && selectedPot) comboKey = `${selectedColor}__${selectedPot}`;
-  } else if (isSizeOnly) {
-    if (selectedSize) comboKey = selectedSize;
+  // Build option lookup: optionId → option data
+  const optionById: Record<string, any> = {};
+  for (const group of variantGroups) {
+    for (const opt of group.options ?? []) {
+      optionById[opt.id] = opt;
+    }
   }
 
-  const selectedColorType = variants?.colors?.find((c) => c.slug === selectedColor);
-  const selectedPotType = variants?.pot_types?.find((p) => p.slug === selectedPot);
-  const selectedSizeType = sizes.find((s) => s.slug === selectedSize);
-  const selectedStock = hasVariants ? Number(variants?.stock?.[comboKey] ?? 0) : product.stock_qty;
-  const selectedPriceModifier =
-    (selectedPotType?.price_modifier || 0) + (selectedSizeType?.price_modifier || 0);
-  const displayPrice = product.price + selectedPriceModifier;
-  const displayOriginalPrice = product.original_price
-    ? product.original_price + selectedPriceModifier
+  // Price: sum of selected option prices (absolute, not deltas over product.price).
+  // Falls back to product.price only when no group has a selection yet — which can
+  // happen briefly on first render before the auto-select effect fires, or if all
+  // groups are optional and nothing has been picked.
+  // NOTE: do NOT use `> 0` as the guard — a legitimately free option (price=0) would
+  // incorrectly fall through to product.price.
+  const hasAnySelection = Object.keys(selectedOptions).length > 0;
+  const selectedOptionsPrice = Object.values(selectedOptions).reduce((sum, optId) => {
+    return sum + Number(optionById[optId]?.price ?? 0);
+  }, 0);
+  const displayPrice = hasGroups && hasAnySelection ? selectedOptionsPrice : product.price;
+  const basePrice = Number(product.price ?? 0);
+  const baseOriginalPrice = Number(product.original_price ?? 0);
+  const scaledVariantOriginalPrice = hasGroups && basePrice > 0 && baseOriginalPrice > basePrice
+    ? Math.round(displayPrice * (baseOriginalPrice / basePrice))
     : null;
-  const discount =
-    displayOriginalPrice && displayOriginalPrice > displayPrice
-      ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
+  const displayOriginalPrice = baseOriginalPrice > displayPrice
+    ? baseOriginalPrice
+    : scaledVariantOriginalPrice && scaledVariantOriginalPrice > displayPrice
+      ? scaledVariantOriginalPrice
       : null;
-  // Derive gallery images.
-  // If the selected combo has dedicated image(s), show them first so the
-  // relevant pot/colour is immediately visible, then append the rest of
-  // product.images (deduped) so the full gallery is always accessible.
-  // If no combo image exists, show product.images as-is.
-  const comboImages = variants?.image_map?.[comboKey];
+  const discount = displayOriginalPrice && displayOriginalPrice > displayPrice
+    ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
+    : null;
+
+  // Stock: minimum stock across all selected options (per-option stock model)
+  const selectedStock = hasGroups
+    ? Object.values(selectedOptions).reduce((min, optId) => {
+        const stock = Number(optionById[optId]?.stock ?? 0);
+        return Math.min(min, stock);
+      }, Infinity) as number
+    : product.stock_qty;
+  const effectiveStock = isFinite(selectedStock) ? selectedStock : product.stock_qty;
+
+  // Image swapping — mirrors old image_map[comboKey] system, adapted for new opt-ID keys.
+  //
+  // Priority chain:
+  //   1. image_map[optId1__optId2__...] — exact combo match (set in admin combinations table)
+  //   2. Colour option's per-option images — fallback when only colour distinguishes the photo
+  //   3. default_image — catch-all variant fallback
+  //   4. product.images — plain product gallery
+  //
+  // Combo key = selected optionIds joined by '__' in variant_group order.
+  // Only generated when ALL groups have a selection — prevents partial keys (e.g. "opt1")
+  // from incorrectly matching image_map entries meant for full combinations ("opt1__opt2").
+  const allGroupsHaveSelection = variantGroups.every((g: any) => selectedOptions[g.id]);
+  const comboKey = allGroupsHaveSelection
+    ? variantGroups
+        .map((g: any) => selectedOptions[g.id])
+        .filter(Boolean)
+        .join('__')
+    : '';
+
+  const imageMap: Record<string, string[]> = (product.variants as any)?.image_map ?? {};
+  const comboImages: string[] = (imageMap[comboKey] ?? []).filter(Boolean);
+
+  // Colour fallback: images on any selected option that belongs to a colour group
+  const colourFallbackImages: string[] = variantGroups
+    .filter((g: any) => /colou?r/i.test(g.label))
+    .flatMap((g: any) => {
+      const optId = selectedOptions[g.id];
+      return optId ? (optionById[optId]?.images ?? []).filter(Boolean) : [];
+    });
+
+  const defaultVariantImage: string = (product.variants as any)?.default_image ?? '';
+
   let galleryImages: string[];
-  if (Array.isArray(comboImages) && comboImages.length > 0) {
+  if (comboImages.length > 0) {
+    // Combo image(s) first, rest of product gallery appended (deduped)
     galleryImages = [
       ...comboImages,
-      ...(product.images || []).filter((img) => !comboImages.includes(img)),
+      ...(product.images ?? []).filter((img) => !comboImages.includes(img)),
     ];
+  } else if (colourFallbackImages.length > 0) {
+    galleryImages = [
+      ...colourFallbackImages,
+      ...(product.images ?? []).filter((img) => !colourFallbackImages.includes(img)),
+    ];
+  } else if (defaultVariantImage) {
+    galleryImages = [defaultVariantImage, ...(product.images ?? [])];
   } else {
-    galleryImages = product.images || [];
+    galleryImages = product.images ?? [];
   }
 
-  const displayImage = galleryImages[0] || product.images?.[0] || '';
+  // Disable Add to Cart: (Task 5) ONLY disabled if has groups AND not all required groups selected
+  // Zero groups = simple product = always enabled
+  const allGroupsSelected = hasGroups
+    ? variantGroups.every((g: any) => {
+        const isRequired = g.required !== false; // default true
+        return !isRequired || selectedOptions[g.id];
+      })
+    : true;
+  const isUnavailable = (hasGroups && !allGroupsSelected) || effectiveStock <= 0;
 
-  // Build selectedOptions for cart
-  let selectedOptions: Record<string, string> | null = null;
-  if (hasColorPotVariants && selectedColor && selectedPot) {
-    selectedOptions = { color: selectedColor, pot_type: selectedPot };
-    if (sizes.length && selectedSize) selectedOptions.size = selectedSize;
-  } else if (isSizeOnly && selectedSize) {
-    selectedOptions = { size: selectedSize };
+  // Cart options: flat array of selected option IDs (Task 6)
+  const cartSelectedOptions: string[] = Object.values(selectedOptions);
+
+  function selectOption(groupId: string, optionId: string) {
+    setSelectedOptions((prev) => ({ ...prev, [groupId]: optionId }));
+    setQty(1);
+    // On mobile the gallery sits above the variant selector and scrolls out of view.
+    // Scroll back to the top of the page (galleryRef) so the image update is visible.
+    // Skip on md+ breakpoints where the gallery is always in the left column.
+    if (window.innerWidth < 768) {
+      galleryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
-
-  const selectionIncomplete =
-    (hasColorPotVariants && (!selectedColor || !selectedPot || (sizes.length > 0 && !selectedSize)))
-    || (isSizeOnly && !selectedSize);
-  const isUnavailable = selectionIncomplete || selectedStock <= 0;
 
   async function handleAddToCart() {
     try {
-      await addItem(product!.id, qty, product!, selectedOptions);
+      await addItem(product!.id, qty, product!, cartSelectedOptions.length ? cartSelectedOptions : null);
       toast.success(`${product!.name} added to cart`);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to add');
@@ -518,7 +670,7 @@ export default function ProductDetailPage() {
 
   async function handleBuyNow() {
     try {
-      await addItem(product!.id, 1, product!, selectedOptions);
+      await addItem(product!.id, 1, product!, cartSelectedOptions.length ? cartSelectedOptions : null);
       useCartStore.getState().closeDrawer();
       navigate('/cart');
     } catch (err: any) {
@@ -527,6 +679,8 @@ export default function ProductDetailPage() {
   }
 
   const similarProducts = similar?.items.filter((p) => p.id !== product.id).slice(0, 4) ?? [];
+  const productDetailBanner = selectProductTypeBanner(productDetailBanners, categories, product.category_id);
+  const productSpecBanner = selectProductTypeBanner(productSpecBanners, categories, product.category_id);
   const mrp = displayOriginalPrice ?? displayPrice;
   const productSpecs = [
     { label: 'Name', value: product.name },
@@ -538,16 +692,18 @@ export default function ProductDetailPage() {
     { label: 'Manufactured by', value: STORE_LEGAL.manufacturedBy },
   ];
 
-  // Shared renderer for product-page inline banners (spec + faq placements).
-  // Returns null when no active banner exists so the space collapses cleanly.
-  function renderInlineBanner(banners: typeof productDetailBanners, fallbackImg: string) {
-    if (!banners.length) return null;
-    const b = banners[0];
-    const img = b.image_url || fallbackImg;
-    const hasCta = b.cta_text && b.cta_link;
-    return (
-      <InlineBanner banner={b} fallbackImg={img} hasCta={!!hasCta} />
-    );
+  function renderInlineBannerItem(banner: Banner | null, fallbackImg: string) {
+    if (!banner) return null;
+    const img = banner.image_url || fallbackImg;
+    const hasCta = banner.cta_text && banner.cta_link;
+    return <InlineBanner banner={banner} fallbackImg={img} hasCta={!!hasCta} />;
+  }
+
+  function renderFaqBannerItem(banner: Banner | null, fallbackImg: string) {
+    if (!banner) return null;
+    const img = banner.image_url || fallbackImg;
+    const hasCta = banner.cta_text && banner.cta_link;
+    return <InlineBanner banner={banner} fallbackImg={img} hasCta={!!hasCta} naturalSize />;
   }
 
   return (
@@ -594,7 +750,7 @@ export default function ProductDetailPage() {
               <span className="text-2xl sm:text-3xl font-bold text-primary">₹{displayPrice}</span>
               {displayOriginalPrice && displayOriginalPrice > displayPrice && (
                 <>
-                  <span className="text-base sm:text-lg text-gray-400 line-through">₹{displayOriginalPrice}</span>
+                  <span className="text-base sm:text-lg text-red-500 line-through">₹{displayOriginalPrice}</span>
                   <span className="text-xs sm:text-sm font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded">
                     {discount}% OFF
                   </span>
@@ -602,142 +758,154 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {selectedStock > 0 ? (
+            {effectiveStock > 0 ? (
               <p className="text-sm text-green-600 font-medium">
-                In Stock {selectedStock <= 5 && `(Only ${selectedStock} left)`}
+                In Stock {effectiveStock <= 5 && `(Only ${effectiveStock} left)`}
               </p>
             ) : (
               <p className="text-sm text-red-500 font-medium">Out of Stock</p>
             )}
 
-            {hasVariants && variants && (
+            {/* Flexible Variant Picker — smart rendering per group type */}
+            {hasGroups && (
               <div className="space-y-4">
-                {/* Plant Size Selector */}
-                {sizes.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        Select Plant Size
-                        {selectedSizeType?.description && (
-                          <span className="ml-2 text-primary normal-case font-normal">— {selectedSizeType.description}</span>
-                        )}
+                {variantGroups.map((group: any) => {
+                  const isColourGroup = /colou?r/i.test(group.label);
+                  const hasOptionImages = (group.options ?? []).some((o: any) => o.images?.[0]);
+                  // Render mode: colour → circular swatches; has images → image cards; else → pill chips
+                  const renderMode: 'colour' | 'image-card' | 'pill' =
+                    isColourGroup ? 'colour' : hasOptionImages ? 'image-card' : 'pill';
+
+                  return (
+                    <div key={group.id}>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                        {group.label}
                       </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {sizes.map((size) => {
-                        const sizeCombo = isSizeOnly
-                          ? size.slug
-                          : (selectedColor && selectedPot ? `${selectedColor}__${selectedPot}__${size.slug}` : '');
-                        const stockForSize = sizeCombo ? Number(variants?.stock?.[sizeCombo] ?? 0) : 0;
-                        const disabled = isSizeOnly
-                          ? stockForSize <= 0
-                          : (selectedColor && selectedPot ? stockForSize <= 0 : false);
-                        const isActive = selectedSize === size.slug;
-                        return (
-                          <button
-                            key={size.slug}
-                            type="button"
-                            disabled={disabled}
-                            onClick={() => {
-                              setSelectedSize(size.slug);
-                              setQty(1);
-                            }}
-                            className={`px-5 py-2 rounded-full border-2 text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed ${
-                              isActive
-                                ? 'bg-primary border-primary text-white shadow-sm'
-                                : 'border-gray-300 text-gray-700 hover:border-primary hover:text-primary bg-white'
-                            }`}
-                          >
-                            {size.name}
-                            {size.price_modifier > 0 && (
-                              <span className={`ml-1 text-xs ${isActive ? 'text-white/80' : 'text-gray-400'}`}>
-                                +₹{size.price_modifier}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
 
-                {/* Color Selector */}
-                {hasColorPotVariants && (
-                  <>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Color</p>
-                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                        {variants!.colors.map((color) => {
-                          const colorCombo = selectedPot
-                            ? `${color.slug}__${selectedPot}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`
-                            : '';
-                          const disabled = colorCombo ? Number(variants?.stock?.[colorCombo] ?? 0) <= 0 : false;
-                          return (
-                            <button
-                              key={color.slug}
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => {
-                                setSelectedColor(color.slug);
-                                setGalleryActive(0);
-                                setQty(1);
-                              }}
-                              className={`w-9 h-9 rounded-full border-2 transition disabled:opacity-30 disabled:cursor-not-allowed ${
-                                selectedColor === color.slug ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200'
-                              }`}
-                              title={color.name}
-                              aria-label={color.name}
-                              style={{ backgroundColor: color.hex }}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
+                      {/* ── Colour swatches ─────────────────────────────── */}
+                      {renderMode === 'colour' && (
+                        <div className="flex flex-wrap gap-2.5">
+                          {(group.options ?? []).map((opt: any) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            const outOfStock = Number(opt.stock ?? 0) <= 0;
+                            // hex is the source of truth for the swatch fill — same as old color.hex system
+                            const hex: string = opt.color_hex || '';
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                disabled={outOfStock}
+                                onClick={() => selectOption(group.id, opt.id)}
+                                title={opt.name}
+                                aria-label={opt.name}
+                                className={`relative h-9 w-9 rounded-full border-2 transition focus:outline-none
+                                  ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200 hover:border-primary/40'}
+                                  ${outOfStock ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
+                                `}
+                                style={{ backgroundColor: hex || '#e5e7eb' }}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
 
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pot Type</p>
-                      <div className="flex flex-wrap gap-2">
-                        {variants!.pot_types.map((pot) => {
-                          const potCombo = selectedColor
-                            ? `${selectedColor}__${pot.slug}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`
-                            : '';
-                          const disabled = potCombo ? Number(variants?.stock?.[potCombo] ?? 0) <= 0 : false;
-                          return (
-                            <button
-                              key={pot.slug}
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => {
-                                setSelectedPot(pot.slug);
-                                setQty(1);
-                              }}
-                              className={`w-24 min-h-24 shrink-0 px-2 py-2 rounded-xl border text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${
-                                selectedPot === pot.slug ? 'border-primary bg-primary text-white shadow-sm' : 'border-gray-200 bg-white hover:border-primary/40'
-                              }`}
-                            >
-                              <span className="flex h-11 items-center justify-center mb-1">
-                                {pot.image_url ? (
-                                  <img src={pot.image_url} alt="" className="h-11 w-14 object-contain" loading="lazy" />
-                                ) : (
-                                  <span className={`text-2xl ${selectedPot === pot.slug ? 'text-white/70' : 'text-gray-300'}`}>♧</span>
+                      {/* ── Image cards (pot type, style, etc.) ─────────── */}
+                      {renderMode === 'image-card' && (
+                        <div className="flex flex-wrap gap-2">
+                          {(group.options ?? []).map((opt: any) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            const outOfStock = Number(opt.stock ?? 0) <= 0;
+                            const priceDelta = Number(opt.price ?? 0);
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                disabled={outOfStock}
+                                onClick={() => selectOption(group.id, opt.id)}
+                                className={`relative flex flex-col items-center rounded-xl border-2 p-2 w-[88px] transition focus:outline-none
+                                  ${isSelected
+                                    ? 'border-primary bg-primary/5 shadow-sm'
+                                    : outOfStock
+                                      ? 'border-gray-200 opacity-50 cursor-not-allowed'
+                                      : 'border-gray-200 hover:border-primary/60 bg-white cursor-pointer'
+                                  }`}
+                              >
+                                <div className="h-14 w-14 rounded-lg overflow-hidden bg-gray-50 mb-1.5 shrink-0">
+                                  {opt.images?.[0] ? (
+                                    <img
+                                      src={opt.images[0]}
+                                      alt={opt.name}
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="h-full w-full flex items-center justify-center text-gray-300">
+                                      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                                        <path d="M21 15l-5-5L5 21"/>
+                                      </svg>
+                                    </div>
+                                  )}
+                                </div>
+                                <span className={`text-[11px] font-semibold text-center leading-tight line-clamp-2 ${isSelected ? 'text-primary' : 'text-gray-800'}`}>
+                                  {opt.name}
+                                </span>
+                                {priceDelta > 0 && (
+                                  <span className={`text-[10px] mt-0.5 font-medium ${isSelected ? 'text-primary/80' : 'text-gray-400'}`}>
+                                    +₹{priceDelta}
+                                  </span>
                                 )}
-                              </span>
-                              <span className="block truncate">{pot.name}</span>
-                              <span className={`block mt-0.5 ${selectedPot === pot.slug ? 'text-white/80' : 'text-gray-500'}`}>
-                                {pot.price_modifier > 0 ? `+₹${pot.price_modifier}` : 'Included'}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+                                {priceDelta === 0 && (
+                                  <span className={`text-[10px] mt-0.5 font-medium ${isSelected ? 'text-primary/80' : 'text-gray-400'}`}>
+                                    Included
+                                  </span>
+                                )}
+                                {outOfStock && (
+                                  <span className="text-[9px] text-red-400 font-semibold mt-0.5">Out of stock</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
 
-            {product.description && (
-              <p className="text-sm sm:text-base text-gray-600 leading-relaxed">{product.description}</p>
+                      {/* ── Pill chips (size, weight, etc.) ─────────────── */}
+                      {renderMode === 'pill' && (
+                        <div className="flex flex-wrap gap-2">
+                          {(group.options ?? []).map((opt: any) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            const outOfStock = Number(opt.stock ?? 0) <= 0;
+                            const priceDelta = Number(opt.price ?? 0);
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                disabled={outOfStock}
+                                onClick={() => selectOption(group.id, opt.id)}
+                                className={`px-4 py-2 rounded-full border-2 text-sm font-semibold transition focus:outline-none
+                                  ${isSelected
+                                    ? 'bg-primary border-primary text-white shadow-sm'
+                                    : outOfStock
+                                      ? 'border-gray-200 text-gray-300 cursor-not-allowed line-through'
+                                      : 'border-gray-200 text-gray-700 hover:border-primary hover:text-primary bg-white'
+                                  }`}
+                              >
+                                {opt.name}
+                                {priceDelta > 0 && (
+                                  <span className={`ml-1.5 text-xs font-normal ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
+                                    +₹{priceDelta}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
 
             {/* Desktop add to cart */}
@@ -748,7 +916,7 @@ export default function ProductDetailPage() {
                     <Minus size={16} />
                   </button>
                   <span className="px-4 font-medium">{qty}</span>
-                  <button onClick={() => setQty(Math.min(selectedStock, qty + 1))} className="p-3 hover:bg-gray-50 transition touch-target">
+                  <button onClick={() => setQty(Math.min(effectiveStock, qty + 1))} className="p-3 hover:bg-gray-50 transition touch-target">
                     <Plus size={16} />
                   </button>
                 </div>
@@ -776,7 +944,7 @@ export default function ProductDetailPage() {
                     <Minus size={14} />
                   </button>
                   <span className="min-w-10 px-3 text-center text-sm font-medium">{qty}</span>
-                  <button onClick={() => setQty(Math.min(selectedStock, qty + 1))} className="px-4 py-3 touch-target">
+                  <button onClick={() => setQty(Math.min(effectiveStock, qty + 1))} className="px-4 py-3 touch-target">
                     <Plus size={14} />
                   </button>
                 </div>
@@ -796,23 +964,25 @@ export default function ProductDetailPage() {
               </div>
             )}
 
+            <ProductDescription description={product.description} />
+
             <CareTips tips={product.care_tips || []} />
           </div>
         </div>
 
-        <PlantCareCard items={product.care_items} />
+        <PlantCareCard careCardImage={product.care_card_image} />
 
-        <PlantogaPromise />
+        <PlantogaPromise bannerImage={product.promise_banner_image} />
 
         <HowToGuide product={product} />
 
-        {renderInlineBanner(productSpecBanners, 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&q=80')}
+        {renderInlineBannerItem(productSpecBanner, 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&q=80')}
 
         <ProductSpecification specs={productSpecs} />
 
         <StoriesCarousel stories={stories} />
 
-        <WhyPlantoga />
+        <WhyPlantoga bannerImage={product.why_plantoga_banner_image} />
 
         {/* Similar products */}
         {similarProducts.length > 0 && (
@@ -835,9 +1005,9 @@ export default function ProductDetailPage() {
         <ProductReviews productId={product.id} />
 
         {/* Product detail page ad banner — admin controlled via Banners › Product Detail Page Banner */}
-        {renderInlineBanner(productDetailBanners, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&q=80')}
+        {renderFaqBannerItem(productDetailBanner, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&q=80')}
 
-        <ProductFaq />
+        <ProductFaq faqs={product.faqs} />
       </div>
 
     </div>

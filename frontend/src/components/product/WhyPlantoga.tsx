@@ -84,7 +84,19 @@ function ValueCell({ value, featured = false }: { value: ComparisonValue; featur
   );
 }
 
-export default function WhyPlantoga() {
+export default function WhyPlantoga({ bannerImage }: { bannerImage?: string | null }) {
+  if (bannerImage) {
+    return (
+      <section className="mt-8 sm:mt-12">
+        <img
+          src={bannerImage}
+          alt="Plantoga vs the rest"
+          className="mx-auto max-w-full h-auto"
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="mt-8 sm:mt-12" aria-labelledby="why-plantoga-title">
       <div className="mb-5 text-center">

@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models import Cart, CartItem, Product
 from app.schemas.cart import CartItemProduct, CartItemResponse, CartResponse
 from app.utils.image_upload import resolve_image_url
+from app.utils.variant_pricing import calculate_variant_price
 
 
 OPTION_COLOR_KEY = "color"
@@ -42,20 +43,36 @@ def _has_variants(product: Product) -> bool:
     return has_color_pot or has_size_only
 
 
-def normalize_selected_options(options: dict | None) -> dict[str, str] | None:
+def normalize_selected_options(options: dict | list | None) -> list[str] | dict[str, str] | None:
+    """Normalize selected_options to support both old dict and new list formats.
+    
+    New format: ["opt_1", "opt_2"] (list of option IDs)
+    Old format: {"color": "terracotta", "pot_type": "ceramic"} (dict of slugs)
+    
+    Returns normalized format matching input type for backward compatibility.
+    """
     if not options:
         return None
-    color = options.get(OPTION_COLOR_KEY) or options.get("color_slug")
-    pot_type = options.get(OPTION_POT_KEY) or options.get("pot_slug")
-    size = options.get(OPTION_SIZE_KEY) or options.get("size_slug")
-    normalized: dict[str, str] = {}
-    if color:
-        normalized[OPTION_COLOR_KEY] = str(color)
-    if pot_type:
-        normalized[OPTION_POT_KEY] = str(pot_type)
-    if size:
-        normalized[OPTION_SIZE_KEY] = str(size)
-    return normalized or None
+    
+    # New format: already a list of option IDs
+    if isinstance(options, list):
+        return [str(opt_id) for opt_id in options if opt_id]
+    
+    # Old format: dict with slugs
+    if isinstance(options, dict):
+        color = options.get(OPTION_COLOR_KEY) or options.get("color_slug")
+        pot_type = options.get(OPTION_POT_KEY) or options.get("pot_slug")
+        size = options.get(OPTION_SIZE_KEY) or options.get("size_slug")
+        normalized: dict[str, str] = {}
+        if color:
+            normalized[OPTION_COLOR_KEY] = str(color)
+        if pot_type:
+            normalized[OPTION_POT_KEY] = str(pot_type)
+        if size:
+            normalized[OPTION_SIZE_KEY] = str(size)
+        return normalized or None
+    
+    return None
 
 
 def options_key(options: dict | None) -> str:
@@ -91,11 +108,50 @@ def _primary_image(product: Product) -> str:
 
 def resolve_variant_details(
     product: Product,
+    selected_options: dict | list | None,
+    quantity: int | None = None,
+    *,
+    validate_stock: bool = False,
+) -> dict:
+    """Resolve variant pricing and details for both old and new formats.
+    
+    Delegates to new calculate_variant_price for new format.
+    Falls back to old logic for legacy products.
+    """
+    variants = product.variants or {}
+    
+    # Check if it's the new flexible variant format
+    if "variant_groups" in variants:
+        # New format: selected_options should be a list of option IDs
+        if not isinstance(selected_options, list):
+            # Convert old format dict to list if needed
+            selected_options = None  # Let calculate_variant_price handle validation
+        
+        try:
+            result = calculate_variant_price(
+                product,
+                selected_options or [],
+                quantity=quantity or 1,
+                validate_stock=validate_stock,
+            )
+            # Add combo_key for backward compatibility (not used in new system)
+            result["combo_key"] = None
+            return result
+        except ValueError as e:
+            raise ValueError(str(e))
+    
+    # Old format fallback (for existing products during migration)
+    return _resolve_old_variant_details(product, selected_options, quantity, validate_stock=validate_stock)
+
+
+def _resolve_old_variant_details(
+    product: Product,
     selected_options: dict | None,
     quantity: int | None = None,
     *,
     validate_stock: bool = False,
 ) -> dict:
+    """Old variant resolution logic - kept for backward compatibility during migration."""
     if not _has_variants(product):
         available_stock = product.stock_qty
         if validate_stock and quantity is not None and available_stock < quantity:
@@ -284,15 +340,21 @@ def build_cart_response(cart: Cart) -> CartResponse:
 
 async def add_item(
     db: AsyncSession, cart: Cart, product_id: int, quantity: int,
-    selected_options: dict | None = None,
+    selected_options: dict | list | None = None,
 ) -> Cart:
+    """Add item to cart with support for both old dict and new list formats."""
     product = await db.get(Product, product_id)
     if not product or not product.is_active:
         raise ValueError("Product not found")
+    
+    # Normalize options format
+    normalized_options = normalize_selected_options(selected_options)
+    
     details = resolve_variant_details(
-        product, selected_options, quantity, validate_stock=True,
+        product, normalized_options, quantity, validate_stock=True,
     )
-    normalized_options = details["selected_options"]
+    
+    # For comparison, use the normalized format
     desired_options_key = options_key(normalized_options)
 
     for item in cart.items:

@@ -288,3 +288,71 @@ async def test_update_product_success(client: AsyncClient, admin_token: str):
     assert data["stock_qty"] == 99
     assert data["images"] == ["https://example.com/new-image.jpg"]
 
+
+@pytest.mark.asyncio
+async def test_update_product_null_variants_does_not_wipe(client: AsyncClient, admin_token: str):
+    """PUT with variants=null must leave existing variants untouched.
+
+    Regression test for the race condition where an admin edits only the
+    price before variant state finishes loading. The frontend omits `variants`
+    from the payload when it wasn't built, but a null value (old behaviour or
+    direct API call) must also be a no-op — not a wipe.
+    """
+    cat = await _seed_category(client, admin_token, "Variants Test")
+    variants_payload = {
+        "colors": [{"name": "Green", "hex": "#2D6A4F", "slug": "green", "image_url": ""}],
+        "pot_types": [{"name": "Type 1", "slug": "type-1", "price_modifier": 45, "image_url": ""}],
+        "sizes": [{"name": "Small", "slug": "small", "price_modifier": 0, "description": ""}],
+        "default_image": "",
+        "image_map": {"green__type-1__small": ["plantoga/products/1/abc.jpg"]},
+        "stock": {"green__type-1__small": 10},
+    }
+    async with test_session_factory() as db:
+        from app.db.models import Product
+        p = Product(
+            name="Variant Plant",
+            slug="variant-plant",
+            description="desc",
+            price=50.0,
+            stock_qty=10,
+            category_id=cat["id"],
+            images=[],
+            is_active=True,
+            variants=variants_payload,
+        )
+        db.add(p)
+        await db.commit()
+        await db.refresh(p)
+        pid = p.id
+
+    # Price-only update — variants explicitly null (mirrors old frontend behaviour)
+    resp = await client.put(
+        f"{PROD_URL}/{pid}",
+        json={"price": 99.0, "variants": None},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    # Price changed
+    assert data["price"] == 99.0
+
+    # Variants must be completely intact — not wiped (not even partially).
+    v = data["variants"]
+    assert v is not None
+
+    # Structural data preserved
+    assert len(v["colors"]) == 1
+    assert v["colors"][0]["name"] == "Green"
+    assert len(v["pot_types"]) == 1
+    assert v["pot_types"][0]["name"] == "Type 1"
+    assert len(v["sizes"]) == 1
+    assert v["sizes"][0]["name"] == "Small"
+
+    # Stock preserved
+    assert v["stock"] == {"green__type-1__small": 10}
+
+    # image_map preserved — response resolves relative keys to full URLs,
+    # so assert on key presence and URL suffix rather than exact raw key
+    assert list(v["image_map"].keys()) == ["green__type-1__small"]
+    assert v["image_map"]["green__type-1__small"][0].endswith("plantoga/products/1/abc.jpg")

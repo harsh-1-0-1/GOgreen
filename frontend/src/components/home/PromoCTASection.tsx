@@ -45,7 +45,7 @@ export default function PromoCTASection() {
               {card.image_url && (
                 <img
                   src={card.image_url}
-                  alt={card.title}
+                      alt=""
                   className="w-full sm:w-[160px] h-44 sm:h-[160px] rounded-xl object-cover shrink-0"
                   loading="lazy"
                   onError={(e) => {
@@ -54,15 +54,7 @@ export default function PromoCTASection() {
                 />
               )}
               <div className="flex flex-col gap-2.5">
-                <h3
-                  className="text-xl font-semibold"
-                  style={{ color: card.text_color || '#16A34A' }}
-                >
-                  {card.title}
-                </h3>
-                <p className="text-sm text-gray-500 leading-relaxed">
-                  {card.subtitle}
-                </p>
+
                 {card.cta_text && (
                   <Link
                     to={card.cta_link || '#'}

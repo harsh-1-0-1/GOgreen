@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import require_admin
 from app.db.session import get_db
 from app.schemas.product import (
-    CareItem,
+    FAQItem,
     ProductCreate,
     ProductListResponse,
     ProductResponse,
@@ -160,10 +160,13 @@ async def get_product_raw(
         "how_to_guide": product.how_to_guide,
         "sunlight": product.sunlight,
         "watering": product.watering,
-        "care_items": product.care_items,  # raw list with relative icon keys
         "badge": product.badge,
         "is_active": product.is_active,
         "variants": product.variants,  # raw dict with relative keys in image fields
+        "promise_banner_image": product.promise_banner_image,  # raw relative key
+        "why_plantoga_banner_image": product.why_plantoga_banner_image,  # raw relative key
+        "care_card_image": product.care_card_image,  # raw relative key
+        "faqs": product.faqs,  # raw list of {question, answer}
         "created_at": product.created_at.isoformat() if product.created_at else None,
     }
 
@@ -198,13 +201,14 @@ async def create_product(
     how_to_guide: Annotated[str | None, Form()] = None,
     sunlight: Annotated[str | None, Form()] = None,
     watering: Annotated[str | None, Form()] = None,
-    care_items: Annotated[str | None, Form()] = None,  # JSON string: [{icon, title, description}, ...]
     badge: Annotated[str | None, Form()] = None,
     variants: Annotated[str | None, Form()] = None,
+    promise_banner_image: Annotated[str | None, Form()] = None,  # relative key from prior /upload-image call
+    why_plantoga_banner_image: Annotated[str | None, Form()] = None,  # relative key from prior /upload-image call
+    care_card_image: Annotated[str | None, Form()] = None,  # relative key from prior /upload-image call
+    faqs: Annotated[str | None, Form()] = None,  # JSON string: [{question, answer}, ...]
     image_urls: Annotated[str, Form()] = "[]",
     images: list[UploadFile] = File(default=[]),
-    # Per-item care icons: care_icon_0, care_icon_1, ... matched by index to care_items array
-    care_icons: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
@@ -246,9 +250,12 @@ async def create_product(
         how_to_guide=how_to_guide,
         sunlight=sunlight,
         watering=watering,
-        care_items=[CareItem(**i) for i in json.loads(care_items)] if care_items else None,
         badge=badge,
         variants=json.loads(variants) if variants else None,
+        promise_banner_image=promise_banner_image or None,
+        why_plantoga_banner_image=why_plantoga_banner_image or None,
+        care_card_image=care_card_image or None,
+        faqs=[FAQItem(**f) for f in json.loads(faqs)] if faqs else None,
     )
 
     # Flush first to get product.id, then upload using that id as the folder namespace.
@@ -264,21 +271,6 @@ async def create_product(
                 key = await upload_image_file(img, folder="products", entity_id=product.id)
                 uploaded_keys.append(key)
                 product.images = list(product.images or []) + [key]
-
-            # Upload per-item care icons and patch the care_items list in-place.
-            # care_icons is a parallel list: index N matches care_items[N].
-            # An empty UploadFile (filename == '') means "no new icon for this slot".
-            if care_icons and product.care_items:
-                patched = list(product.care_items or [])
-                for idx, icon_file in enumerate(care_icons):
-                    if idx >= len(patched):
-                        break
-                    if not icon_file.filename:
-                        continue
-                    icon_key = await upload_image_file(icon_file, folder="product-care-icons", entity_id=product.id)
-                    uploaded_keys.append(icon_key)
-                    patched[idx] = {**patched[idx], "icon": icon_key}
-                product.care_items = patched
 
             await db.flush()
             await db.refresh(product)

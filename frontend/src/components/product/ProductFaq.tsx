@@ -1,12 +1,8 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import type { FAQItem } from '@/types';
 
-interface FAQItem {
-  question: string;
-  answer: string;
-}
-
-const FAQ_DATA: FAQItem[] = [
+const DEFAULT_FAQS: FAQItem[] = [
   {
     question: "What is the Plantoga quality guarantee?",
     answer: "We offer a 100% Thrive Guarantee. If any plant or pot arrives damaged, withered, or incorrect, simply submit our Damage Replacement form with a photo within 48 hours, and we'll ship a replacement immediately, completely free of charge. No return shipment required!"
@@ -33,8 +29,13 @@ const FAQ_DATA: FAQItem[] = [
   }
 ];
 
-export default function ProductFaq() {
+interface ProductFaqProps {
+  faqs?: FAQItem[] | null;
+}
+
+export default function ProductFaq({ faqs }: ProductFaqProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const items = faqs && faqs.length > 0 ? faqs : DEFAULT_FAQS;
 
   const toggleExpand = (index: number) => {
     setExpandedIndex(expandedIndex === index ? null : index);
@@ -57,7 +58,7 @@ export default function ProductFaq() {
         </div>
 
         <div className="space-y-4">
-          {FAQ_DATA.map((faq, index) => {
+          {items.map((faq, index) => {
             const isExpanded = expandedIndex === index;
             return (
               <article
