@@ -256,3 +256,245 @@ async def send_order_emails(db: AsyncSession, order_id: int) -> None:
             logger.error("Order email failed for order {} recipient {}: {}", order.id, to_email, exc)
         else:
             logger.info("Order email sent for order {} recipient {}.", order.id, to_email)
+
+
+# ---------------------------------------------------------------------------
+# Damage Claim Emails
+# ---------------------------------------------------------------------------
+
+async def send_damage_claim_submitted_emails(
+    db: AsyncSession, claim_id: int
+) -> None:
+    """Send emails to customer and admin when a damage claim is submitted."""
+    if not _smtp_configured():
+        logger.info("Damage claim email skipped: SMTP settings are not configured.")
+        return
+
+    from app.db.models import DamageClaim, OrderItem
+
+    result = await db.execute(
+        select(DamageClaim)
+        .where(DamageClaim.id == claim_id)
+        .options(
+            selectinload(DamageClaim.user),
+            selectinload(DamageClaim.order).selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(DamageClaim.order).selectinload(Order.address),
+        )
+    )
+    claim = result.scalar_one_or_none()
+    if not claim:
+        logger.warning("Damage claim email skipped: claim {} not found.", claim_id)
+        return
+
+    # Customer email
+    customer_text = f"""Damage Claim Submitted — {claim.ticket_id}
+
+Hi {claim.user.full_name}, we've received your damage claim.
+
+Claim Reference: {claim.ticket_id}
+Order ID: #{claim.order_id}
+Issue Type: {claim.issue_type}
+Description: {claim.description}
+
+Our team will review your claim within 24-48 hours and contact you via email with next steps.
+
+For any questions, reply to this email with your ticket reference {claim.ticket_id}.
+"""
+
+    customer_html = f"""<!doctype html>
+<html>
+<body style="margin:0;background:#f6f7f4;font-family:Arial,sans-serif;color:#111827;">
+  <div style="max-width:680px;margin:0 auto;padding:24px;">
+    <div style="background:#1B4332;color:#ffffff;padding:22px;border-radius:10px 10px 0 0;">
+      <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#d8f3dc;">Plantoga Damage Claim</div>
+      <h1 style="margin:8px 0 0;font-size:24px;">Claim Submitted</h1>
+    </div>
+    <div style="background:#ffffff;padding:24px;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 10px 10px;">
+      <p style="font-size:16px;line-height:1.5;margin:0 0 18px;">Hi {html.escape(claim.user.full_name)}, we've received your damage claim.</p>
+      
+      <table style="width:100%;border-collapse:collapse;margin:0 0 20px;background:#f9fafb;border-radius:8px;overflow:hidden;">
+        <tr><td style="padding:10px;color:#6b7280;">Ticket Reference</td><td style="padding:10px;text-align:right;font-weight:700;">{html.escape(claim.ticket_id)}</td></tr>
+        <tr><td style="padding:10px;color:#6b7280;">Order ID</td><td style="padding:10px;text-align:right;">#{claim.order_id}</td></tr>
+        <tr><td style="padding:10px;color:#6b7280;">Issue Type</td><td style="padding:10px;text-align:right;">{html.escape(claim.issue_type)}</td></tr>
+      </table>
+
+      <div style="margin-top:22px;padding:14px;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;color:#065f46;">
+        Our team will review your claim within 24-48 hours and contact you via email with next steps.
+      </div>
+
+      <p style="margin-top:22px;color:#6b7280;font-size:13px;">For any questions, reply to this email with your ticket reference {html.escape(claim.ticket_id)}.</p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+    # Admin email
+    item_list = ", ".join(
+        (item.product.name if item.product else f"Product #{item.product_id}")
+        for item in claim.order.items[:3]
+    )
+    if len(claim.order.items) > 3:
+        item_list += f" +{len(claim.order.items) - 3} more"
+
+    admin_text = f"""🚨 New Damage Claim Received
+
+Ticket ID: {claim.ticket_id}
+Order ID: #{claim.order_id}
+Customer: {claim.user.full_name} ({claim.user.email})
+Issue Type: {claim.issue_type}
+
+Description:
+{claim.description}
+
+Order Items: {item_list}
+
+Photos uploaded: {len(claim.photo_keys)} file(s)
+
+Review and respond in the admin panel.
+"""
+
+    admin_html = f"""<!doctype html>
+<html>
+<body style="margin:0;background:#fef2f2;font-family:Arial,sans-serif;color:#111827;">
+  <div style="max-width:680px;margin:0 auto;padding:24px;">
+    <div style="background:#dc2626;color:#ffffff;padding:22px;border-radius:10px 10px 0 0;">
+      <h1 style="margin:0;font-size:24px;">🚨 New Damage Claim</h1>
+    </div>
+    <div style="background:#ffffff;padding:24px;border:1px solid #fee2e2;border-top:0;border-radius:0 0 10px 10px;">
+      <table style="width:100%;border-collapse:collapse;margin:0 0 20px;">
+        <tr><td style="padding:8px 0;color:#6b7280;font-weight:600;">Ticket ID</td><td style="padding:8px 0;text-align:right;font-weight:700;color:#dc2626;">{html.escape(claim.ticket_id)}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;font-weight:600;">Order ID</td><td style="padding:8px 0;text-align:right;">#{claim.order_id}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;font-weight:600;">Customer</td><td style="padding:8px 0;text-align:right;">{html.escape(claim.user.full_name)}<br><span style="color:#9ca3af;font-size:13px;">{html.escape(claim.user.email)}</span></td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;font-weight:600;">Issue Type</td><td style="padding:8px 0;text-align:right;">{html.escape(claim.issue_type)}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;font-weight:600;">Photos</td><td style="padding:8px 0;text-align:right;">{len(claim.photo_keys)} file(s)</td></tr>
+      </table>
+
+      <div style="background:#f9fafb;padding:14px;border-radius:8px;margin-bottom:20px;">
+        <div style="font-weight:600;color:#6b7280;margin-bottom:6px;">Description:</div>
+        <div style="line-height:1.6;">{html.escape(claim.description)}</div>
+      </div>
+
+      <div style="background:#f9fafb;padding:14px;border-radius:8px;">
+        <div style="font-weight:600;color:#6b7280;margin-bottom:6px;">Order Items:</div>
+        <div style="line-height:1.6;">{html.escape(item_list)}</div>
+      </div>
+
+      <p style="margin-top:22px;color:#6b7280;font-size:13px;">Review and respond in the admin panel.</p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+    # Send customer email
+    try:
+        await asyncio.to_thread(
+            _send_email_sync,
+            claim.user.email,
+            f"Damage Claim {claim.ticket_id} — Under Review",
+            customer_text,
+            customer_html,
+        )
+        logger.info("Damage claim customer email sent for claim {}.", claim.ticket_id)
+    except Exception as exc:
+        logger.error("Damage claim customer email failed for {}: {}", claim.ticket_id, exc)
+
+    # Send admin email
+    if settings.ADMIN_ORDER_EMAIL.strip():
+        try:
+            await asyncio.to_thread(
+                _send_email_sync,
+                settings.ADMIN_ORDER_EMAIL,
+                f"🚨 New Damage Claim — {claim.ticket_id}",
+                admin_text,
+                admin_html,
+            )
+            logger.info("Damage claim admin email sent for claim {}.", claim.ticket_id)
+        except Exception as exc:
+            logger.error("Damage claim admin email failed for {}: {}", claim.ticket_id, exc)
+
+
+async def send_damage_claim_status_update_email(
+    db: AsyncSession, claim_id: int, new_status: str
+) -> None:
+    """Send email to customer when claim status changes (approved, rejected, etc)."""
+    if not _smtp_configured():
+        logger.info("Damage claim status email skipped: SMTP settings are not configured.")
+        return
+
+    from app.db.models import DamageClaim
+
+    result = await db.execute(
+        select(DamageClaim)
+        .where(DamageClaim.id == claim_id)
+        .options(selectinload(DamageClaim.user))
+    )
+    claim = result.scalar_one_or_none()
+    if not claim:
+        logger.warning("Damage claim status email skipped: claim {} not found.", claim_id)
+        return
+
+    status_messages = {
+        "approved": ("✅ Claim Approved", "Great news! Your damage claim has been approved.", "We'll ship your replacement or process your refund soon."),
+        "rejected": ("❌ Claim Rejected", "We've reviewed your damage claim.", f"Unfortunately, we cannot approve it at this time. {claim.admin_notes or 'Please contact us for more details.'}"),
+        "replacement_shipped": ("📦 Replacement Shipped", "Your replacement has shipped!", "You'll receive tracking details shortly."),
+        "refund_issued": ("💵 Refund Issued", "Your refund has been processed.", "The amount will reflect in your account within 5-7 business days."),
+        "closed": ("🔒 Claim Closed", "Your damage claim has been closed.", "Thank you for your patience."),
+    }
+
+    if new_status not in status_messages:
+        logger.info("No email template for status {}. Skipping notification.", new_status)
+        return
+
+    subject_suffix, heading, body = status_messages[new_status]
+    
+    text_body = f"""Damage Claim Update — {claim.ticket_id}
+
+{heading}
+
+Ticket Reference: {claim.ticket_id}
+Order ID: #{claim.order_id}
+New Status: {new_status.replace('_', ' ').title()}
+
+{body}
+
+For questions, reply to this email with your ticket reference {claim.ticket_id}.
+"""
+
+    html_body = f"""<!doctype html>
+<html>
+<body style="margin:0;background:#f6f7f4;font-family:Arial,sans-serif;color:#111827;">
+  <div style="max-width:680px;margin:0 auto;padding:24px;">
+    <div style="background:#1B4332;color:#ffffff;padding:22px;border-radius:10px 10px 0 0;">
+      <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#d8f3dc;">Plantoga Damage Claim</div>
+      <h1 style="margin:8px 0 0;font-size:24px;">{subject_suffix}</h1>
+    </div>
+    <div style="background:#ffffff;padding:24px;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 10px 10px;">
+      <p style="font-size:16px;line-height:1.5;margin:0 0 18px;">{html.escape(heading)}</p>
+      
+      <table style="width:100%;border-collapse:collapse;margin:0 0 20px;background:#f9fafb;border-radius:8px;overflow:hidden;">
+        <tr><td style="padding:10px;color:#6b7280;">Ticket Reference</td><td style="padding:10px;text-align:right;font-weight:700;">{html.escape(claim.ticket_id)}</td></tr>
+        <tr><td style="padding:10px;color:#6b7280;">Order ID</td><td style="padding:10px;text-align:right;">#{claim.order_id}</td></tr>
+        <tr><td style="padding:10px;color:#6b7280;">New Status</td><td style="padding:10px;text-align:right;font-weight:700;">{html.escape(new_status.replace('_', ' ').title())}</td></tr>
+      </table>
+
+      <div style="margin-top:22px;padding:14px;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;color:#065f46;">
+        {html.escape(body)}
+      </div>
+
+      <p style="margin-top:22px;color:#6b7280;font-size:13px;">For questions, reply to this email with your ticket reference {html.escape(claim.ticket_id)}.</p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+    try:
+        await asyncio.to_thread(
+            _send_email_sync,
+            claim.user.email,
+            f"Damage Claim {claim.ticket_id} — {subject_suffix}",
+            text_body,
+            html_body,
+        )
+        logger.info("Damage claim status update email sent for claim {} status {}.", claim.ticket_id, new_status)
+    except Exception as exc:
+        logger.error("Damage claim status email failed for {} status {}: {}", claim.ticket_id, new_status, exc)

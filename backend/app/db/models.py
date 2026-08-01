@@ -309,6 +309,46 @@ def sync_stock_qty(mapper, connection, target):
         target.stock_qty = sum(int(v or 0) for v in target.variants["stock"].values())
 
 
+class DamageClaimStatus(str, enum.Enum):
+    SUBMITTED = "submitted"
+    UNDER_REVIEW = "under_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    REPLACEMENT_SHIPPED = "replacement_shipped"
+    REFUND_ISSUED = "refund_issued"
+    CLOSED = "closed"
+
+
+class DamageClaim(Base):
+    __tablename__ = "damage_claims"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    # Human-readable ticket ID generated after insert: PLG-DR-000001
+    ticket_id: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    order_id: Mapped[int] = mapped_column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
+    # Nullable: one claim covers the whole order in v1; reserved for per-item in v2
+    order_item_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("order_items.id"), nullable=True)
+    issue_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    # JSON array of S3 / local storage keys
+    photo_keys: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[DamageClaimStatus] = mapped_column(
+        # Persist the enum *values* (lowercase), matching the damageclaimstatus
+        # enum type created in the e3f4a5b6c7d8 migration.
+        Enum(DamageClaimStatus, values_callable=lambda e: [m.value for m in e]),
+        default=DamageClaimStatus.SUBMITTED,
+        index=True,
+    )
+    admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    user: Mapped["User"] = relationship("User")
+    order: Mapped["Order"] = relationship("Order")
+    order_item: Mapped["OrderItem | None"] = relationship("OrderItem")
+
+
 class Story(Base):
     __tablename__ = "stories"
 
