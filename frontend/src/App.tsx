@@ -21,6 +21,7 @@ import BlogListPage from '@/pages/BlogListPage';
 import BlogDetailPage from '@/pages/BlogDetailPage';
 import CorporateGiftingPage from '@/pages/CorporateGiftingPage';
 import DamageReplacementPage from '@/pages/DamageReplacementPage';
+import MyDamageClaimsPage from '@/pages/MyDamageClaimsPage';
 import FaqPage from '@/pages/FaqPage';
 
 import AdminLayout from '@/components/admin/AdminLayout';
@@ -34,6 +35,7 @@ import BlogAdminPage from '@/pages/admin/BlogAdminPage';
 import StoriesAdminPage from '@/pages/admin/StoriesAdminPage';
 import CorporateAdminPage from '@/pages/admin/CorporateAdminPage';
 import CouponsAdminPage from '@/pages/admin/CouponsAdminPage';
+import DamageClaimsAdminPage from '@/pages/admin/DamageClaimsAdminPage';
 import SettingsAdminPage from '@/pages/admin/SettingsAdminPage';
 
 function ScrollToTop() {
@@ -107,6 +109,7 @@ export default function App() {
               <Route path="/blog/:slug" element={<BlogDetailPage />} />
               <Route path="/corporate-gifting" element={<CorporateGiftingPage />} />
               <Route path="/damage-replacement" element={<DamageReplacementPage />} />
+              <Route path="/damage-claims" element={<MyDamageClaimsPage />} />
               <Route path="/faqs" element={<FaqPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
@@ -122,6 +125,7 @@ export default function App() {
                 <Route path="blog" element={<BlogAdminPage />} />
                 <Route path="corporate" element={<CorporateAdminPage />} />
                 <Route path="coupons" element={<CouponsAdminPage />} />
+                <Route path="damage-claims" element={<DamageClaimsAdminPage />} />
                 <Route path="settings" element={<SettingsAdminPage />} />
               </Route>
             </Route>

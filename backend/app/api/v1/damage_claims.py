@@ -78,7 +78,6 @@ async def submit_claim(
             photo_files=photos,
         )
         await db.commit()
-        await db.refresh(claim)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -193,7 +192,6 @@ async def admin_update_claim(
         raise HTTPException(status_code=404, detail="Claim not found")
 
     await db.commit()
-    await db.refresh(claim)
 
     # Notify customer of meaningful status changes
     try:

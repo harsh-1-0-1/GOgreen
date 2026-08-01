@@ -185,16 +185,16 @@ export default function DamageReplacementPage() {
 
         <div className="mt-10 flex flex-col sm:flex-row gap-3 w-full max-w-xs sm:max-w-md justify-center">
           <Link
-            to="/products"
+            to="/damage-claims"
             className="flex-1 py-3 px-6 bg-primary hover:bg-primary/95 text-white font-bold rounded-xl shadow-md hover:shadow-lg transition active:scale-[0.98] text-sm text-center"
           >
-            Continue Shopping
+            Track My Claim
           </Link>
           <Link
-            to="/"
+            to="/products"
             className="flex-1 py-3 px-6 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-bold rounded-xl shadow-sm transition active:scale-[0.98] text-sm text-center"
           >
-            Back to Home
+            Continue Shopping
           </Link>
         </div>
       </div>

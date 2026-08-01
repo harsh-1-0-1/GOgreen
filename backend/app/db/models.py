@@ -334,7 +334,11 @@ class DamageClaim(Base):
     # JSON array of S3 / local storage keys
     photo_keys: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[DamageClaimStatus] = mapped_column(
-        Enum(DamageClaimStatus), default=DamageClaimStatus.SUBMITTED, index=True
+        # Persist the enum *values* (lowercase), matching the damageclaimstatus
+        # enum type created in the e3f4a5b6c7d8 migration.
+        Enum(DamageClaimStatus, values_callable=lambda e: [m.value for m in e]),
+        default=DamageClaimStatus.SUBMITTED,
+        index=True,
     )
     admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

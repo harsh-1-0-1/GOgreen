@@ -126,7 +126,7 @@ async def create_claim(
         "Damage claim created: ticket_id={} order_id={} user_id={}",
         claim.ticket_id, order_id, user_id,
     )
-    return claim
+    return await _load_claim(db, claim.id) or claim
 
 
 async def list_claims_for_user(
@@ -146,6 +146,11 @@ async def list_claims_for_user(
     result = await db.execute(
         select(DamageClaim)
         .where(DamageClaim.user_id == user_id)
+        .options(
+            selectinload(DamageClaim.user),
+            selectinload(DamageClaim.order).selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(DamageClaim.order).selectinload(Order.address),
+        )
         .order_by(DamageClaim.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -163,6 +168,10 @@ async def get_claim_by_ticket(
         select(DamageClaim).where(
             DamageClaim.ticket_id == ticket_id,
             DamageClaim.user_id == user_id,
+        ).options(
+            selectinload(DamageClaim.user),
+            selectinload(DamageClaim.order).selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(DamageClaim.order).selectinload(Order.address),
         )
     )
     return result.scalar_one_or_none()
@@ -185,8 +194,8 @@ async def admin_list_claims(
     if status:
         if status not in VALID_STATUSES:
             raise ValueError(f"Invalid status filter: {status}")
-        base = base.where(DamageClaim.status == status)
-        count_base = count_base.where(DamageClaim.status == status)
+        base = base.where(DamageClaim.status == DamageClaimStatus(status))
+        count_base = count_base.where(DamageClaim.status == DamageClaimStatus(status))
 
     total = (await db.execute(count_base)).scalar() or 0
     offset = (page - 1) * limit

@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.order import OrderResponse, OrderUserResponse
+
 
 class DamageClaimCreate(BaseModel):
     """Request body for customer submitting a damage claim."""
@@ -33,12 +35,17 @@ class DamageClaimResponse(BaseModel):
     admin_notes: str | None
     created_at: datetime
     updated_at: datetime
+    # Nested details (loaded via selectinload in service queries)
+    user: OrderUserResponse | None = None
+    order: OrderResponse | None = None
 
     model_config = {"from_attributes": True}
 
     @classmethod
     def from_orm_with_resolved_urls(cls, claim, photo_urls: list[str]):
         """Factory method to construct response with resolved photo URLs."""
+        user = OrderUserResponse.model_validate(claim.user) if claim.user is not None else None
+        order = OrderResponse.model_validate(claim.order) if claim.order is not None else None
         return cls(
             id=claim.id,
             ticket_id=claim.ticket_id,
@@ -52,6 +59,8 @@ class DamageClaimResponse(BaseModel):
             admin_notes=claim.admin_notes,
             created_at=claim.created_at,
             updated_at=claim.updated_at,
+            user=user,
+            order=order,
         )
 
 

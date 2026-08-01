@@ -264,6 +264,8 @@ export interface DamageClaim {
   admin_notes: string | null;
   created_at: string;
   updated_at: string;
+  user: OrderUser | null;
+  order: Order | null;
 }
 
 export interface DamageClaimListResponse {
