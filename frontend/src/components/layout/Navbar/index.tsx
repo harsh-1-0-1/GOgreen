@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  FileCheck2,
   Leaf,
   LogOut,
   Menu,
@@ -349,6 +350,13 @@ export default function Navbar() {
                       onClick={() => setUserMenuOpen(false)}
                     >
                       <ShieldCheck size={15} /> Damage Replacement
+                    </Link>
+                    <Link
+                      to="/damage-claims"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-gray-50 text-gray-700 transition-colors"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <FileCheck2 size={15} /> My Damage Claims
                     </Link>
                     <button
                       onClick={() => {
@@ -761,6 +769,7 @@ export default function Navbar() {
                       { label: 'Track Your Order', href: '/orders' },
                       { label: 'Support', href: `https://wa.me/${WHATSAPP_NUMBER}` },
                       { label: 'Damage Replacement Form', href: '/damage-replacement' },
+                      { label: 'Track My Claim', href: '/damage-claims' },
                     ].map((link) => {
                       const isExternal = link.href.startsWith('http');
                       const Component = isExternal ? 'a' : Link;

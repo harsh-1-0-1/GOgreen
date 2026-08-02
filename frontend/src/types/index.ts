@@ -242,6 +242,39 @@ export interface OrderListResponse {
   pages: number;
 }
 
+export type DamageClaimStatus =
+  | 'submitted'
+  | 'under_review'
+  | 'approved'
+  | 'rejected'
+  | 'replacement_shipped'
+  | 'refund_issued'
+  | 'closed';
+
+export interface DamageClaim {
+  id: number;
+  ticket_id: string;
+  user_id: number;
+  order_id: number;
+  order_item_id: number | null;
+  issue_type: string;
+  description: string;
+  photo_urls: string[];
+  status: DamageClaimStatus;
+  admin_notes: string | null;
+  created_at: string;
+  updated_at: string;
+  user: OrderUser | null;
+  order: Order | null;
+}
+
+export interface DamageClaimListResponse {
+  items: DamageClaim[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
 export interface TokenResponse {
   access_token: string;
   refresh_token: string;
