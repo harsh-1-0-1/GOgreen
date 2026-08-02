@@ -764,10 +764,15 @@ export default function ProductDetailPage() {
               <div className="space-y-4">
                 {variantGroups.map((group: any) => {
                   const isColourGroup = /colou?r/i.test(group.label);
-                  const hasOptionImages = (group.options ?? []).some((o: any) => o.images?.[0]);
+                  // Hide out-of-stock options entirely — only in-stock options are rendered.
+                  const inStockOptions = (group.options ?? []).filter((o: any) => Number(o.stock ?? 0) > 0);
+                  const hasOptionImages = inStockOptions.some((o: any) => o.images?.[0]);
                   // Render mode: colour → circular swatches; has images → image cards; else → pill chips
                   const renderMode: 'colour' | 'image-card' | 'pill' =
                     isColourGroup ? 'colour' : hasOptionImages ? 'image-card' : 'pill';
+
+                  // Group has no purchasable options — hide it entirely.
+                  if (inStockOptions.length === 0) return null;
 
                   return (
                     <div key={group.id}>
@@ -778,22 +783,19 @@ export default function ProductDetailPage() {
                       {/* ── Colour swatches ─────────────────────────────── */}
                       {renderMode === 'colour' && (
                         <div className="flex flex-wrap gap-2.5">
-                          {(group.options ?? []).map((opt: any) => {
+                          {inStockOptions.map((opt: any) => {
                             const isSelected = selectedOptions[group.id] === opt.id;
-                            const outOfStock = Number(opt.stock ?? 0) <= 0;
-                            // hex is the source of truth for the swatch fill — same as old color.hex system
                             const hex: string = opt.color_hex || '';
                             return (
                               <button
                                 key={opt.id}
                                 type="button"
-                                disabled={outOfStock}
                                 onClick={() => selectOption(group.id, opt.id)}
                                 title={opt.name}
                                 aria-label={opt.name}
                                 className={`relative h-9 w-9 rounded-full border-2 transition focus:outline-none
                                   ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200 hover:border-primary/40'}
-                                  ${outOfStock ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
+                                  cursor-pointer
                                 `}
                                 style={{ backgroundColor: hex || '#e5e7eb' }}
                               />
@@ -805,22 +807,18 @@ export default function ProductDetailPage() {
                       {/* ── Image cards (pot type, style, etc.) ─────────── */}
                       {renderMode === 'image-card' && (
                         <div className="flex flex-wrap gap-2">
-                          {(group.options ?? []).map((opt: any) => {
+                          {inStockOptions.map((opt: any) => {
                             const isSelected = selectedOptions[group.id] === opt.id;
-                            const outOfStock = Number(opt.stock ?? 0) <= 0;
                             const priceDelta = Number(opt.price ?? 0);
                             return (
                               <button
                                 key={opt.id}
                                 type="button"
-                                disabled={outOfStock}
                                 onClick={() => selectOption(group.id, opt.id)}
                                 className={`relative flex flex-col items-center rounded-xl border-2 p-2 w-[88px] transition focus:outline-none
                                   ${isSelected
                                     ? 'border-primary bg-primary/5 shadow-sm'
-                                    : outOfStock
-                                      ? 'border-gray-200 opacity-50 cursor-not-allowed'
-                                      : 'border-gray-200 hover:border-primary/60 bg-white cursor-pointer'
+                                    : 'border-gray-200 hover:border-primary/60 bg-white cursor-pointer'
                                   }`}
                               >
                                 <div className="h-14 w-14 rounded-lg overflow-hidden bg-gray-50 mb-1.5 shrink-0">
@@ -854,9 +852,6 @@ export default function ProductDetailPage() {
                                     Included
                                   </span>
                                 )}
-                                {outOfStock && (
-                                  <span className="text-[9px] text-red-400 font-semibold mt-0.5">Out of stock</span>
-                                )}
                               </button>
                             );
                           })}
@@ -866,22 +861,18 @@ export default function ProductDetailPage() {
                       {/* ── Pill chips (size, weight, etc.) ─────────────── */}
                       {renderMode === 'pill' && (
                         <div className="flex flex-wrap gap-2">
-                          {(group.options ?? []).map((opt: any) => {
+                          {inStockOptions.map((opt: any) => {
                             const isSelected = selectedOptions[group.id] === opt.id;
-                            const outOfStock = Number(opt.stock ?? 0) <= 0;
                             const priceDelta = Number(opt.price ?? 0);
                             return (
                               <button
                                 key={opt.id}
                                 type="button"
-                                disabled={outOfStock}
                                 onClick={() => selectOption(group.id, opt.id)}
                                 className={`px-4 py-2 rounded-full border-2 text-sm font-semibold transition focus:outline-none
                                   ${isSelected
                                     ? 'bg-primary border-primary text-white shadow-sm'
-                                    : outOfStock
-                                      ? 'border-gray-200 text-gray-300 cursor-not-allowed line-through'
-                                      : 'border-gray-200 text-gray-700 hover:border-primary hover:text-primary bg-white'
+                                    : 'border-gray-200 text-gray-700 hover:border-primary hover:text-primary bg-white'
                                   }`}
                               >
                                 {opt.name}
