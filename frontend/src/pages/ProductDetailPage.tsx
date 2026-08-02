@@ -696,13 +696,6 @@ export default function ProductDetailPage() {
     if (!banner) return null;
     const img = banner.image_url || fallbackImg;
     const hasCta = banner.cta_text && banner.cta_link;
-    return <InlineBanner banner={banner} fallbackImg={img} hasCta={!!hasCta} />;
-  }
-
-  function renderFaqBannerItem(banner: Banner | null, fallbackImg: string) {
-    if (!banner) return null;
-    const img = banner.image_url || fallbackImg;
-    const hasCta = banner.cta_text && banner.cta_link;
     return <InlineBanner banner={banner} fallbackImg={img} hasCta={!!hasCta} naturalSize />;
   }
 
@@ -1005,7 +998,7 @@ export default function ProductDetailPage() {
         <ProductReviews productId={product.id} />
 
         {/* Product detail page ad banner — admin controlled via Banners › Product Detail Page Banner */}
-        {renderFaqBannerItem(productDetailBanner, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&q=80')}
+        {renderInlineBannerItem(productDetailBanner, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&q=80')}
 
         <ProductFaq faqs={product.faqs} />
       </div>

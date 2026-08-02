@@ -99,7 +99,7 @@ function ProductTile({ product }: { product: Product }) {
             className="mt-auto w-full py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90"
             style={{ backgroundColor: SECONDARY }}
           >
-            {hasVariants ? 'Choose options' : 'Add to cart'}
+            Add to cart
           </button>
         )}
       </div>

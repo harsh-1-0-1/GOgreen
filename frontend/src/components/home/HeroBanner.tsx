@@ -24,15 +24,6 @@ const FALLBACK_SLIDE: Banner = {
 const STARBURST_CLIP =
   'polygon(50% 0%,66% 18%,85% 5%,80% 28%,100% 35%,87% 50%,100% 65%,80% 72%,85% 95%,66% 82%,50% 100%,34% 82%,15% 95%,20% 72%,0% 65%,13% 50%,0% 35%,20% 28%,15% 5%,34% 18%)';
 
-function isDarkBg(hex: string): boolean {
-  const c = hex.replace('#', '');
-  if (c.length !== 6) return false;
-  const r = parseInt(c.substring(0, 2), 16);
-  const g = parseInt(c.substring(2, 4), 16);
-  const b = parseInt(c.substring(4, 6), 16);
-  return r * 0.299 + g * 0.587 + b * 0.114 < 128;
-}
-
 function SlidesSkeleton() {
   return (
     <section className="w-full overflow-hidden">
@@ -105,91 +96,52 @@ export default function HeroBanner() {
         }}
       >
         {slides.map((slide, i) => {
-          const dark = isDarkBg(slide.bg_color);
-          const textColor = slide.text_color || (dark ? '#FFFFFF' : '#1B4332');
-
-          return (
-            <div
-              key={slide.id || i}
-              className="w-full shrink-0 relative overflow-hidden"
-              style={{ backgroundColor: slide.bg_color }}
-              aria-hidden={i !== current}
-            >
+          const slideInner = (
+            <>
               {slide.image_url && (
                 <img
                   src={slide.image_url}
                   alt=""
-                  className="absolute inset-0 w-full h-full object-cover md:hidden"
+                  className="absolute inset-0 w-full h-full object-cover"
                   loading={i === 0 ? 'eager' : 'lazy'}
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                   }}
                 />
               )}
-              <div className="relative h-full flex items-stretch">
-                <div className="relative z-10 w-full md:w-[48%] lg:w-[44%] flex items-center px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28 py-10 md:py-0">
-                  <div className="text-center md:text-left max-w-md w-full space-y-5 md:space-y-6">
-                    {slide.title && (
-                      <h2
-                        className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold leading-tight"
-                        style={{ color: textColor }}
-                      >
-                        {slide.title}
-                      </h2>
-                    )}
-                    {slide.subtitle && (
-                      <p
-                        className="text-sm sm:text-base md:text-lg leading-relaxed"
-                        style={{ color: textColor, opacity: 0.9 }}
-                      >
-                        {slide.subtitle}
-                      </p>
-                    )}
-                  </div>
-                </div>
 
-                <div className="hidden md:block flex-1 relative overflow-hidden">
-                  {slide.image_url && (
-                    <img
-                      src={slide.image_url}
-                      alt=""
-                      className="w-full h-full object-cover object-center"
-                      loading={i === 0 ? 'eager' : 'lazy'}
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  )}
-
-                </div>
-
-                {slide.badge_text && (
-                  <div
-                    className="absolute z-20 hidden md:flex left-[44%] top-1/2 -translate-x-1/2 -translate-y-1/2 w-[130px] h-[130px] lg:w-[148px] lg:h-[148px] items-center justify-center drop-shadow-xl"
-                    style={{
-                      clipPath: STARBURST_CLIP,
-                      backgroundColor: '#F4A261',
-                    }}
-                  >
-                  </div>
-                )}
-              </div>
-
-              {slide.cta_text && slide.cta_link && (
-                <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-10 flex flex-col sm:flex-row items-center gap-3">
-                  <Link
-                    to={slide.cta_link}
-                    className={clsx(
-                      'inline-flex items-center justify-center px-8 py-3 rounded-lg font-semibold text-[14px] md:text-[15px] transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md',
-                      dark
-                        ? 'bg-white text-[#1B4332] hover:bg-gray-100'
-                        : 'bg-accent text-[#1B4332] hover:bg-accent/90',
-                    )}
-                  >
-                    {slide.cta_text}
-                  </Link>
-                </div>
+              {slide.badge_text && (
+                <div
+                  className="absolute z-20 hidden md:flex left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[130px] h-[130px] lg:w-[148px] lg:h-[148px] items-center justify-center drop-shadow-xl"
+                  style={{
+                    clipPath: STARBURST_CLIP,
+                    backgroundColor: '#F4A261',
+                  }}
+                />
               )}
+            </>
+          );
+
+          const slideStyle = { backgroundColor: slide.bg_color };
+
+          return slide.cta_link ? (
+            <Link
+              key={slide.id || i}
+              to={slide.cta_link}
+              className="w-full shrink-0 relative overflow-hidden block"
+              style={slideStyle}
+              aria-hidden={i !== current}
+            >
+              {slideInner}
+            </Link>
+          ) : (
+            <div
+              key={slide.id || i}
+              className="w-full shrink-0 relative overflow-hidden"
+              style={slideStyle}
+              aria-hidden={i !== current}
+            >
+              {slideInner}
             </div>
           );
         })}

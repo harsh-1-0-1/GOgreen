@@ -111,13 +111,13 @@ const PLACEMENTS = [
     key: 'product_detail',
     label: '📦 Product Detail Page Banner',
     description: 'A wide promotional banner displayed on product detail pages, just above the FAQ section.',
-    helpText: 'Recommended size: 1400x350px. Choose a product type for type-specific banners, or fallback for all products.',
+    helpText: 'Recommended aspect ratio 4:1 (e.g. 1400×350px). Banner renders at the uploaded image size. Choose a product type for type-specific banners, or fallback for all products.',
   },
   {
     key: 'product_spec',
     label: '📋 Product Spec Banner',
     description: 'A wide promotional banner displayed on the product detail page, just above the Product Specification section.',
-    helpText: 'Recommended size: 600x600px (square). Choose a product type for type-specific spec banners, or fallback for all products.',
+    helpText: 'Recommended aspect ratio 1:1 (square, e.g. 600×600px). Banner renders at the uploaded image size. Choose a product type for type-specific spec banners, or fallback for all products.',
   },
 ] as const;
 
