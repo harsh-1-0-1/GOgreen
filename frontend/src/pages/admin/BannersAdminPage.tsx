@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,12 +20,13 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Image as ImageIcon, Plus, X, Info, Layout, Calendar, CheckCircle } from 'lucide-react';
+import { GripVertical, Image as ImageIcon, Plus, X, Info, Layout, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import api from '@/lib/api';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useCategories } from '@/hooks/useCategories';
+import { getApiErrorDetail } from '@/lib/apiError';
 import type { Banner, Category } from '@/types';
 
 const PLACEMENTS = [
@@ -474,13 +475,11 @@ function TrendingBannerPreview({
 function BannerDrawer({
   banner,
   placement,
-  cloudinaryEnabled,
   onClose,
   onSaved,
 }: {
   banner: Banner | null;
   placement: string;
-  cloudinaryEnabled: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -491,16 +490,17 @@ function BannerDrawer({
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<BannerFormData>({
-    resolver: zodResolver(bannerSchema) as any,
+    resolver: zodResolver(bannerSchema),
     defaultValues: {
       title: banner?.title || '',
       subtitle: banner?.subtitle || '',
       cta_text: banner?.cta_text || '',
       cta_link: banner?.cta_link || '',
       badge_text: banner?.badge_text || '',
-      placement: (banner?.placement || placement) as any,
+      placement: (banner?.placement || placement) as BannerFormData['placement'],
       target_path: banner?.target_path || '',
       bg_color: banner?.bg_color || '#F5F0E8',
       text_color: banner?.text_color || '#1B4332',
@@ -528,6 +528,10 @@ function BannerDrawer({
   const [fileError, setFileError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // react-hook-form's `watch()` is a React-Compiler-incompatible library (cannot be
+  // memoized safely); the live banner preview needs its reactive values, so the
+  // compiler is intentionally allowed to skip memoizing this drawer.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const watchedTitle = watch('title');
   const watchedSubtitle = watch('subtitle');
   const watchedBgColor = watch('bg_color');
@@ -613,9 +617,9 @@ function BannerDrawer({
       toast.success('Banner saved successfully!');
       onSaved();
       onClose();
-    } catch (err: any) {
+    } catch (err) {
       toast.error(
-        err.response?.data?.detail || 'Failed to save banner',
+        getApiErrorDetail(err, 'Failed to save banner'),
       );
     } finally {
       setSubmitting(false);
@@ -861,9 +865,7 @@ function BannerDrawer({
             </div>
             <button
               type="button"
-              onClick={() =>
-                setValue('is_active', !watch('is_active'))
-              }
+              onClick={() => setValue('is_active', !getValues('is_active'))}
               className={`relative w-11 h-6 rounded-full transition-colors ml-auto ${
                 watch('is_active') ? 'bg-primary' : 'bg-gray-300'
               }`}
@@ -1102,13 +1104,6 @@ export default function BannersAdminPage() {
     null,
   );
 
-  const { data: config } = useQuery({
-    queryKey: ['banner-config'],
-    queryFn: () => api.get('/banners/config').then((r) => r.data),
-    retry: false,
-    staleTime: Infinity,
-  });
-
   const {
     data: banners = [],
     isLoading,
@@ -1121,10 +1116,15 @@ export default function BannersAdminPage() {
         .then((r) => r.data),
   });
 
-  const [localBanners, setLocalBanners] = useState<Banner[]>([]);
-  useEffect(() => {
+  const [localBanners, setLocalBanners] = useState<Banner[]>(banners);
+
+  // Mirror fetched banners into editable local state. Guarded render-time adjustment
+  // replaces a synchronous setState effect.
+  const [lastFetchedBanners, setLastFetchedBanners] = useState(banners);
+  if (lastFetchedBanners !== banners) {
+    setLastFetchedBanners(banners);
     setLocalBanners(banners);
-  }, [banners]);
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -1306,7 +1306,6 @@ export default function BannersAdminPage() {
         <BannerDrawer
           banner={editingBanner}
           placement={activePlacement}
-          cloudinaryEnabled={config?.cloudinary_enabled ?? false}
           onClose={() => {
             setDrawerOpen(false);
             setEditingBanner(null);

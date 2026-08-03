@@ -13,6 +13,7 @@ from app.schemas.cart import (
     CartResponse,
 )
 from app.services import cart_service
+from app.utils.variant_pricing import StockMapMissingError
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 
@@ -74,6 +75,8 @@ async def add_cart_item(
         cart = await cart_service.add_item(
             db, cart, body.product_id, body.quantity, body.selected_options,
         )
+    except StockMapMissingError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return cart_service.build_cart_response(cart)
@@ -97,6 +100,8 @@ async def update_cart_item(
 
     try:
         cart = await cart_service.update_item(db, cart, item_id, body.quantity)
+    except StockMapMissingError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return cart_service.build_cart_response(cart)
@@ -119,6 +124,8 @@ async def delete_cart_item(
 
     try:
         cart = await cart_service.remove_item(db, cart, item_id)
+    except StockMapMissingError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return cart_service.build_cart_response(cart)

@@ -59,6 +59,11 @@ class ProductVariantsNew(BaseModel):
     # Combo image map: keyed by "optId1__optId2__..." joining one optId per group in order.
     # Values are lists of relative image keys, resolved to URLs in the serializer.
     image_map: Optional[dict] = None
+    # Per-combination stock map (dense): keyed by the same "optId1__optId2__..." combo
+    # key, one row for EVERY cartesian combination (including 0). This is the source of
+    # truth for availability/reservation on variant_groups products; options[].stock is
+    # retained only as the migration source. See VARIANT_COMBO_STOCK_PLAN.md.
+    stock_map: Optional[dict] = None
 
     model_config = {"extra": "allow"}
 

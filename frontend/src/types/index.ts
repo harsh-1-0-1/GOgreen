@@ -52,7 +52,9 @@ export interface VariantOption {
   id: string;
   name: string;
   price: number;
-  stock: number;
+  /** Legacy per-option stock — no longer used for availability (stock_map is the
+   *  source of truth per combination). Retained in the API as the migration source. */
+  stock?: number;
   images?: string[];
   color_hex?: string;
 }
@@ -67,6 +69,10 @@ export interface VariantGroup {
 export interface ProductVariants {
   variant_groups: VariantGroup[];
   default_image?: string;
+  /** Per-combination stock, keyed by combo_key (option IDs joined by "__"). Dense: every combo has a row, 0 = out of stock. */
+  stock_map?: Record<string, number>;
+  /** Per-combination images, keyed by combo_key (admin combinations table). */
+  image_map?: Record<string, string[]>;
 }
 
 // Old variant types - kept for backward compatibility during migration

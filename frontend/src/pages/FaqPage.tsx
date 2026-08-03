@@ -7,7 +7,6 @@ import {
   ChevronUp, 
   Mail, 
   Phone, 
-  MessageSquare, 
   ShieldCheck, 
   HelpCircle, 
   HeartHandshake,

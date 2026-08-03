@@ -78,9 +78,16 @@ function TrendingPromoBanner({
   const slides = banners.length > 0 ? banners : fallbackSlides;
   const [current, setCurrent] = useState(0);
 
-  useEffect(() => {
+  // Reset to the first slide when the slide set changes — guarded render-time
+  // adjustment replaces a synchronous setState effect.
+  const [lastSlideLens, setLastSlideLens] = useState<[number, number]>([
+    banners.length,
+    images.length,
+  ]);
+  if (banners.length !== lastSlideLens[0] || images.length !== lastSlideLens[1]) {
+    setLastSlideLens([banners.length, images.length]);
     setCurrent(0);
-  }, [banners.length, images.length]);
+  }
 
   useEffect(() => {
     if (slides.length <= 1) return;

@@ -48,9 +48,13 @@ export default function HeroBanner() {
   const [paused, setPaused] = useState(false);
   const touchStartRef = useRef(0);
 
-  useEffect(() => {
+  // Reset to the first slide when the banner set changes. React docs recommend
+  // adjusting state during render (guarded) instead of a synchronous setState effect.
+  const [lastBanners, setLastBanners] = useState(banners);
+  if (lastBanners !== banners) {
+    setLastBanners(banners);
     setCurrent(0);
-  }, [banners]);
+  }
 
   const next = useCallback(
     () => setCurrent((c) => (c + 1) % slides.length),
@@ -75,7 +79,8 @@ export default function HeroBanner() {
   function handleTouchEnd(e: React.TouchEvent) {
     const delta = e.changedTouches[0].clientX - touchStartRef.current;
     if (Math.abs(delta) > 50) {
-      delta < 0 ? next() : prev();
+      if (delta < 0) next();
+      else prev();
     }
   }
 

@@ -4,6 +4,7 @@ import { CheckCircle2, ChevronDown, ImagePlus, Star, ThumbsUp } from 'lucide-rea
 import toast from 'react-hot-toast';
 import { useCreateReview, useMarkReviewHelpful, useProductReviews } from '@/hooks/useReviews';
 import { useAuthStore } from '@/store/authStore';
+import { getApiErrorDetail, isUnauthorizedError } from '@/lib/apiError';
 import type { ReviewSummary } from '@/types';
 
 const ratingRows = [5, 4, 3, 2, 1];
@@ -163,8 +164,8 @@ export default function ProductReviews({ productId }: { productId: number }) {
       setRating(5);
       setIsWriting(false);
       toast.success('Review submitted');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Could not submit review');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Could not submit review'));
     }
   }
 
@@ -176,9 +177,9 @@ export default function ProductReviews({ productId }: { productId: number }) {
   async function markHelpful(reviewId: number) {
     try {
       await helpful.mutateAsync(reviewId);
-    } catch (err: any) {
-      if (err.response?.status === 401) openAuthModal();
-      else toast.error(err.response?.data?.detail || 'Could not mark helpful');
+    } catch (err) {
+      if (isUnauthorizedError(err)) openAuthModal();
+      else toast.error(getApiErrorDetail(err, 'Could not mark helpful'));
     }
   }
 

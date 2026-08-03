@@ -20,6 +20,7 @@ from app.db.models import (
 )
 from app.schemas.order import DirectCheckoutItem
 from app.services.cart_service import resolve_variant_details
+from app.utils.variant_pricing import StockMapMissingError
 
 
 async def _create_razorpay_order(order: Order, email: str, full_name: str, phone: str) -> dict:
@@ -74,52 +75,29 @@ async def _reserve_product_for_order(
     combo_key = details.get("combo_key")
     variant_snapshot = details.get("variant_snapshot", [])
     
-    if combo_key:
+    if "variant_groups" in (product.variants or {}):
+        # New format: Decrement the exact stock_map combo row under the row lock.
+        # No per-option decrement, no fallback — a missing row/key is a loud bug,
+        # not a condition to reserve against the wrong pool.
+        variants = product.variants or {}
+        stock_map = variants.get("stock_map")
+        if not isinstance(stock_map, dict) or combo_key is None or combo_key not in stock_map:
+            raise StockMapMissingError(
+                f"Stock map missing for product '{product.name}' (id={product.id}, combo_key={combo_key!r})"
+            )
+        stock_map[combo_key] = max(0, int(stock_map[combo_key]) - quantity)
+        variants["stock_map"] = stock_map
+        product.variants = variants
+        flag_modified(product, "variants")
+        # stock_qty = total sellable units = sum of all combination pools.
+        product.stock_qty = sum(int(v or 0) for v in stock_map.values())
+    elif combo_key:
         # Old format: Update stock in variants.stock map
         variants = product.variants or {}
         variants["stock"][combo_key] = int(variants["stock"].get(combo_key, 0)) - quantity
         product.variants = variants
         product.stock_qty = sum(int(v or 0) for v in variants.get("stock", {}).values())
         flag_modified(product, "variants")
-    elif variant_snapshot:
-        # New format: Decrement stock per selected option
-        variants = product.variants or {}
-        variant_groups = variants.get("variant_groups", [])
-        selected_ids = details.get("selected_options", [])
-        
-        for group in variant_groups:
-            for option in group.get("options", []):
-                if option.get("id") in selected_ids:
-                    current_stock = int(option.get("stock", 0))
-                    option["stock"] = max(0, current_stock - quantity)
-        
-        product.variants = variants
-        flag_modified(product, "variants")
-        # Recalculate stock_qty as: min over groups of (sum of option stocks in that group).
-        #
-        # Why this formula — derived directly from the decrement code above:
-        # A purchase of (S, Red) decrements ONLY S.stock and ONLY Red.stock.
-        # Option stocks are therefore independent shared marginals: Red's 3 units can
-        # be consumed by (S,Red) OR (M,Red) — they share the same pool.
-        #
-        # Consequence: a group's total capacity = sum of its options' stocks, because
-        # those options are mutually exclusive choices whose pools don't overlap.
-        # The binding group is whichever has the smallest total capacity (min across groups).
-        #
-        # Counterexample that eliminates "min of per-group max":
-        #   Group A (sizes): S:5, M:5  → capacity 10
-        #   Group B (colors): Red:3, Blue:3 → capacity 6
-        #   Sellable: 3×(S,Red) + 3×(M,Blue) = 6 total. Correct answer: 6.
-        #   min(max(5,5), max(3,3)) = 5 — wrong, understates real capacity by 1.
-        #   min(10, 6) = 6 — correct.
-        #
-        # Counterexample that eliminates "sum all options across all groups":
-        #   Same setup: sum = 10+6 = 16 — obviously wrong, double-counts.
-        group_totals = [
-            sum(int(opt.get("stock", 0)) for opt in grp.get("options", []))
-            for grp in variant_groups
-        ]
-        product.stock_qty = min(group_totals) if group_totals else 0
     else:
         # Simple product: Atomic SQL update
         update_stmt = (

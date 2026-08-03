@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, FolderTree, Plus, Trash2, Info, Upload, Image as ImageIcon, CheckCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderTree, Plus, Trash2, Info, Upload, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCategories } from '@/hooks/useCategories';
 import { useCreateCategory, useDeleteCategory } from '@/hooks/useAdmin';
 import api from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { getApiErrorDetail } from '@/lib/apiError';
 import type { Category } from '@/types';
 
 function CategoryNode({ cat, onDelete }: { cat: Category; onDelete: (id: number, name: string) => void }) {
@@ -126,8 +127,8 @@ export default function CategoriesAdminPage() {
       // Invalidate queries
       qc.invalidateQueries({ queryKey: ['categories'] });
       refetch();
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to create category');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to create category'));
     }
   }
 
@@ -137,8 +138,8 @@ export default function CategoriesAdminPage() {
       await deleteMutation.mutateAsync(id);
       toast.success('Category deleted successfully!');
       refetch();
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to delete (check if products are attached)');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to delete (check if products are attached)'));
     }
   }
 

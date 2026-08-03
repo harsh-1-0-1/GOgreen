@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { Product, Category } from '@/types';
 
 interface AdminStats {
   total_products: number;
@@ -114,11 +113,24 @@ export function useCreateBlogPost() {
 export function useUpdateBlogPost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ slug, body }: { slug: string; body: any }) => {
+    mutationFn: async ({
+      slug,
+      body,
+    }: {
+      slug: string;
+      body: {
+        title: string;
+        excerpt: string;
+        content: string;
+        category: string;
+        author_name: string;
+        is_published: boolean;
+      };
+    }) => {
       const { data } = await api.put(`/blog/${slug}`, body);
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['blog'] });
     },
   });

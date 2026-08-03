@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Edit2, X, Image as ImageIcon, BookOpen, Eye, Edit3, HelpCircle, ArrowRight } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { Plus, Trash2, Edit2, X, Image as ImageIcon, Eye, Edit3, HelpCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useBlogPosts } from '@/hooks/useBlog';
 import { useCreateBlogPost, useUpdateBlogPost, useDeleteBlogPost } from '@/hooks/useAdmin';
+import { getApiErrorDetail } from '@/lib/apiError';
 import type { BlogPost } from '@/types';
 
 const CATEGORIES = [
@@ -35,9 +36,7 @@ export default function BlogAdminPage() {
   // Active Mode: 'edit' or 'preview'
   const [activeFormTab, setActiveFormTab] = useState<'write' | 'preview'>('write');
 
-  // Defined with useCallback so the useEffect below can safely list it as a
-  // dependency — avoids the "used before declaration" bug where const resetForm
-  // was referenced inside the effect before it was initialised.
+  // Defined with useCallback so the form-seed logic can safely call it.
   const resetForm = useCallback(() => {
     setTitle('');
     setExcerpt('');
@@ -51,7 +50,11 @@ export default function BlogAdminPage() {
     setActiveFormTab('write');
   }, []);
 
-  useEffect(() => {
+  // Seed the form when entering edit mode (or reset for create). Guarded render-time
+  // adjustment replaces a synchronous setState effect.
+  const [lastEditedPost, setLastEditedPost] = useState<BlogPost | null>(null);
+  if (editingPost !== lastEditedPost) {
+    setLastEditedPost(editingPost);
     if (editingPost) {
       setTitle(editingPost.title);
       setExcerpt(editingPost.excerpt);
@@ -64,7 +67,7 @@ export default function BlogAdminPage() {
     } else {
       resetForm();
     }
-  }, [editingPost, resetForm]);
+  }
 
   const openCreateModal = () => {
     resetForm();
@@ -126,8 +129,8 @@ export default function BlogAdminPage() {
         toast.success('New article published successfully!');
       }
       closeModal();
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Something went wrong. Verify inputs.');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Something went wrong. Verify inputs.'));
     }
   };
 
@@ -136,8 +139,8 @@ export default function BlogAdminPage() {
       try {
         await deleteMutation.mutateAsync(slug);
         toast.success('Article deleted successfully!');
-      } catch (err: any) {
-        toast.error(err.response?.data?.detail || 'Failed to delete');
+      } catch (err) {
+        toast.error(getApiErrorDetail(err, 'Failed to delete'));
       }
     }
   };

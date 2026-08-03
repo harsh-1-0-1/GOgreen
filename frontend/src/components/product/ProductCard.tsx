@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
+import { getApiErrorDetail } from '@/lib/apiError';
 import type { Product } from '@/types';
 
 const SECONDARY = '#16A34A';
@@ -10,7 +11,7 @@ export default function ProductCard({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
   const navigate = useNavigate();
   const hasVariants = Boolean(
-    (product.variants as any)?.variant_groups?.length > 0,
+    (product.variants?.variant_groups?.length ?? 0) > 0,
   );
   // For stock-display purposes the meaningful distinction is whether there are
   // multiple variant groups. With 0 or 1 group, stock_qty is exact:
@@ -20,7 +21,7 @@ export default function ProductCard({ product }: { product: Product }) {
   // With 2+ groups, stock_qty = min(group sums) — a transportation-problem ceiling
   // that can diverge from any individual combo's real availability, so showing
   // the number as a per-item count would be misleading.
-  const variantGroupCount: number = (product.variants as any)?.variant_groups?.length ?? 0;
+  const variantGroupCount: number = product.variants?.variant_groups?.length ?? 0;
   const stockQtyIsExact = variantGroupCount <= 1;
 
   const discount =
@@ -38,8 +39,8 @@ export default function ProductCard({ product }: { product: Product }) {
     try {
       await addItem(product.id, 1, product);
       toast.success(`${product.name} added to cart`);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to add');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to add'));
     }
   }
 

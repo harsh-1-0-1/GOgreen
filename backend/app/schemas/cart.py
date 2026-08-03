@@ -1,10 +1,17 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
+
+
+# New-format variant products send selected_options as a list of option IDs;
+# old-format products send a dict of slugs. Both are normalized server-side.
+SelectedOptions = list[str] | dict[str, str] | None
 
 
 class CartItemCreate(BaseModel):
     product_id: int
     quantity: int = Field(ge=1, default=1)
-    selected_options: dict[str, str] | None = None
+    selected_options: SelectedOptions = None
 
 
 class CartItemUpdate(BaseModel):
@@ -31,7 +38,7 @@ class CartItemResponse(BaseModel):
     id: int
     product_id: int
     quantity: int
-    selected_options: dict[str, str] | None = None
+    selected_options: list[str] | dict[str, Any] | None = None
     product: CartItemProduct
     line_total: float
     resolved_image_url: str

@@ -2,9 +2,9 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
-import { useAuthStore } from '@/store/authStore';
 import RecommendationBar from '@/components/cart/RecommendationBar';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
+import { getApiErrorDetail } from '@/lib/apiError';
 
 function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
   if (!item.selected_options) return null;
@@ -13,14 +13,13 @@ function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][n
 
 export default function CartPage() {
   const { items, total, itemCount, updateItem, removeItem, lastAddedProduct } = useCartStore();
-  const { user, openAuthModal } = useAuthStore();
 
   async function handleUpdate(itemId: number, qty: number) {
     try {
       if (qty <= 0) await removeItem(itemId);
       else await updateItem(itemId, qty);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Update failed');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Update failed'));
     }
   }
 

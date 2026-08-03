@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Phone, Mail, Building, FileText, ChevronRight, X, ArrowRight, MessageSquare, Info, User } from 'lucide-react';
+import { Phone, Mail, Building, FileText, X, Info, User } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Inquiry {

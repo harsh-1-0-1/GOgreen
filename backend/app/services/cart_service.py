@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models import Cart, CartItem, Product
 from app.schemas.cart import CartItemProduct, CartItemResponse, CartResponse
 from app.utils.image_upload import resolve_image_url
-from app.utils.variant_pricing import calculate_variant_price
+from app.utils.variant_pricing import StockMapMissingError, calculate_variant_price
 
 
 OPTION_COLOR_KEY = "color"
@@ -134,9 +134,13 @@ def resolve_variant_details(
                 quantity=quantity or 1,
                 validate_stock=validate_stock,
             )
-            # Add combo_key for backward compatibility (not used in new system)
-            result["combo_key"] = None
+            # combo_key comes from the canonical builder in calculate_variant_price.
+            # It is used by order reservation to decrement the exact stock_map row.
             return result
+        except StockMapMissingError:
+            # Preserve the loud-error class so the API layer maps it to a 500 with the
+            # STOCK_MAP_MISSING code (a deployment bug), not a client-side 400.
+            raise
         except ValueError as e:
             raise ValueError(str(e))
     

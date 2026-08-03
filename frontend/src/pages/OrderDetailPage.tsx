@@ -6,10 +6,6 @@ import { formatSelectedOptions } from '@/lib/variantDisplay';
 
 const STATUS_STEPS = ['pending', 'confirmed', 'shipped', 'delivered'];
 
-function labelize(slug?: string) {
-  return slug ? slug.split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' ') : '';
-}
-
 function paymentLabel(paymentMethod: string, paymentStatus: string) {
   if (paymentMethod === 'cod') {
     return paymentStatus === 'paid' ? 'COD collected' : 'Cash on delivery';

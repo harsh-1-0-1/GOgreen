@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
-import { X, ChevronLeft, ChevronRight, ShoppingBag } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { X, ShoppingBag } from 'lucide-react';
 import { useCartStore } from '@/store/cartStore';
 import type { Story } from '@/types';
 import toast from 'react-hot-toast';
@@ -19,10 +19,13 @@ export function StoryViewer({ stories, startIndex, onClose }: StoryViewerProps) 
 
   const story = stories[index];
 
-  useEffect(() => {
-    // Reset progress when story changes
+  // Reset progress when story changes — guarded render-time adjustment instead of a
+  // synchronous setState effect.
+  const [lastIndex, setLastIndex] = useState(index);
+  if (lastIndex !== index) {
+    setLastIndex(index);
     setProgress(0);
-  }, [index]);
+  }
 
   const next = () => {
     if (index < stories.length - 1) {
@@ -54,7 +57,7 @@ export function StoryViewer({ stories, startIndex, onClose }: StoryViewerProps) 
       toast.success('Added to cart');
       openDrawer();
       onClose();
-    } catch (err) {
+    } catch {
       toast.error('Failed to add to cart');
     }
   };

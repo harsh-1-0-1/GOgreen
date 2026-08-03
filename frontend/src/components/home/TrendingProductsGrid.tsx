@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useProducts } from '@/hooks/useProducts';
 import { useCartStore } from '@/store/cartStore';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
+import { getApiErrorDetail } from '@/lib/apiError';
 import type { Product } from '@/types';
 
 const SECONDARY = '#16A34A';
@@ -12,7 +13,7 @@ function ProductTile({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
   const navigate = useNavigate();
   const hasVariants = Boolean(
-    (product.variants as any)?.variant_groups?.length > 0,
+    (product.variants?.variant_groups?.length ?? 0) > 0,
   );
 
   const discount =
@@ -33,8 +34,8 @@ function ProductTile({ product }: { product: Product }) {
     try {
       await addItem(product.id, 1, product);
       toast.success(`${product.name} added to cart`);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to add');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to add'));
     }
   }
 

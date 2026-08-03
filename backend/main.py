@@ -23,6 +23,7 @@ from app.core.rate_limit import limiter
 from app.core.tasks import cleanup_abandoned_orders
 from app.utils.image_upload import ImageStorageUnavailableError
 from app.utils.redis import close_redis, init_redis
+from app.utils.variant_pricing import StockMapMissingError
 
 
 @asynccontextmanager
@@ -123,6 +124,18 @@ async def integrity_error_handler(_request: Request, exc: IntegrityError) -> JSO
     return JSONResponse(
         status_code=409,
         content={"detail": "A database constraint was violated. Check your input and try again."},
+    )
+
+
+@app.exception_handler(StockMapMissingError)
+async def stock_map_missing_handler(_request: Request, exc: StockMapMissingError) -> JSONResponse:
+    # A variant_groups product is missing its stock_map / combo row. This is a
+    # deployment/migration bug, not a client error — surface a distinct, greppable
+    # error code instead of a generic trace or a silent wrong-answer path.
+    logger.error("Stock map missing: {}", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": StockMapMissingError.error_code},
     )
 
 

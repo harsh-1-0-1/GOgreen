@@ -4,9 +4,70 @@ CRITICAL: All price calculations MUST use stored variant_groups data.
 Never trust client-provided prices - always re-calculate server-side.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from app.db.models import Product
+
+STOCK_MAP_MISSING = "STOCK_MAP_MISSING"
+
+
+class StockMapMissingError(ValueError):
+    """Raised when a variant_groups product lacks a usable stock_map entry.
+
+    Missing stock_map data is a bug (stale data / key mismatch / migration not run),
+    not a condition to quietly work around. The API layer maps this to a 500 with the
+    distinct STOCK_MAP_MISSING code so it is greppable and testable.
+    """
+
+    error_code = STOCK_MAP_MISSING
+
+
+def build_combo_key(variant_groups: List[dict], selected_option_ids: List[str]) -> Optional[str]:
+    """Build the canonical combo key: option IDs joined by '__' in variant_groups order.
+
+    Mirrors the frontend buildComboRows ordering (ProductsAdminPage.tsx) so reservation,
+    stock_map lookup, and image_map lookup all agree. Returns None when a group does not
+    contribute exactly one selected option (e.g. partial selection).
+    """
+    if not variant_groups:
+        return None
+    parts = []
+    for group in variant_groups:
+        sel = [o for o in group.get("options", []) if o.get("id") in selected_option_ids]
+        if len(sel) != 1:
+            return None
+        parts.append(sel[0]["id"])
+    return "__".join(parts)
+
+
+def build_dense_stock_map(variant_groups: List[dict]) -> Dict[str, int]:
+    """Backfill a dense per-combination stock_map from per-option stocks.
+
+    Walks the cartesian product of options (same iteration as the frontend buildComboRows,
+    ignoring the cap) and assigns each combo row stock = min of the option stocks it
+    references — reproducing the pre-migration per-option availability as the starting
+    point. Used by the one-off migration, seed data, and tests.
+    """
+    keys = [""]
+    for group in variant_groups:
+        options = group.get("options", [])
+        keys = [
+            (f"{k}__{opt['id']}" if k else opt["id"])
+            for k in keys
+            for opt in options
+        ]
+        if not options:
+            return {}
+
+    stock_by_option = {}
+    for group in variant_groups:
+        for opt in group.get("options", []):
+            stock_by_option[opt["id"]] = int(opt.get("stock", 0))
+
+    return {
+        key: min(stock_by_option[opt_id] for opt_id in key.split("__"))
+        for key in keys
+    }
 
 
 def calculate_variant_price(
@@ -84,25 +145,25 @@ def calculate_variant_price(
             raise ValueError(f"Multiple options selected for group '{group_label}'")
         selection_by_group[group_id] = (group_label, option_data)
     
-    # Validate required groups have selections
+    # Per-combination stock requires a full combo key: EVERY group must contribute
+    # exactly one selection, required or not. `required` is retained in the schema as
+    # documentation of intent; a missing selection is an incomplete-configuration
+    # client error (400), never a StockMapMissingError data-integrity failure.
     for group_id, group_data in group_map.items():
-        if group_data["required"] and group_id not in selection_by_group:
+        if group_id not in selection_by_group:
             raise ValueError(f"Please select an option for '{group_data['label']}'")
     
     # Calculate total price by summing selected option prices
     total_price = 0.0
     variant_snapshot = []  # For order denormalization
     selected_option_images = []
-    min_stock = float('inf')
     
     for group_id, (group_label, option_data) in selection_by_group.items():
         option_price = float(option_data.get("price", 0))
-        option_stock = int(option_data.get("stock", 0))
         option_name = option_data.get("name", "")
         option_images = option_data.get("images", [])
         
         total_price += option_price
-        min_stock = min(min_stock, option_stock)
         
         # Build snapshot for order denormalization
         variant_snapshot.append({
@@ -115,8 +176,18 @@ def calculate_variant_price(
         if option_images:
             selected_option_images.extend(option_images)
     
-    # Stock validation
-    available_stock = int(min_stock) if min_stock != float('inf') else product.stock_qty
+    # Canonical combo key for per-combination stock lookup.
+    # Every variant_groups product must carry a dense stock_map (migration is a
+    # mandatory pre-deploy step). No fallback: a missing map/key is a bug and fails
+    # loudly so it surfaces in logs instead of silently overselling.
+    combo_key = build_combo_key(variant_groups, selected_options)
+    stock_map = variants.get("stock_map")
+    if not isinstance(stock_map, dict) or combo_key is None or combo_key not in stock_map:
+        raise StockMapMissingError(
+            f"Stock map missing for product '{product.name}' (id={product.id}, combo_key={combo_key!r})"
+        )
+    
+    available_stock = int(stock_map.get(combo_key, 0) or 0)
     if validate_stock:
         if available_stock <= 0:
             raise ValueError("Selected configuration is out of stock")
@@ -136,6 +207,7 @@ def calculate_variant_price(
         "resolved_image_url": resolved_image,  # Will be resolved to full URL by serializer
         "available_stock": available_stock,
         "variant_snapshot": variant_snapshot,  # CRITICAL: For order denormalization
+        "combo_key": combo_key,  # Canonical key for reservation / image lookup
     }
 
 

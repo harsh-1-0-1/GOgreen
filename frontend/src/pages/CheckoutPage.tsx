@@ -5,12 +5,13 @@ import { BadgePercent, Banknote, ChevronDown, ChevronUp, CreditCard, LockKeyhole
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { clearDirectCheckoutSession, readDirectCheckoutSession } from '@/lib/directCheckout';
-import type { CheckoutResponse } from '@/types';
+import type { CartItemProduct, CheckoutResponse } from '@/types';
 import { useCreateAddress } from '@/hooks/useAddresses';
 import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 import { LOGO_PATH } from '@/lib/branding';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
+import { getApiErrorDetail } from '@/lib/apiError';
 
 declare global {
   interface Window {
@@ -63,7 +64,7 @@ type CheckoutItem = {
   product_id: number;
   quantity: number;
   selected_options: import('@/types').SelectedOptions;
-  product: any;
+  product: CartItemProduct;
   unit_price: number;
   line_total: number;
   resolved_image_url: string;
@@ -205,7 +206,7 @@ export default function CheckoutPage() {
   const [paying, setPaying] = useState(false);
 
   const isBuyNow = new URLSearchParams(location.search).get('mode') === 'buy-now';
-  const directSession = useMemo(() => readDirectCheckoutSession(), [location.search]);
+  const directSession = useMemo(() => (isBuyNow ? readDirectCheckoutSession() : null), [isBuyNow]);
   const items: CheckoutItem[] = isBuyNow ? directSession?.items ?? [] : cart.items;
   const subtotal = items.reduce((sum, item) => sum + item.line_total, 0);
   const shipping = subtotal >= 499 ? 0 : 49;
@@ -221,17 +222,17 @@ export default function CheckoutPage() {
     if (!isBuyNow && cart.items.length === 0) navigate('/cart', { replace: true });
   }, [cart.items.length, directSession, isBuyNow, navigate]);
 
-  useEffect(() => {
-    if (user) {
-      setForm((prev) => ({
-        ...prev,
-        contact: prev.contact || user.email,
-        firstName: prev.firstName || user.full_name?.split(' ')[0] || '',
-        lastName: prev.lastName || user.full_name?.split(' ').slice(1).join(' ') || '',
-        phone: prev.phone || user.phone || '',
-      }));
-    }
-  }, [user]);
+  const [lastUser, setLastUser] = useState(user);
+  if (user && lastUser !== user) {
+    setLastUser(user);
+    setForm((prev) => ({
+      ...prev,
+      contact: prev.contact || user.email,
+      firstName: prev.firstName || user.full_name?.split(' ')[0] || '',
+      lastName: prev.lastName || user.full_name?.split(' ').slice(1).join(' ') || '',
+      phone: prev.phone || user.phone || '',
+    }));
+  }
 
 
 
@@ -347,8 +348,8 @@ export default function CheckoutPage() {
           await openRazorpay(data);
         }
       }
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || err.message || 'Checkout failed');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Checkout failed'));
     } finally {
       setPaying(false);
     }

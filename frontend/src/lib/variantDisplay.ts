@@ -7,7 +7,13 @@
  * - Old format: Record<string, string> (color/pot_type/size slugs) → kept for backward compat
  */
 
-import type { SelectedOptions } from '@/types';
+import type {
+  ProductVariants,
+  ProductVariantsOld,
+  SelectedOptions,
+  VariantGroup,
+  VariantSnapshotEntry,
+} from '@/types';
 
 export interface DisplayOption {
   label: string;
@@ -20,7 +26,7 @@ export interface DisplayOption {
  */
 export function resolveSelectedOptions(
   selectedOptions: SelectedOptions,
-  productVariants: any,
+  productVariants: ProductVariants | ProductVariantsOld | null,
 ): DisplayOption[] {
   if (!selectedOptions) return [];
 
@@ -29,9 +35,9 @@ export function resolveSelectedOptions(
     typeof selectedOptions === 'object' &&
     !Array.isArray(selectedOptions) &&
     'snapshot' in selectedOptions &&
-    Array.isArray((selectedOptions as any).snapshot)
+    Array.isArray(selectedOptions.snapshot)
   ) {
-    return (selectedOptions as any).snapshot.map((s: any) => ({
+    return selectedOptions.snapshot.map((s: VariantSnapshotEntry) => ({
       label: s.label || '',
       name: s.name || '',
     }));
@@ -39,7 +45,8 @@ export function resolveSelectedOptions(
 
   // New format: string[] of option IDs
   if (Array.isArray(selectedOptions)) {
-    const groups: any[] = productVariants?.variant_groups ?? [];
+    const groups: VariantGroup[] =
+      (productVariants as ProductVariants | null)?.variant_groups ?? [];
     const results: DisplayOption[] = [];
     for (const group of groups) {
       for (const opt of group.options ?? []) {
@@ -70,7 +77,7 @@ export function resolveSelectedOptions(
  */
 export function formatSelectedOptions(
   selectedOptions: SelectedOptions,
-  productVariants: any,
+  productVariants: ProductVariants | ProductVariantsOld | null,
 ): string {
   const resolved = resolveSelectedOptions(selectedOptions, productVariants);
   if (!resolved.length) return '';

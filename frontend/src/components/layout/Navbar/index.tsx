@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   FileCheck2,
-  Leaf,
   LogOut,
   Menu,
   Package,
@@ -30,7 +29,6 @@ import type { ProductListResponse } from '@/types';
 import { NAV_ITEMS, WHATSAPP_NUMBER } from './navData';
 import type { NavItemDef } from './navData';
 
-import { MobileCollectionList } from './MobileCollectionList';
 import { LOGO_PATH } from '@/lib/branding';
 
 const FALLBACK_MOBILE_MENU_ITEMS = [
@@ -70,10 +68,13 @@ export default function Navbar() {
   const debouncedQuery = useDebounce(searchQuery, 300);
   const isProductPage = /^\/products\/[^/]+/.test(location.pathname);
 
-  // Close search when leaving a product page
-  useEffect(() => {
+  // Close search when leaving a product page. Adjusting state during render
+  // (guarded by the previous value) replaces a synchronous setState effect.
+  const [wasProductPage, setWasProductPage] = useState(isProductPage);
+  if (wasProductPage !== isProductPage) {
+    setWasProductPage(isProductPage);
     if (!isProductPage) setSearchOpen(false);
-  }, [isProductPage]);
+  }
   const { data: mobilePromoBanners = [] } = useBanners('mobile_promo');
   const { data: menuBanners = [] } = useBanners('menu_banner');
   const mobilePromoBanner = mobilePromoBanners[0];
@@ -772,25 +773,29 @@ export default function Navbar() {
                       { label: 'Track My Claim', href: '/damage-claims' },
                     ].map((link) => {
                       const isExternal = link.href.startsWith('http');
-                      const Component = isExternal ? 'a' : Link;
-                      const props = isExternal 
-                        ? { href: link.href, target: '_blank', rel: 'noopener noreferrer' } 
-                        : { to: link.href };
-                      
-                      return (
-                        <Component
+
+                      return isExternal ? (
+                        <a
                           key={link.label}
-                          {...(props as any)}
+                          href={link.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           onClick={closeDrawer}
                           className="flex items-center justify-between text-xs font-semibold text-gray-500 hover:text-primary hover:translate-x-0.5 transition-all duration-200 py-1"
                         >
                           <span>{link.label}</span>
-                          {isExternal ? (
-                            <ArrowUpRight size={14} className="text-gray-400" />
-                          ) : (
-                            <ChevronRight size={13} className="text-gray-400" />
-                          )}
-                        </Component>
+                          <ArrowUpRight size={14} className="text-gray-400" />
+                        </a>
+                      ) : (
+                        <Link
+                          key={link.label}
+                          to={link.href}
+                          onClick={closeDrawer}
+                          className="flex items-center justify-between text-xs font-semibold text-gray-500 hover:text-primary hover:translate-x-0.5 transition-all duration-200 py-1"
+                        >
+                          <span>{link.label}</span>
+                          <ChevronRight size={13} className="text-gray-400" />
+                        </Link>
                       );
                     })}
                   </div>

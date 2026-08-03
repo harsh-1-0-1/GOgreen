@@ -345,51 +345,63 @@ async def test_duplicate_carts_are_consolidated(client: AsyncClient):
 
 
 # ---------------------------------------------------------------------------
-# variant_groups pricing unit tests
+# variant_groups pricing + stock_map unit tests
 # ---------------------------------------------------------------------------
-# These test _resolve_variant_groups_details directly (no DB/HTTP needed).
-# The pricing model: price = sum of all required groups' selected option prices.
-# If this function is refactored, these tests will catch silent regressions.
+# These test calculate_variant_price directly (no DB/HTTP needed).
+# The pricing model: price = sum of all selected groups' option prices.
+# Availability: per-combination stock_map[combo_key], no fallback.
 # NOTE: These are sync unit tests — not marked asyncio despite the file-level mark.
-# Use pytest.ini's asyncio_mode or per-test overrides if needed.
 
-from app.services.cart_service import _resolve_variant_groups_details
+from app.utils.variant_pricing import (
+    build_combo_key,
+    build_dense_stock_map,
+    calculate_variant_price,
+    STOCK_MAP_MISSING,
+    StockMapMissingError,
+)
 
 
-LEAF_VARIANTS = {
-    "variant_groups": [
-        {
-            "id": "vg_colour",
-            "label": "colour",
-            "required": True,
-            "options": [
-                {"id": "opt_red",   "name": "red",   "price": 100.0, "stock": 10, "images": None, "color_hex": "#ff0000"},
-                {"id": "opt_blue",  "name": "blue",  "price": 100.0, "stock": 20, "images": None, "color_hex": "#0000ff"},
-            ],
-        },
-        {
-            "id": "vg_pot",
-            "label": "pot",
-            "required": True,
-            "options": [
-                {"id": "opt_krish", "name": "krish", "price": 100.0,  "stock": 100, "images": None, "color_hex": None},
-                {"id": "opt_type1", "name": "type1", "price": 1000.0, "stock": 15,  "images": None, "color_hex": None},
-            ],
-        },
-        {
-            "id": "vg_size",
-            "label": "size",
-            "required": True,
-            "options": [
-                {"id": "opt_4inch", "name": "4inch", "price": 1000.0, "stock": 6,  "images": None, "color_hex": None},
-                {"id": "opt_6inch", "name": "6inch", "price": 1500.0, "stock": 6,  "images": None, "color_hex": None},
-                {"id": "opt_8inch", "name": "8inch", "price": 1600.0, "stock": 8,  "images": None, "color_hex": None},
-            ],
-        },
-    ],
-    "default_image": None,
-    "image_map": None,
-}
+LEAF_GROUPS = [
+    {
+        "id": "vg_colour",
+        "label": "colour",
+        "required": True,
+        "options": [
+            {"id": "opt_red",   "name": "red",   "price": 100.0, "stock": 10, "images": None, "color_hex": "#ff0000"},
+            {"id": "opt_blue",  "name": "blue",  "price": 100.0, "stock": 20, "images": None, "color_hex": "#0000ff"},
+        ],
+    },
+    {
+        "id": "vg_pot",
+        "label": "pot",
+        "required": True,
+        "options": [
+            {"id": "opt_krish", "name": "krish", "price": 100.0,  "stock": 100, "images": None, "color_hex": None},
+            {"id": "opt_type1", "name": "type1", "price": 1000.0, "stock": 15,  "images": None, "color_hex": None},
+        ],
+    },
+    {
+        "id": "vg_size",
+        "label": "size",
+        "required": True,
+        "options": [
+            {"id": "opt_4inch", "name": "4inch", "price": 1000.0, "stock": 6,  "images": None, "color_hex": None},
+            {"id": "opt_6inch", "name": "6inch", "price": 1500.0, "stock": 6,  "images": None, "color_hex": None},
+            {"id": "opt_8inch", "name": "8inch", "price": 1600.0, "stock": 8,  "images": None, "color_hex": None},
+        ],
+    },
+]
+
+
+def _leaf_variants(stock_map: dict | None = None) -> dict:
+    variants = {
+        "variant_groups": [dict(g, options=list(g["options"])) for g in LEAF_GROUPS],
+        "default_image": None,
+        "image_map": None,
+    }
+    if stock_map is not None:
+        variants["stock_map"] = stock_map
+    return variants
 
 
 class _MockProduct:
@@ -405,79 +417,142 @@ class _MockProduct:
 
 def test_variant_groups_price_sums_all_required_groups():
     """red(100) + krish(100) + 4inch(1000) = 1200."""
-    p = _MockProduct(price=450.0, stock_qty=50, variants=LEAF_VARIANTS)
-    sel = {"vg_colour": "opt_red", "vg_pot": "opt_krish", "vg_size": "opt_4inch"}
-    d = _resolve_variant_groups_details(p, sel)
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
+    d = calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"])
     assert d["unit_price"] == 1200.0, f"Expected 1200.0, got {d['unit_price']}"
 
 
 def test_variant_groups_price_second_combo():
     """red(100) + type1(1000) + 8inch(1600) = 2700."""
-    p = _MockProduct(price=450.0, stock_qty=50, variants=LEAF_VARIANTS)
-    sel = {"vg_colour": "opt_red", "vg_pot": "opt_type1", "vg_size": "opt_8inch"}
-    d = _resolve_variant_groups_details(p, sel)
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
+    d = calculate_variant_price(p, ["opt_red", "opt_type1", "opt_8inch"])
     assert d["unit_price"] == 2700.0, f"Expected 2700.0, got {d['unit_price']}"
 
 
-def test_variant_groups_stock_is_min_across_required_groups():
-    """min(red=10, krish=100, 4inch=6) = 6."""
-    p = _MockProduct(price=450.0, stock_qty=50, variants=LEAF_VARIANTS)
-    sel = {"vg_colour": "opt_red", "vg_pot": "opt_krish", "vg_size": "opt_4inch"}
-    d = _resolve_variant_groups_details(p, sel)
-    assert d["available_stock"] == 6, f"Expected 6, got {d['available_stock']}"
+def test_variant_groups_stock_comes_from_stock_map_not_option_min():
+    """available_stock must read the exact combo row, not min of option stocks."""
+    stock_map = build_dense_stock_map(LEAF_GROUPS)
+    # min(red=10, krish=100, 4inch=6) = 6, but the map row says 4 → map wins.
+    stock_map["opt_red__opt_krish__opt_4inch"] = 4
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(stock_map))
+    d = calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"])
+    assert d["available_stock"] == 4, f"Expected 4, got {d['available_stock']}"
+
+
+def test_variant_groups_returns_canonical_combo_key():
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
+    d = calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"])
+    assert d["combo_key"] == "opt_red__opt_krish__opt_4inch"
 
 
 def test_variant_groups_missing_required_group_raises():
     """Omitting a required group selection must raise ValueError."""
-    p = _MockProduct(price=450.0, stock_qty=50, variants=LEAF_VARIANTS)
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
     # Only two of three required groups provided
-    sel = {"vg_colour": "opt_red", "vg_pot": "opt_krish"}
     with pytest.raises(ValueError, match="Please select an option for"):
-        _resolve_variant_groups_details(p, sel, validate_stock=True)
+        calculate_variant_price(p, ["opt_red", "opt_krish"], validate_stock=True)
+
+
+def test_variant_groups_optional_group_unselected_is_clear_400_not_stock_map_error():
+    """An unselected group — required or not — is an incomplete-configuration 400,
+    never a StockMapMissingError. Per-combination stock needs a full combo key, so
+    every group must contribute a selection."""
+    groups = [
+        {
+            "id": "vg_colour",
+            "label": "colour",
+            "required": True,
+            "options": [
+                {"id": "opt_red", "name": "red", "price": 100.0, "stock": 10},
+                {"id": "opt_blue", "name": "blue", "price": 100.0, "stock": 10},
+            ],
+        },
+        {
+            "id": "vg_extra",
+            "label": "gift wrap",
+            "required": None,  # legacy optional group
+            "options": [
+                {"id": "opt_wrap", "name": "wrap", "price": 0, "stock": 10},
+                {"id": "opt_box", "name": "box", "price": 0, "stock": 10},
+            ],
+        },
+    ]
+    variants = {
+        "variant_groups": groups,
+        "default_image": None,
+        "image_map": None,
+        "stock_map": build_dense_stock_map(groups),
+    }
+    p = _MockProduct(price=450.0, stock_qty=50, variants=variants)
+    # Required group selected, optional group left unselected → actionable 400, not 500.
+    with pytest.raises(ValueError, match="Please select an option for 'gift wrap'"):
+        calculate_variant_price(p, ["opt_red"], validate_stock=True)
+    # Entirely empty selection → same clear error.
+    with pytest.raises(ValueError, match="Please select an option for"):
+        calculate_variant_price(p, [], validate_stock=True)
 
 
 def test_variant_groups_invalid_option_id_raises():
     """A tampered/unknown option id must raise ValueError."""
-    p = _MockProduct(price=450.0, stock_qty=50, variants=LEAF_VARIANTS)
-    sel = {"vg_colour": "opt_red", "vg_pot": "opt_krish", "vg_size": "opt_FAKE"}
-    with pytest.raises(ValueError, match="Invalid option selected"):
-        _resolve_variant_groups_details(p, sel, validate_stock=True)
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
+    with pytest.raises(ValueError, match="Invalid option ID"):
+        calculate_variant_price(p, ["opt_red", "opt_krish", "opt_FAKE"], validate_stock=True)
 
 
-def test_variant_groups_zero_required_falls_back_to_product_price():
-    """Products with no required groups use product.price as display price."""
-    no_required_variants = {
-        "variant_groups": [
-            {
-                "id": "vg_colour", "label": "Pot Colour", "required": None,
-                "options": [
-                    {"id": "o1", "name": "White", "price": 0, "stock": 10, "images": None, "color_hex": "#ffffff"},
-                ],
-            },
-        ],
-        "default_image": None,
-        "image_map": None,
-    }
-    p = _MockProduct(price=249.0, stock_qty=10, variants=no_required_variants)
-    d = _resolve_variant_groups_details(p, {})
-    assert d["unit_price"] == 249.0, f"Expected 249.0 (product.price), got {d['unit_price']}"
-    assert d["available_stock"] == 10, f"Expected stock_qty=10, got {d['available_stock']}"
+def test_variant_groups_missing_stock_map_raises_loudly():
+    """No stock_map on a variant_groups product is a loud bug, never a fallback."""
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants())
+    with pytest.raises(StockMapMissingError) as exc_info:
+        calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"], validate_stock=True)
+    assert exc_info.value.error_code == STOCK_MAP_MISSING
+
+
+def test_variant_groups_missing_combo_key_raises_loudly():
+    """A combo row absent from stock_map is a loud bug (stale data / key mismatch)."""
+    stock_map = build_dense_stock_map(LEAF_GROUPS)
+    stock_map.pop("opt_blue__opt_type1__opt_6inch")
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(stock_map))
+    with pytest.raises(StockMapMissingError) as exc_info:
+        calculate_variant_price(p, ["opt_blue", "opt_type1", "opt_6inch"], validate_stock=True)
+    assert exc_info.value.error_code == STOCK_MAP_MISSING
 
 
 def test_variant_groups_out_of_stock_raises_when_validating():
-    """Selecting an option with stock=0 should raise when validate_stock=True."""
-    low_stock_variants = {
-        "variant_groups": [
-            {
-                "id": "vg_size", "label": "Size", "required": True,
-                "options": [
-                    {"id": "o1", "name": "Small", "price": 99.0, "stock": 0, "images": None, "color_hex": None},
-                ],
-            },
-        ],
-        "default_image": None,
-        "image_map": None,
-    }
-    p = _MockProduct(price=99.0, stock_qty=0, variants=low_stock_variants)
+    """A stock_map row of 0 must raise when validate_stock=True."""
+    stock_map = build_dense_stock_map(LEAF_GROUPS)
+    stock_map["opt_red__opt_krish__opt_4inch"] = 0
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(stock_map))
     with pytest.raises(ValueError, match="out of stock"):
-        _resolve_variant_groups_details(p, {"vg_size": "o1"}, validate_stock=True)
+        calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"], validate_stock=True)
+
+
+def test_variant_groups_quantity_exceeding_stock_raises():
+    stock_map = build_dense_stock_map(LEAF_GROUPS)
+    stock_map["opt_red__opt_krish__opt_4inch"] = 2
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(stock_map))
+    with pytest.raises(ValueError, match="Only 2 in stock"):
+        calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"], quantity=3, validate_stock=True)
+
+
+def test_build_combo_key_is_canonical():
+    assert build_combo_key(LEAF_GROUPS, ["opt_red", "opt_krish", "opt_4inch"]) == "opt_red__opt_krish__opt_4inch"
+    # Partial selection (missing a group) → None
+    assert build_combo_key(LEAF_GROUPS, ["opt_red", "opt_krish"]) is None
+    # No groups → None
+    assert build_combo_key([], ["opt_red"]) is None
+    # Duplicate option from the same group → None (must contribute exactly one)
+    assert build_combo_key(LEAF_GROUPS[:1], ["opt_red", "opt_blue"]) is None
+
+
+def test_build_dense_stock_map_contains_every_combo():
+    stock_map = build_dense_stock_map(LEAF_GROUPS)
+    assert len(stock_map) == 2 * 2 * 3 == 12
+    assert stock_map["opt_red__opt_krish__opt_4inch"] == 6  # min(10, 100, 6)
+    assert stock_map["opt_red__opt_krish__opt_8inch"] == 8   # min(10, 100, 8)
+    # Every combo (including 0-value rows) is present → dense.
+    assert set(stock_map.keys()) == {
+        f"{c}__{p}__{s}"
+        for c in ("opt_red", "opt_blue")
+        for p in ("opt_krish", "opt_type1")
+        for s in ("opt_4inch", "opt_6inch", "opt_8inch")
+    }

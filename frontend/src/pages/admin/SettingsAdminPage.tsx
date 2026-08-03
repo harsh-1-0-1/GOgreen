@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Shield, CreditCard, Truck, Mail, Globe, Palette, Info, CheckCircle } from 'lucide-react';
+import { Settings, CreditCard, Truck, Mail, Globe, Palette } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function SettingsAdminPage() {

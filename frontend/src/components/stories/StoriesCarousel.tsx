@@ -6,38 +6,6 @@ interface StoriesCarouselProps {
   stories: Story[];
 }
 
-export function StoriesCarousel({ stories }: StoriesCarouselProps) {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-
-  if (!stories || stories.length === 0) return null;
-
-  return (
-    <div className="mt-12 mb-8">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-serif text-green-900">Stories Across India.</h2>
-      </div>
-      
-      <div className="flex gap-4 overflow-x-auto snap-x pb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
-        {stories.map((story, i) => (
-          <StoryCard 
-            key={story.id} 
-            story={story} 
-            onClick={() => setActiveIndex(i)} 
-          />
-        ))}
-      </div>
-
-      {activeIndex !== null && (
-        <StoryViewer
-          stories={stories}
-          startIndex={activeIndex}
-          onClose={() => setActiveIndex(null)}
-        />
-      )}
-    </div>
-  );
-}
-
 function StoryCard({ story, onClick }: { story: Story; onClick: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -113,3 +81,36 @@ function StoryCard({ story, onClick }: { story: Story; onClick: () => void }) {
     </button>
   );
 }
+
+export function StoriesCarousel({ stories }: StoriesCarouselProps) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
+  if (!stories || stories.length === 0) return null;
+
+  return (
+    <div className="mt-12 mb-8">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-serif text-green-900">Stories Across India.</h2>
+      </div>
+      
+      <div className="flex gap-4 overflow-x-auto snap-x pb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
+        {stories.map((story, i) => (
+          <StoryCard 
+            key={story.id} 
+            story={story} 
+            onClick={() => setActiveIndex(i)} 
+          />
+        ))}
+      </div>
+
+      {activeIndex !== null && (
+        <StoryViewer
+          stories={stories}
+          startIndex={activeIndex}
+          onClose={() => setActiveIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+

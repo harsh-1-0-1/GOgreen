@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Tag, Percent, IndianRupee, Info, Plus, Trash2, CheckCircle } from 'lucide-react';
+import { Tag, Percent, IndianRupee, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Coupon {

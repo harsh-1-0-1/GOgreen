@@ -9,6 +9,7 @@ from app.db.models import User
 from app.db.session import get_db
 from app.schemas.order import CheckoutRequest, CheckoutResponse, DirectCheckoutRequest, OrderListResponse, OrderResponse
 from app.services import email_service, order_service, whatsapp_service
+from app.utils.variant_pricing import StockMapMissingError
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -41,6 +42,8 @@ async def checkout(
             phone=user.phone or "",
             payment_method=body.payment_method,
         )
+    except StockMapMissingError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if body.payment_method == "cod":
@@ -66,6 +69,8 @@ async def direct_checkout(
             phone=user.phone or "",
             payment_method=body.payment_method,
         )
+    except StockMapMissingError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if body.payment_method == "cod":

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
+import type { Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -20,9 +21,10 @@ import { useProduct, useProductRaw, useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useDeleteProduct } from '@/hooks/useAdmin';
 import api from '@/lib/api';
+import { getApiErrorDetail } from '@/lib/apiError';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import type { Product, ProductListResponse, ProductVariants } from '@/types';
+import type { FAQItem, Product, ProductListResponse, ProductVariants, VariantGroup, VariantOption } from '@/types';
 
 type ProductFormData = z.infer<typeof productSchema>;
 
@@ -32,7 +34,6 @@ type VariantOptionDraft = {
   id: string;           // stable ID – preserved for existing options, generated for new
   name: string;
   price: number;
-  stock: number;
   image_keys: string[];  // relative keys array, stored in DB
   image_urls: string[];  // resolved URLs array, display only
   color_hex: string;     // optional hex color for colour-type variants
@@ -50,7 +51,7 @@ function genId(prefix: string): string {
 }
 
 function emptyOption(): VariantOptionDraft {
-  return { id: genId('opt'), name: '', price: 0, stock: 0, image_keys: [], image_urls: [], color_hex: '', uploading: false };
+  return { id: genId('opt'), name: '', price: 0, image_keys: [], image_urls: [], color_hex: '', uploading: false };
 }
 
 function emptyGroup(): VariantGroupDraft {
@@ -69,10 +70,6 @@ const productSchema = z.object({
   tags: z.array(z.object({ value: z.string() })).optional(),
   care_tips: z.array(z.object({ value: z.string() })).optional(),
 });
-
-function slugify(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
 
 /**
  * Crops an image file to a centered square and returns a new File.
@@ -193,6 +190,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // image_keys = relative keys (sent to backend). image_urls = resolved URLs (display only).
   const [comboImageKeys, setComboImageKeys] = useState<Record<string, string[]>>({});
   const [comboImageUrls, setComboImageUrls] = useState<Record<string, string[]>>({});
+  // Per-combination stock: keyed by combo_key (same space as comboImageKeys). Dense on save.
+  const [comboStock, setComboStock] = useState<Record<string, number>>({});
   const [uploadingComboKey, setUploadingComboKey] = useState<string | null>(null);
   // Plantoga Promise banner — per-product image replacing the four hardcoded cards
   // promiseBannerKey: relative key stored in DB. promiseBannerUrl: resolved URL for preview only.
@@ -240,7 +239,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   useBodyScrollLock(true);
 
   const { register, handleSubmit, control, reset, formState: { errors } } = useForm<ProductFormData>({
-    resolver: zodResolver(productSchema) as any,
+    resolver: zodResolver(productSchema) as unknown as Resolver<ProductFormData>,
     defaultValues: {
       name: '',
       description: '',
@@ -275,17 +274,16 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setUploadedFiles([]);
     setFilePreviews([]);
     // Seed variant groups from new format (variant_groups)
-    const vg = (p.variants as any)?.variant_groups;
+    const vg = p.variants?.variant_groups;
     if (Array.isArray(vg)) {
       setVariantGroups(
-        vg.map((group: any) => ({
+        vg.map((group: VariantGroup) => ({
           id: group.id || genId('vg'),
           label: group.label || '',
-          options: (group.options || []).map((opt: any) => ({
+          options: (group.options || []).map((opt: VariantOption) => ({
             id: opt.id || genId('opt'),
             name: opt.name || '',
             price: Number(opt.price ?? 0),
-            stock: Number(opt.stock ?? 0),
             // images are already resolved URLs from the API; store first as preview
             // backend /admin/raw returns relative keys — handled in rawProduct effect
             image_keys: [],
@@ -302,6 +300,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setDefaultImageUrl('');
     setComboImageKeys({});
     setComboImageUrls({});
+    setComboStock({});
     setVariantError(null);
     // Promise banner URL comes pre-resolved from the public API response.
     // The raw key is seeded separately from rawProduct in the useEffect below.
@@ -311,90 +310,151 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setWhyPlantogaBannerKey('');  // will be overwritten by rawProduct effect
     setCareCardImageUrl(p.care_card_image || '');
     setCareCardImageKey('');  // will be overwritten by rawProduct effect
-    setFaqItems((p as any).faqs || []);
+    setFaqItems(p.faqs || []);
   };
   // Seed default_image from the raw admin endpoint (relative key, not resolved URL).
   // Must wait for formInitialized so that variantGroups is already populated before
   // we patch image_keys into options — otherwise prev.map() iterates an empty array.
   // Guard (rawProductSeededId) prevents re-seeding on background refetches.
-  useEffect(() => {
-    if (!isEdit || !rawProduct || !formInitialized) return;
+  // Run during render (guarded by seed id) instead of an effect to avoid the
+  // set-state-in-effect hook violation.
+  if (isEdit && rawProduct && formInitialized) {
     const incomingId = rawProduct.id ?? null;
-    if (rawProductSeededId === incomingId) return;
-    setRawProductSeededId(incomingId);
+    if (rawProductSeededId !== incomingId) {
+      setRawProductSeededId(incomingId);
 
-    const v = (rawProduct as any).variants || {};
-    // Seed default image relative key
-    setDefaultImageKey(v.default_image || '');
-    setDefaultImageUrl(resolveImageUrl(v.default_image));
+      const v: ProductVariants = rawProduct.variants ?? { variant_groups: [] };
+      // Seed default image relative key
+      setDefaultImageKey(v.default_image || '');
+      setDefaultImageUrl(resolveImageUrl(v.default_image));
 
-    // Seed combo image_map from raw product
-    if (v.image_map && typeof v.image_map === 'object') {
-      const seedKeys: Record<string, string[]> = {};
-      const seedUrls: Record<string, string[]> = {};
-      Object.entries(v.image_map as Record<string, string[]>).forEach(([key, imgs]) => {
-        if (Array.isArray(imgs) && imgs.length > 0) {
-          seedKeys[key] = imgs.filter(Boolean);
-          seedUrls[key] = imgs.filter(Boolean).map((k: string) => resolveImageUrl(k));
-        }
-      });
-      setComboImageKeys(seedKeys);
-      setComboImageUrls(seedUrls);
+      // Seed combo image_map from raw product
+      if (v.image_map && typeof v.image_map === 'object') {
+        const seedKeys: Record<string, string[]> = {};
+        const seedUrls: Record<string, string[]> = {};
+        Object.entries(v.image_map).forEach(([key, imgs]) => {
+          if (Array.isArray(imgs) && imgs.length > 0) {
+            seedKeys[key] = imgs.filter(Boolean);
+            seedUrls[key] = imgs.filter(Boolean).map((k: string) => resolveImageUrl(k));
+          }
+        });
+        setComboImageKeys(seedKeys);
+        setComboImageUrls(seedUrls);
+      }
+
+      // Seed per-combination stock from raw stock_map
+      if (v.stock_map && typeof v.stock_map === 'object') {
+        const seedStock: Record<string, number> = {};
+        Object.entries(v.stock_map).forEach(([key, qty]) => {
+          const n = Number(qty);
+          seedStock[key] = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+        });
+        setComboStock(seedStock);
+      }
+
+      // Seed per-option image keys from raw variant_groups
+      if (Array.isArray(v.variant_groups)) {
+        setVariantGroups(prev => prev.map((group) => {
+          const rawGroup = v.variant_groups.find((rg: VariantGroup) => rg.id === group.id);
+          if (!rawGroup) return group;
+          return {
+            ...group,
+            options: group.options.map((opt) => {
+              const rawOpt = rawGroup.options?.find((ro: VariantOption) => ro.id === opt.id);
+              if (!rawOpt) return opt;
+              const rawKeys: string[] = (rawOpt.images || []).filter(Boolean);
+              const rawUrls = rawKeys.map((k: string) => resolveImageUrl(k));
+              return {
+                ...opt,
+                image_keys: rawKeys.length ? rawKeys : opt.image_keys,
+                image_urls: rawKeys.length ? rawUrls : opt.image_urls,
+                color_hex: rawOpt.color_hex || opt.color_hex,
+              };
+            }),
+          };
+        }));
+      }
+
+      // Seed promise banner raw key
+      const rawBannerKey = rawProduct.promise_banner_image || '';
+      setPromiseBannerKey(rawBannerKey);
+      if (rawBannerKey) setPromiseBannerUrl(resolveImageUrl(rawBannerKey));
+
+      // Seed why plantoga banner raw key
+      const rawWhyBannerKey = rawProduct.why_plantoga_banner_image || '';
+      setWhyPlantogaBannerKey(rawWhyBannerKey);
+      if (rawWhyBannerKey) setWhyPlantogaBannerUrl(resolveImageUrl(rawWhyBannerKey));
+
+      // Seed care card image raw key
+      const rawCareCardKey = rawProduct.care_card_image || '';
+      setCareCardImageKey(rawCareCardKey);
+      if (rawCareCardKey) setCareCardImageUrl(resolveImageUrl(rawCareCardKey));
+
+      // Seed FAQs from raw product
+      const rawFaqs = rawProduct.faqs;
+      if (Array.isArray(rawFaqs) && rawFaqs.length > 0) {
+        setFaqItems(rawFaqs.map((f: FAQItem) => ({ question: f.question || '', answer: f.answer || '' })));
+      }
     }
+  }
 
-    // Seed per-option image keys from raw variant_groups
-    if (Array.isArray(v.variant_groups)) {
-      setVariantGroups(prev => prev.map((group) => {
-        const rawGroup = v.variant_groups.find((rg: any) => rg.id === group.id);
-        if (!rawGroup) return group;
-        return {
-          ...group,
-          options: group.options.map((opt) => {
-            const rawOpt = rawGroup.options?.find((ro: any) => ro.id === opt.id);
-            if (!rawOpt) return opt;
-            const rawKeys: string[] = (rawOpt.images || []).filter(Boolean);
-            const rawUrls = rawKeys.map((k: string) => resolveImageUrl(k));
-            return {
-              ...opt,
-              image_keys: rawKeys.length ? rawKeys : opt.image_keys,
-              image_urls: rawKeys.length ? rawUrls : opt.image_urls,
-              color_hex: rawOpt.color_hex || opt.color_hex,
-            };
-          }),
-        };
-      }));
-    }
-
-    // Seed promise banner raw key
-    const rawBannerKey = (rawProduct as any).promise_banner_image || '';
-    setPromiseBannerKey(rawBannerKey);
-    if (rawBannerKey) setPromiseBannerUrl(resolveImageUrl(rawBannerKey));
-
-    // Seed why plantoga banner raw key
-    const rawWhyBannerKey = (rawProduct as any).why_plantoga_banner_image || '';
-    setWhyPlantogaBannerKey(rawWhyBannerKey);
-    if (rawWhyBannerKey) setWhyPlantogaBannerUrl(resolveImageUrl(rawWhyBannerKey));
-
-    // Seed care card image raw key
-    const rawCareCardKey = (rawProduct as any).care_card_image || '';
-    setCareCardImageKey(rawCareCardKey);
-    if (rawCareCardKey) setCareCardImageUrl(resolveImageUrl(rawCareCardKey));
-
-    // Seed FAQs from raw product
-    const rawFaqs = (rawProduct as any).faqs;
-    if (Array.isArray(rawFaqs) && rawFaqs.length > 0) {
-      setFaqItems(rawFaqs.map((f: any) => ({ question: f.question || '', answer: f.answer || '' })));
-    }
-  }, [isEdit, rawProduct, rawProductSeededId, formInitialized]);
-
+  // Initialize the form from the freshly-fetched product. Kept as an effect because it
+  // calls react-hook-form's reset() (an external-store mutation that must not run during
+  // render). The render-time rawProduct seeding block above waits on formInitialized.
   useEffect(() => {
     if (!isEdit) return;
     const source = freshProduct ?? editProduct;
     if (source && !formInitialized) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset() belongs in an effect
       applyProductToForm(source);
       setFormInitialized(true);
     }
-  }, [isEdit, freshProduct, editProduct, formInitialized, applyProductToForm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyProductToForm is recreated each render; the effect re-runs whenever editProduct/freshProduct changes identity anyway
+  }, [isEdit, freshProduct, editProduct, formInitialized]);
+
+  // ─── Cartesian product helper ────────────────────────────────────────────
+  // Returns rows of { key: "optId1__optId2__...", label: "Name1 / Name2 / ..." }
+  // Only includes named, named options. Capped at COMBO_CAP rows.
+  const COMBO_CAP = 50;
+  function buildComboRows(groups: VariantGroupDraft[]): { key: string; label: string }[] {
+    const namedGroups = groups
+      .map(g => ({ ...g, options: g.options.filter(o => o.name.trim()) }))
+      .filter(g => g.label.trim() && g.options.length > 0);
+    if (namedGroups.length === 0) return [];
+    // Cartesian product
+    let rows: { key: string; label: string }[] = [{ key: '', label: '' }];
+    for (const group of namedGroups) {
+      const next: { key: string; label: string }[] = [];
+      for (const row of rows) {
+        for (const opt of group.options) {
+          next.push({
+            key: row.key ? `${row.key}__${opt.id}` : opt.id,
+            label: row.label ? `${row.label} / ${opt.name}` : opt.name,
+          });
+        }
+      }
+      rows = next;
+    }
+    return rows;
+  }
+
+  // Full dense stock_map (no COMBO_CAP) for the save payload. Every cartesian combo
+  // gets a row. Editable rows come from comboStock; overflow rows not present in state
+  // fall back to the existing stock_map value (preserves untouched combos), else 0.
+  function buildDenseStockMap(
+    groups: VariantGroupDraft[],
+    comboStockMap: Record<string, number>,
+    existing: Record<string, number> | null | undefined,
+  ): Record<string, number> {
+    const rows = buildComboRows(groups);
+    const map: Record<string, number> = {};
+    for (const row of rows) {
+      const qty = comboStockMap[row.key] ?? existing?.[row.key] ?? 0;
+      const n = Number(qty);
+      map[row.key] = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+    }
+    return map;
+  }
 
   async function onSubmit(data: ProductFormData) {
     setSubmitting(true);
@@ -420,12 +480,21 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         }
       }
 
+      let stockMap: Record<string, number> | null = null;
+
       if (cleanGroups.length > 0 || defaultImageKey.trim()) {
         // Build image_map: only include combos that actually have images
         const imageMap: Record<string, string[]> = {};
         Object.entries(comboImageKeys).forEach(([key, keys]) => {
           if (keys.length > 0) imageMap[key] = keys;
         });
+
+        // Build dense stock_map over every cartesian combo (comboStock state, falling
+        // back to the existing stock_map for overflow rows, else 0).
+        const existingStockMap = rawProduct?.variants?.stock_map;
+        stockMap = cleanGroups.length
+          ? buildDenseStockMap(cleanGroups, comboStock, existingStockMap)
+          : null;
 
         variants = {
           variant_groups: cleanGroups.map(group => ({
@@ -437,40 +506,22 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                 id: o.id,
                 name: o.name.trim(),
                 price: Number(o.price || 0),
-                stock: Number(o.stock || 0),
                 // Per-option images — used as colour fallback on product page
                 ...(o.image_keys.length ? { images: o.image_keys } : {}),
                 ...(o.color_hex.trim() ? { color_hex: o.color_hex.trim() } : {}),
               })),
           })),
           ...(Object.keys(imageMap).length ? { image_map: imageMap } : {}),
+          ...(stockMap ? { stock_map: stockMap } : {}),
           default_image: defaultImageKey || undefined,
         };
       }
 
-      // Total stock: min over groups of (sum of option stocks in that group).
-      //
-      // Derived from the order decrement code in order_service.py:
-      //   buying (S, Red) decrements ONLY S.stock and ONLY Red.stock — Blue and M untouched.
-      //   Option stocks are independent shared marginals. Red's 3 units can be consumed by
-      //   (S,Red) or (M,Red) interchangeably — they share the same pool.
-      //
-      //   → A group's total capacity = sum of its options (mutually exclusive, non-overlapping).
-      //   → Binding constraint = the group with the smallest total capacity (min across groups).
-      //
-      // Worked example that distinguishes this from "min of per-group max":
-      //   sizes [S:5, M:5] + colours [Red:3, Blue:3]
-      //   Sellable: 3×(S,Red) + 3×(M,Blue) = 6 units.
-      //   min(sum(5,5), sum(3,3)) = min(10,6) = 6  ✓
-      //   min(max(5,5), max(3,3)) = 5  ✗  — understates by 1
-      //
+      // Total stock = sum of all per-combination stock rows (sum(stock_map.values())).
+      // Each combination is an independent pool, so total sellable units is the sum.
       // If no variants, fall through to the form field value.
-      const totalStock = variants?.variant_groups?.length
-        ? Math.min(
-            ...variants.variant_groups.map((g) =>
-              g.options.reduce((sum: number, o: any) => sum + Number(o.stock || 0), 0)
-            )
-          )
+      const totalStock = stockMap
+        ? Object.values(stockMap).reduce((sum, n) => sum + (Number(n) || 0), 0)
         : data.stock_qty;
 
       type ProductPayload = {
@@ -579,8 +630,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       setUploadedFiles([]);
       setFilePreviews([]);
       onClose();
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to save product');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to save product'));
     } finally {
       setSubmitting(false);
     }
@@ -613,52 +664,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         }
       ));
       toast.success('Image uploaded');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload image');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload image'));
     } finally {
       setUploadingOptionImage(null);
     }
-  }
-
-  function handleRemoveOptionImage(groupId: string, optionId: string, index: number) {
-    setVariantGroups(prev => prev.map(g =>
-      g.id !== groupId ? g : {
-        ...g,
-        options: g.options.map(o =>
-          o.id !== optionId ? o : {
-            ...o,
-            image_keys: o.image_keys.filter((_, i) => i !== index),
-            image_urls: o.image_urls.filter((_, i) => i !== index),
-          }
-        ),
-      }
-    ));
-  }
-
-  // ─── Cartesian product helper ────────────────────────────────────────────
-  // Returns rows of { key: "optId1__optId2__...", label: "Name1 / Name2 / ..." }
-  // Only includes named, named options. Capped at COMBO_CAP rows.
-  const COMBO_CAP = 50;
-  function buildComboRows(groups: VariantGroupDraft[]): { key: string; label: string }[] {
-    const namedGroups = groups
-      .map(g => ({ ...g, options: g.options.filter(o => o.name.trim()) }))
-      .filter(g => g.label.trim() && g.options.length > 0);
-    if (namedGroups.length === 0) return [];
-    // Cartesian product
-    let rows: { key: string; label: string }[] = [{ key: '', label: '' }];
-    for (const group of namedGroups) {
-      const next: { key: string; label: string }[] = [];
-      for (const row of rows) {
-        for (const opt of group.options) {
-          next.push({
-            key: row.key ? `${row.key}__${opt.id}` : opt.id,
-            label: row.label ? `${row.label} / ${opt.name}` : opt.name,
-          });
-        }
-      }
-      rows = next;
-    }
-    return rows;
   }
 
   // ─── Combo image upload / remove ────────────────────────────────────────
@@ -676,8 +686,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       setComboImageKeys(prev => ({ ...prev, [comboKey]: [...(prev[comboKey] || []), data.key] }));
       setComboImageUrls(prev => ({ ...prev, [comboKey]: [...(prev[comboKey] || []), data.url] }));
       toast.success('Combination image uploaded');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload combination image');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload combination image'));
     } finally {
       setUploadingComboKey(null);
     }
@@ -701,8 +711,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       setDefaultImageKey(data.key);
       setDefaultImageUrl(data.url);
       toast.success('Default image uploaded');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload default image');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload default image'));
     } finally {
       setUploadingDefaultImage(false);
     }
@@ -719,8 +729,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       setPromiseBannerKey(data.key);
       setPromiseBannerUrl(data.url);
       toast.success('Promise banner uploaded');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload banner image');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload banner image'));
     } finally {
       setUploadingPromiseBanner(false);
     }
@@ -737,8 +747,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       setWhyPlantogaBannerKey(data.key);
       setWhyPlantogaBannerUrl(data.url);
       toast.success('Why Plantoga banner uploaded');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload banner image');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload banner image'));
     } finally {
       setUploadingWhyPlantogaBanner(false);
     }
@@ -755,8 +765,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       setCareCardImageKey(data.key);
       setCareCardImageUrl(data.url);
       toast.success('Care card image uploaded');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload care card image');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload care card image'));
     } finally {
       setUploadingCareCardImage(false);
     }
@@ -1240,7 +1250,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             {openSections.variants && (
               <div className="p-5 border-t border-gray-100 space-y-5 bg-white">
                 <div className="rounded-lg bg-green-50 border border-green-100 p-3 text-xs text-green-800 leading-relaxed">
-                  <strong>How variants work:</strong> Click &ldquo;+ Add Variant Type&rdquo;, type a label (e.g. &ldquo;Select Size&rdquo;, &ldquo;Select Packet Size&rdquo;), then add options with name, price, and stock. Admin controls all labels — no category rules.
+                  <strong>How variants work:</strong> Click &ldquo;+ Add Variant Type&rdquo;, type a label (e.g. &ldquo;Select Size&rdquo;, &ldquo;Select Packet Size&rdquo;), then add options with name and price. Stock is set per combination in the &ldquo;Variant Combinations&rdquo; table below — the only stock field that matters. Admin controls all labels — no category rules.
                 </div>
 
                 {variantError && (
@@ -1383,23 +1393,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                                   className="w-24 px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                                 />
                               </div>
-                              {/* Stock */}
-                              <div className="flex items-center gap-1 shrink-0">
-                                <span className="text-xs text-gray-500">Qty</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={opt.stock}
-                                  onChange={(e) => {
-                                    const v = Number(e.target.value);
-                                    setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
-                                      ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, stock: v }),
-                                    }));
-                                  }}
-                                  placeholder="Stock"
-                                  className="w-20 px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                                />
-                              </div>
 
                               {/* Colour variants: quick add-photo button (full management in table below) */}
                               {isColourGroup && (
@@ -1498,6 +1491,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                             <tr>
                               <th className="p-3 font-medium">Combination</th>
                               <th className="p-3 font-medium">
+                                Stock
+                                <span className="font-normal text-gray-400 ml-1">(per combination)</span>
+                              </th>
+                              <th className="p-3 font-medium">
                                 Images
                                 <span className="font-normal text-gray-400 ml-1">(optional — falls back to colour / default image)</span>
                               </th>
@@ -1511,6 +1508,22 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                                 <tr key={row.key} className="border-b last:border-0 bg-white">
                                   <td className="p-3 font-semibold text-gray-800 whitespace-nowrap align-top pt-4">
                                     {row.label}
+                                  </td>
+                                  <td className="p-3 align-top pt-3.5">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step={1}
+                                      value={comboStock[row.key] ?? 0}
+                                      onChange={(e) => {
+                                        const n = Number(e.target.value);
+                                        setComboStock(prev => ({
+                                          ...prev,
+                                          [row.key]: Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0,
+                                        }));
+                                      }}
+                                      className="w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-800 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                                    />
                                   </td>
                                   <td className="p-3">
                                     <div className="flex flex-col gap-2">

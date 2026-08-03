@@ -62,6 +62,15 @@ export default function DamageReplacementPage() {
   // Handlers
   // ---------------------------------------------------------------------------
 
+  function clearError(key: string) {
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
   function handleOrderSelect(e: React.ChangeEvent<HTMLSelectElement>) {
     const id = parseInt(e.target.value, 10);
     const order = deliveredOrders?.find((o) => o.id === id) ?? null;
@@ -90,15 +99,6 @@ export default function DamageReplacementPage() {
     URL.revokeObjectURL(photoPreviews[index]);
     setPhotoFiles((prev) => prev.filter((_, i) => i !== index));
     setPhotoPreviews((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function clearError(key: string) {
-    setErrors((prev) => {
-      if (!prev[key]) return prev;
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
   }
 
   // ---------------------------------------------------------------------------

@@ -242,6 +242,21 @@ def _make_care_variants(unit_label: str, options: list) -> dict:
     }
 
 
+def _attach_stock_map(variants: dict) -> dict:
+    """Add a dense per-combination stock_map to a variant_groups structure.
+
+    Reproduces the one-time migration's starting point (min of option stocks per combo
+    row) so seeded products behave like migrated production data.
+    """
+    from app.utils.variant_pricing import build_dense_stock_map
+
+    groups = variants.get("variant_groups") or []
+    if not groups:
+        return variants
+    variants["stock_map"] = build_dense_stock_map(groups)
+    return variants
+
+
 PRODUCTS = [
     # Indoor Plants (cat: indoor-plants)
         {"name": "Money Plant Golden", "cat": "indoor-plants", "price": 249,
@@ -655,13 +670,9 @@ async def seed() -> None:
 
             variants = p.get("variants")
             if variants and "variant_groups" in variants:
-                # New format: sum stock across all options in the first group
-                all_stocks = [
-                    int(opt.get("stock", 0))
-                    for grp in variants["variant_groups"]
-                    for opt in grp.get("options", [])
-                ]
-                stock_qty = sum(all_stocks) if all_stocks else random.randint(5, 200)
+                # New format: per-combination stock via dense stock_map.
+                variants = _attach_stock_map(variants)
+                stock_qty = sum(int(v or 0) for v in variants.get("stock_map", {}).values())
             else:
                 stock_qty = random.randint(5, 200)
 

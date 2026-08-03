@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronUp, Minus, Plus, ShoppingCart, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronUp, Minus, Plus, ShoppingCart, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProduct, useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useProductReviews } from '@/hooks/useReviews';
 import { useCartStore } from '@/store/cartStore';
-import { useAuthStore } from '@/store/authStore';
 import ProductCard from '@/components/product/ProductCard';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
 import ProductReviews, { ProductRatingInline } from '@/components/product/ProductReviews';
@@ -21,9 +20,10 @@ import { useBanners } from '@/hooks/useBanners';
 import { STORE_LEGAL } from '@/lib/branding';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
-import type { Banner, Category } from '@/types';
+import type { Banner, Category, VariantGroup, VariantOption } from '@/types';
 import { useStories } from '@/hooks/useStories';
 import { StoriesCarousel } from '@/components/stories/StoriesCarousel';
+import { getApiErrorDetail } from '@/lib/apiError';
 
 
 function findCategoryName(categories: Category[] | undefined, categoryId: number): string {
@@ -41,6 +41,31 @@ function findCategoryName(categories: Category[] | undefined, categoryId: number
   };
 
   return (search(categories) || 'Plants').toUpperCase();
+}
+
+// Full cartesian product of variant groups → combo rows (cap guards pathological products,
+// matching the admin combos table cap). Each row carries the per-group option map so
+// visibility/auto-select can be computed without re-walking the matrix.
+function buildComboRows(
+  groups: VariantGroup[],
+  cap = 50,
+): { key: string; groupOption: Record<string, string> }[] {
+  let rows: { key: string; groupOption: Record<string, string> }[] = [{ key: '', groupOption: {} }];
+  outer: for (const group of groups) {
+    const options = group?.options ?? [];
+    const next: { key: string; groupOption: Record<string, string> }[] = [];
+    for (const row of rows) {
+      for (const opt of options) {
+        if (next.length >= cap) break outer;
+        next.push({
+          key: row.key ? `${row.key}__${opt.id}` : opt.id,
+          groupOption: { ...row.groupOption, [group.id]: opt.id },
+        });
+      }
+    }
+    rows = next;
+  }
+  return rows;
 }
 
 function findCategoryTrail(categories: Category[] | undefined, categoryId: number): Category[] {
@@ -487,7 +512,6 @@ export default function ProductDetailPage() {
   const { data: product, isLoading, isError } = useProduct(slug!);
   const { data: categories } = useCategories();
   const addItem = useCartStore((s) => s.addItem);
-  const { user, openAuthModal } = useAuthStore();
   const navigate = useNavigate();
   const [qty, setQty] = useState(1);
   // New: selectedOptions maps groupId → optionId for the new flexible variant system
@@ -507,28 +531,40 @@ export default function ProductDetailPage() {
     isInitialized.current = false;
   }, [slug]);
 
-  // Auto-select first in-stock option for each group when product loads
-  useEffect(() => {
-    if (!product) return;
-    const groups = (product.variants as any)?.variant_groups;
+  // Auto-select the first in-stock combo row when the product loads (per-combination stock).
+  // The row's combo_key dictates each group's selection, so groups are always consistent
+  // with a purchasable combination. Run during render (guarded by product id) instead of an
+  // effect to avoid the set-state-in-effect hook violation.
+  const [lastAutoSelectedProductId, setLastAutoSelectedProductId] = useState<number | null>(
+    product?.id ?? null,
+  );
+  if (product && lastAutoSelectedProductId !== product.id) {
+    const groups = product.variants?.variant_groups;
     if (!Array.isArray(groups) || groups.length === 0) {
+      setLastAutoSelectedProductId(product.id);
       setSelectedOptions({});
       setQty(1);
-      return;
+    } else {
+      const stockMap = product.variants?.stock_map ?? null;
+      const rows = buildComboRows(groups);
+      const firstInStock = stockMap
+        ? rows.find((r) => Number(stockMap[r.key] ?? 0) > 0)
+        : undefined;
+      const chosen = firstInStock ?? rows[0];
+      if (chosen) {
+        setLastAutoSelectedProductId(product.id);
+        setSelectedOptions(chosen.groupOption);
+        setQty(1);
+      }
     }
-    const defaults: Record<string, string> = {};
-    for (const group of groups) {
-      // Pick first option that has stock > 0, fallback to first option
-      const firstInStock = group.options?.find((o: any) => Number(o.stock ?? 0) > 0);
-      const firstOption = firstInStock || group.options?.[0];
-      if (firstOption) defaults[group.id] = firstOption.id;
-    }
-    setSelectedOptions(defaults);
-    setQty(1);
-  }, [product]);
+  }
 
-  // Reset gallery when selection changes
-  useEffect(() => { setGalleryActive(0); }, [selectedOptions]);
+  // Reset gallery when selection changes (guarded render-time adjustment).
+  const [lastSelectedOptions, setLastSelectedOptions] = useState(selectedOptions);
+  if (lastSelectedOptions !== selectedOptions) {
+    setLastSelectedOptions(selectedOptions);
+    setGalleryActive(0);
+  }
 
   if (isLoading) return <Spinner className="py-32" />;
   if (isError || !product) {
@@ -540,11 +576,11 @@ export default function ProductDetailPage() {
     );
   }
 
-  const variantGroups = (product.variants as any)?.variant_groups ?? [];
+  const variantGroups = product.variants?.variant_groups ?? [];
   const hasGroups = variantGroups.length > 0;
 
   // Build option lookup: optionId → option data
-  const optionById: Record<string, any> = {};
+  const optionById: Record<string, VariantOption> = {};
   for (const group of variantGroups) {
     for (const opt of group.options ?? []) {
       optionById[opt.id] = opt;
@@ -576,14 +612,33 @@ export default function ProductDetailPage() {
     ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
     : null;
 
-  // Stock: minimum stock across all selected options (per-option stock model)
-  const selectedStock = hasGroups
-    ? Object.values(selectedOptions).reduce((min, optId) => {
-        const stock = Number(optionById[optId]?.stock ?? 0);
-        return Math.min(min, stock);
-      }, Infinity) as number
-    : product.stock_qty;
-  const effectiveStock = isFinite(selectedStock) ? selectedStock : product.stock_qty;
+  // Per-combination stock: dense stock_map keyed by combo_key (option IDs joined by "__").
+  // Source of truth for availability. Old-format products have no variant_groups / stock_map.
+  const stockMap: Record<string, number> | null = hasGroups
+    ? product.variants?.stock_map ?? null
+    : null;
+  const missingStockMap = hasGroups && !stockMap;
+  // Combo rows (with per-group option maps + stock) — used for per-combo visibility.
+  const comboRows = buildComboRows(variantGroups).map((row) => ({
+    ...row,
+    stock: Number(stockMap?.[row.key] ?? 0),
+  }));
+
+  // Option visibility: an option is visible if some combo row containing it — consistent
+  // with the other groups' current selections — has stock > 0. Recomputed on every render.
+  function isOptionVisible(group: VariantGroup, opt: VariantOption): boolean {
+    if (!stockMap) return true;
+    return comboRows.some((row) => {
+      if (row.groupOption[group.id] !== opt.id) return false;
+      if (row.stock <= 0) return false;
+      for (const g of variantGroups) {
+        if (g.id === group.id) continue;
+        const sel = selectedOptions[g.id];
+        if (sel && row.groupOption[g.id] !== sel) return false;
+      }
+      return true;
+    });
+  }
 
   // Image swapping — mirrors old image_map[comboKey] system, adapted for new opt-ID keys.
   //
@@ -596,26 +651,32 @@ export default function ProductDetailPage() {
   // Combo key = selected optionIds joined by '__' in variant_group order.
   // Only generated when ALL groups have a selection — prevents partial keys (e.g. "opt1")
   // from incorrectly matching image_map entries meant for full combinations ("opt1__opt2").
-  const allGroupsHaveSelection = variantGroups.every((g: any) => selectedOptions[g.id]);
+  const allGroupsHaveSelection = variantGroups.every((g) => selectedOptions[g.id]);
   const comboKey = allGroupsHaveSelection
     ? variantGroups
-        .map((g: any) => selectedOptions[g.id])
+        .map((g) => selectedOptions[g.id])
         .filter(Boolean)
         .join('__')
     : '';
 
-  const imageMap: Record<string, string[]> = (product.variants as any)?.image_map ?? {};
+  // Stock: per-combination — the matched combo row's stock (no per-option min).
+  // Old-format products fall back to the product-level stock_qty.
+  const effectiveStock = hasGroups
+    ? Number(stockMap?.[comboKey] ?? 0)
+    : product.stock_qty;
+
+  const imageMap: Record<string, string[]> = product.variants?.image_map ?? {};
   const comboImages: string[] = (imageMap[comboKey] ?? []).filter(Boolean);
 
   // Colour fallback: images on any selected option that belongs to a colour group
   const colourFallbackImages: string[] = variantGroups
-    .filter((g: any) => /colou?r/i.test(g.label))
-    .flatMap((g: any) => {
+    .filter((g) => /colou?r/i.test(g.label))
+    .flatMap((g) => {
       const optId = selectedOptions[g.id];
       return optId ? (optionById[optId]?.images ?? []).filter(Boolean) : [];
     });
 
-  const defaultVariantImage: string = (product.variants as any)?.default_image ?? '';
+  const defaultVariantImage: string = product.variants?.default_image ?? '';
 
   let galleryImages: string[];
   if (comboImages.length > 0) {
@@ -635,15 +696,13 @@ export default function ProductDetailPage() {
     galleryImages = product.images ?? [];
   }
 
-  // Disable Add to Cart: (Task 5) ONLY disabled if has groups AND not all required groups selected
-  // Zero groups = simple product = always enabled
+  // Disable Add to Cart: requires a selection for EVERY group — per-combination stock
+  // needs a full combo key, so an unselected group (even a legacy `required: false`
+  // one) leaves the configuration incomplete. Zero groups = simple product = enabled.
   const allGroupsSelected = hasGroups
-    ? variantGroups.every((g: any) => {
-        const isRequired = g.required !== false; // default true
-        return !isRequired || selectedOptions[g.id];
-      })
+    ? variantGroups.every((g) => selectedOptions[g.id])
     : true;
-  const isUnavailable = (hasGroups && !allGroupsSelected) || effectiveStock <= 0;
+  const isUnavailable = (hasGroups && !allGroupsSelected) || missingStockMap || effectiveStock <= 0;
 
   // Cart options: flat array of selected option IDs (Task 6)
   const cartSelectedOptions: string[] = Object.values(selectedOptions);
@@ -663,8 +722,8 @@ export default function ProductDetailPage() {
     try {
       await addItem(product!.id, qty, product!, cartSelectedOptions.length ? cartSelectedOptions : null);
       toast.success(`${product!.name} added to cart`);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to add');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to add'));
     }
   }
 
@@ -673,8 +732,8 @@ export default function ProductDetailPage() {
       await addItem(product!.id, 1, product!, cartSelectedOptions.length ? cartSelectedOptions : null);
       useCartStore.getState().closeDrawer();
       navigate('/cart');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to process');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to process'));
     }
   }
 
@@ -751,7 +810,11 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {effectiveStock > 0 ? (
+            {missingStockMap ? (
+              <p className="text-sm text-amber-600 font-medium">
+                This product isn&apos;t configured correctly (missing stock information).
+              </p>
+            ) : effectiveStock > 0 ? (
               <p className="text-sm text-green-600 font-medium">
                 In Stock {effectiveStock <= 5 && `(Only ${effectiveStock} left)`}
               </p>
@@ -761,18 +824,27 @@ export default function ProductDetailPage() {
 
             {/* Flexible Variant Picker — smart rendering per group type */}
             {hasGroups && (
+              missingStockMap ? (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 flex gap-2 items-start text-xs text-amber-800">
+                  <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                  <span>
+                    Variant options are temporarily unavailable for this product. Please check back later.
+                  </span>
+                </div>
+              ) : (
               <div className="space-y-4">
-                {variantGroups.map((group: any) => {
+                {variantGroups.map((group) => {
                   const isColourGroup = /colou?r/i.test(group.label);
-                  // Hide out-of-stock options entirely — only in-stock options are rendered.
-                  const inStockOptions = (group.options ?? []).filter((o: any) => Number(o.stock ?? 0) > 0);
-                  const hasOptionImages = inStockOptions.some((o: any) => o.images?.[0]);
+                  // Only options with at least one in-stock combo — consistent with the other
+                  // groups' current selections — are rendered.
+                  const visibleOptions = (group.options ?? []).filter((o) => isOptionVisible(group, o));
+                  const hasOptionImages = visibleOptions.some((o) => o.images?.[0]);
                   // Render mode: colour → circular swatches; has images → image cards; else → pill chips
                   const renderMode: 'colour' | 'image-card' | 'pill' =
                     isColourGroup ? 'colour' : hasOptionImages ? 'image-card' : 'pill';
 
                   // Group has no purchasable options — hide it entirely.
-                  if (inStockOptions.length === 0) return null;
+                  if (visibleOptions.length === 0) return null;
 
                   return (
                     <div key={group.id}>
@@ -783,7 +855,7 @@ export default function ProductDetailPage() {
                       {/* ── Colour swatches ─────────────────────────────── */}
                       {renderMode === 'colour' && (
                         <div className="flex flex-wrap gap-2.5">
-                          {inStockOptions.map((opt: any) => {
+                          {visibleOptions.map((opt) => {
                             const isSelected = selectedOptions[group.id] === opt.id;
                             const hex: string = opt.color_hex || '';
                             return (
@@ -807,7 +879,7 @@ export default function ProductDetailPage() {
                       {/* ── Image cards (pot type, style, etc.) ─────────── */}
                       {renderMode === 'image-card' && (
                         <div className="flex flex-wrap gap-2">
-                          {inStockOptions.map((opt: any) => {
+                          {visibleOptions.map((opt) => {
                             const isSelected = selectedOptions[group.id] === opt.id;
                             const priceDelta = Number(opt.price ?? 0);
                             return (
@@ -861,7 +933,7 @@ export default function ProductDetailPage() {
                       {/* ── Pill chips (size, weight, etc.) ─────────────── */}
                       {renderMode === 'pill' && (
                         <div className="flex flex-wrap gap-2">
-                          {inStockOptions.map((opt: any) => {
+                          {visibleOptions.map((opt) => {
                             const isSelected = selectedOptions[group.id] === opt.id;
                             const priceDelta = Number(opt.price ?? 0);
                             return (
@@ -890,6 +962,7 @@ export default function ProductDetailPage() {
                   );
                 })}
               </div>
+              )
             )}
 
             {/* Desktop add to cart */}

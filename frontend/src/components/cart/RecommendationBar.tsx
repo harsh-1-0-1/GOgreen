@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { useProducts } from '@/hooks/useProducts';
 import { useCartStore } from '@/store/cartStore';
 import { getRecommendedProducts } from '@/lib/recommendations';
+import { getApiErrorDetail } from '@/lib/apiError';
 import type { Product, CartItem } from '@/types';
 
 interface RecommendationBarProps {
@@ -33,7 +34,7 @@ export default function RecommendationBar({ lastAddedProduct, cartItems }: Recom
     e.preventDefault();
     e.stopPropagation();
     const hasVariants = Boolean(
-      (product.variants as any)?.variant_groups?.length > 0,
+      (product.variants?.variant_groups?.length ?? 0) > 0,
     );
     if (hasVariants) {
       navigate(`/products/${product.slug}`);
@@ -43,8 +44,8 @@ export default function RecommendationBar({ lastAddedProduct, cartItems }: Recom
     try {
       await addItem(product.id, 1, product);
       toast.success(`${product.name} added!`);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to add');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to add'));
     } finally {
       setAddingId(null);
     }
@@ -103,7 +104,7 @@ export default function RecommendationBar({ lastAddedProduct, cartItems }: Recom
                 ) : (
                   <>
                     <Plus size={11} strokeWidth={2.5} />
-                    {(product.variants as any)?.variant_groups?.length > 0 ? 'Options' : 'Add'}
+                    {(product.variants?.variant_groups?.length ?? 0) > 0 ? 'Options' : 'Add'}
                   </>
                 )}
               </button>

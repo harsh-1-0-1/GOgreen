@@ -5,6 +5,7 @@ import { useCartStore } from '@/store/cartStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import RecommendationBar from './RecommendationBar';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
+import { getApiErrorDetail } from '@/lib/apiError';
 
 function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
   if (!item.selected_options) return null;
@@ -23,8 +24,8 @@ export default function CartDrawer() {
     try {
       if (qty <= 0) await removeItem(itemId);
       else await updateItem(itemId, qty);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to update cart');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to update cart'));
     }
   }
 

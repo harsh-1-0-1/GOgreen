@@ -14,7 +14,8 @@ class CheckoutRequest(BaseModel):
 class DirectCheckoutItem(BaseModel):
     product_id: int
     quantity: int
-    selected_options: dict[str, str] | None = None
+    # New-format variant products send a list of option IDs; old-format send a dict.
+    selected_options: list[str] | dict[str, str] | None = None
 
 
 class DirectCheckoutRequest(BaseModel):
@@ -39,7 +40,8 @@ class OrderItemResponse(BaseModel):
     product_id: int
     quantity: int
     unit_price: float
-    selected_options: dict[str, str] | None = None
+    # Old format: dict of slugs. New format: {"option_ids": [...], "snapshot": [...]}.
+    selected_options: dict[str, Any] | None = None
     resolved_image_url: str | None = None
     product: Any = Field(default=None, exclude=True)
 
