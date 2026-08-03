@@ -63,6 +63,10 @@ export interface VariantGroup {
   id: string;
   label: string;
   required?: boolean;
+  /** When true, the storefront renders every defined option regardless of stock
+   *  (e.g. always show Small/Medium/Large); colour groups without this keep hiding
+   *  out-of-stock options. */
+  always_show_options?: boolean;
   options: VariantOption[];
 }
 

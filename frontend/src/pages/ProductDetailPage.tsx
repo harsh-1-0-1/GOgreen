@@ -626,7 +626,10 @@ export default function ProductDetailPage() {
 
   // Option visibility: an option is visible if some combo row containing it — consistent
   // with the other groups' current selections — has stock > 0. Recomputed on every render.
+  // Groups flagged `always_show_options` always render every defined option regardless of
+  // stock (e.g. Small/Medium/Large always visible).
   function isOptionVisible(group: VariantGroup, opt: VariantOption): boolean {
+    if (group.always_show_options) return true;
     if (!stockMap) return true;
     return comboRows.some((row) => {
       if (row.groupOption[group.id] !== opt.id) return false;
@@ -708,6 +711,46 @@ export default function ProductDetailPage() {
   const cartSelectedOptions: string[] = Object.values(selectedOptions);
 
   function selectOption(groupId: string, optionId: string) {
+    const clickedGroup = variantGroups.find((g) => g.id === groupId);
+
+    // Stale-selection guard for always-show groups: a picked option (e.g. a size) may
+    // have no in-stock combo with the customer's currently-selected options in other
+    // groups. Re-derive those groups from the first in-stock combo that preserves as
+    // many of their current picks as possible, so we never strand them on a hidden
+    // colour / dead "Out of Stock" state. If nothing is in stock for this pick at all,
+    // keep the plain selection and let effectiveStock <= 0 show "Out of Stock" honestly.
+    if (clickedGroup?.always_show_options && stockMap) {
+      const candidates = comboRows.filter(
+        (row) =>
+          row.groupOption[groupId] === optionId &&
+          Number(stockMap[row.key] ?? 0) > 0,
+      );
+      if (candidates.length > 0) {
+        let best = candidates[0];
+        let bestScore = -1;
+        for (const row of candidates) {
+          let score = 0;
+          for (const g of variantGroups) {
+            if (g.id === groupId) continue;
+            const sel = selectedOptions[g.id];
+            if (sel && row.groupOption[g.id] === sel) score++;
+          }
+          // Strict > over comboRows' cartesian (admin-defined) order → tie-break is
+          // "first in defined order", matching auto-select and the admin combos table.
+          if (score > bestScore) {
+            bestScore = score;
+            best = row;
+          }
+        }
+        setSelectedOptions(best.groupOption);
+        setQty(1);
+        if (window.innerWidth < 768) {
+          galleryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        return;
+      }
+    }
+
     setSelectedOptions((prev) => ({ ...prev, [groupId]: optionId }));
     setQty(1);
     // On mobile the gallery sits above the variant selector and scrolls out of view.
@@ -833,7 +876,12 @@ export default function ProductDetailPage() {
                 </div>
               ) : (
               <div className="space-y-4">
-                {variantGroups.map((group) => {
+                {/* Always-show groups (e.g. Select Size) render on top of colours/pots,
+                    regardless of their admin-defined order. Stable sort preserves relative
+                    order within each bucket; combo keys keep using variantGroups order. */}
+                {[...variantGroups]
+                  .sort((a, b) => Number(Boolean(b.always_show_options)) - Number(Boolean(a.always_show_options)))
+                  .map((group) => {
                   const isColourGroup = /colou?r/i.test(group.label);
                   // Only options with at least one in-stock combo — consistent with the other
                   // groups' current selections — are rendered.

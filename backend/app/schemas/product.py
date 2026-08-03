@@ -29,6 +29,10 @@ class VariantGroup(BaseModel):
     id: str = Field(default_factory=lambda: f"vg_{uuid.uuid4().hex[:8]}")
     label: str = Field(min_length=1)
     required: bool = True
+    # When true, the storefront renders EVERY defined option in this group regardless
+    # of per-combination stock (e.g. always show Small/Medium/Large); colour groups
+    # without this flag keep hiding out-of-stock options. Independent of `required`.
+    always_show_options: bool = False
     options: List[VariantOption] = Field(min_length=1)
 
     model_config = {"extra": "allow"}

@@ -43,6 +43,7 @@ type VariantOptionDraft = {
 type VariantGroupDraft = {
   id: string;           // stable ID – preserved for existing groups, generated for new
   label: string;
+  always_show_options: boolean;
   options: VariantOptionDraft[];
 };
 
@@ -55,7 +56,7 @@ function emptyOption(): VariantOptionDraft {
 }
 
 function emptyGroup(): VariantGroupDraft {
-  return { id: genId('vg'), label: '', options: [emptyOption()] };
+  return { id: genId('vg'), label: '', always_show_options: false, options: [emptyOption()] };
 }
 
 const productSchema = z.object({
@@ -280,6 +281,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         vg.map((group: VariantGroup) => ({
           id: group.id || genId('vg'),
           label: group.label || '',
+          always_show_options: Boolean(group.always_show_options),
           options: (group.options || []).map((opt: VariantOption) => ({
             id: opt.id || genId('opt'),
             name: opt.name || '',
@@ -500,6 +502,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           variant_groups: cleanGroups.map(group => ({
             id: group.id,
             label: group.label.trim(),
+            always_show_options: group.always_show_options,
             options: group.options
               .filter(o => o.name.trim())
               .map(o => ({
@@ -1283,6 +1286,32 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                         >
                           <Trash2 size={15} />
                         </button>
+                      </div>
+
+                      {/* Always-show-options toggle */}
+                      <div className="flex items-center gap-2 px-3 pb-2">
+                        <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={group.always_show_options}
+                            onChange={(e) => {
+                              const v = e.target.checked;
+                              setVariantGroups(prev => prev.map(g => g.id === group.id ? { ...g, always_show_options: v } : g));
+                            }}
+                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                          <span>
+                            Always show every option (ignores stock)
+                            <span className="text-gray-400 font-normal">
+                              &nbsp;— e.g. always display Small / Medium / Large
+                            </span>
+                          </span>
+                        </label>
+                        {/size/i.test(group.label) && !group.always_show_options && (
+                          <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 rounded-full px-2 py-0.5">
+                            Tip: this label looks like a size group — tick the box so sizes always appear
+                          </span>
+                        )}
                       </div>
 
                       {/* Options */}
