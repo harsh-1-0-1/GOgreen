@@ -152,6 +152,8 @@ function topLevelCategories(categories: Category[] | undefined): Category[] {
   return categories?.filter((category) => category.is_active) ?? [];
 }
 
+const EMPTY_BANNERS: Banner[] = [];
+
 const inputClass =
   'w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors';
 
@@ -1105,7 +1107,7 @@ export default function BannersAdminPage() {
   );
 
   const {
-    data: banners = [],
+    data: banners = EMPTY_BANNERS,
     isLoading,
     refetch,
   } = useQuery<Banner[]>({
@@ -1118,8 +1120,11 @@ export default function BannersAdminPage() {
 
   const [localBanners, setLocalBanners] = useState<Banner[]>(banners);
 
-  // Mirror fetched banners into editable local state. Guarded render-time adjustment
-  // replaces a synchronous setState effect.
+  // Mirror fetched banners into editable local state. Guarded render-time
+  // adjustment replaces a synchronous setState effect.
+  // NOTE: the `banners` default above must stay a STABLE reference (EMPTY_BANNERS).
+  // A fresh `[]` per render makes this guard always true while loading, which
+  // loops forever (React "Too many re-renders").
   const [lastFetchedBanners, setLastFetchedBanners] = useState(banners);
   if (lastFetchedBanners !== banners) {
     setLastFetchedBanners(banners);

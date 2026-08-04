@@ -472,17 +472,13 @@ function CareTips({ tips }: { tips: string[] }) {
   );
 }
 
-function InlineBanner({ banner: b, fallbackImg, hasCta, naturalSize = false }: {
+function InlineBanner({ banner: b, fallbackImg, naturalSize = false }: {
   banner: Banner;
   fallbackImg: string;
-  hasCta: boolean;
   naturalSize?: boolean;
 }) {
-  return (
-    <div
-      className="mt-10 sm:mt-14 rounded-2xl overflow-hidden relative"
-      style={{ backgroundColor: b.bg_color || '#1B4332' }}
-    >
+  const inner = (
+    <>
       <img
         src={fallbackImg}
         alt=""
@@ -493,16 +489,27 @@ function InlineBanner({ banner: b, fallbackImg, hasCta, naturalSize = false }: {
         }
         loading="lazy"
       />
-      {hasCta && b.cta_link && (
-        <div className="absolute bottom-4 right-4 sm:bottom-5 sm:right-6 z-10">
-          <a
-            href={b.cta_link}
-            className="inline-flex items-center justify-center px-4 py-2 rounded-full text-xs sm:text-sm font-semibold bg-white text-gray-900 hover:bg-gray-100 transition whitespace-nowrap shadow-md"
-          >
-            {b.cta_text}
-          </a>
-        </div>
-      )}
+    </>
+  );
+
+  if (b.cta_link) {
+    return (
+      <Link
+        to={b.cta_link}
+        className="mt-10 sm:mt-14 rounded-2xl overflow-hidden relative block"
+        style={{ backgroundColor: b.bg_color || '#1B4332' }}
+      >
+        {inner}
+      </Link>
+    );
+  }
+
+  return (
+    <div
+      className="mt-10 sm:mt-14 rounded-2xl overflow-hidden relative"
+      style={{ backgroundColor: b.bg_color || '#1B4332' }}
+    >
+      {inner}
     </div>
   );
 }
@@ -797,8 +804,7 @@ export default function ProductDetailPage() {
   function renderInlineBannerItem(banner: Banner | null, fallbackImg: string) {
     if (!banner) return null;
     const img = banner.image_url || fallbackImg;
-    const hasCta = banner.cta_text && banner.cta_link;
-    return <InlineBanner banner={banner} fallbackImg={img} hasCta={!!hasCta} naturalSize />;
+    return <InlineBanner banner={banner} fallbackImg={img} naturalSize />;
   }
 
   return (

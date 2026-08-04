@@ -6,8 +6,8 @@ export default function SettingsAdminPage() {
   const [activeTab, setActiveTab] = useState<'store' | 'payments' | 'shipping' | 'emails' | 'seo' | 'branding'>('store');
 
   // Store information state
-  const [storeName, setStoreName] = useState('GOgreen Plants & Pots');
-  const [storeEmail, setStoreEmail] = useState('support@gogreen.com');
+  const [storeName, setStoreName] = useState('Plantoga');
+  const [storeEmail, setStoreEmail] = useState('support@plantoga.com');
   const [storePhone, setStorePhone] = useState('+91 99887 76655');
   const [storeAddress, setStoreAddress] = useState('12, Green Enclave, Sector 5, Bangalore - 560001');
 
@@ -24,7 +24,7 @@ export default function SettingsAdminPage() {
   const [notifyLowStock, setNotifyLowStock] = useState(true);
 
   // SEO state
-  const [metaTitle, setMetaTitle] = useState('GOgreen - Buy Indoor Plants & Pots Online India');
+  const [metaTitle, setMetaTitle] = useState('Plantoga - Buy Indoor Plants & Pots Online India');
   const [metaDescription, setMetaDescription] = useState('Order fresh indoor air-purifier plants, succulents, premium ceramic pots, and garden combos. Fast home delivery across India.');
 
   // Branding state

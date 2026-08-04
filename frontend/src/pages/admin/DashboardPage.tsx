@@ -58,7 +58,7 @@ export default function DashboardPage() {
           <span className="text-[10px] uppercase font-bold tracking-widest text-[#E6F3EE] bg-white/10 px-2.5 py-1 rounded-full">
             Store Performance
           </span>
-          <h1 className="text-xl sm:text-2xl font-bold pt-1">Welcome back to GOgreen Admin Panel!</h1>
+          <h1 className="text-xl sm:text-2xl font-bold pt-1">Welcome back to Plantoga Admin Panel!</h1>
           <p className="text-xs text-white/80 max-w-md">Here is a quick overview of your orders, revenue, inventory status, and website operations today.</p>
         </div>
         {/* Background Plant Abstract Shapes */}

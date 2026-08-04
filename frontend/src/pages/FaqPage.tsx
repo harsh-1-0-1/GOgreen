@@ -249,7 +249,7 @@ export default function FaqPage() {
           
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto shrink-0">
             <a
-              href="mailto:support@gogreen.com"
+              href="mailto:support@plantoga.com"
               className="flex items-center justify-center gap-2 py-3 px-5 bg-white border border-gray-200 text-gray-750 text-xs sm:text-sm font-bold rounded-xl shadow-sm hover:bg-gray-50 transition"
             >
               <Mail size={16} className="text-primary" />

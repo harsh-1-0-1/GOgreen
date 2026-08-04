@@ -1,4 +1,4 @@
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 import { useBanners } from '@/hooks/useBanners';
 import type { Banner } from '@/types';
@@ -71,7 +71,17 @@ export default function PageBanner() {
 
   return (
     <section className="border-b border-gray-100 bg-white py-2 sm:py-3">
-      {content}
+      {banner.cta_link ? (
+        <Link
+          to={banner.cta_link}
+          className="block"
+          aria-label={banner.title}
+        >
+          {content}
+        </Link>
+      ) : (
+        content
+      )}
     </section>
   );
 }

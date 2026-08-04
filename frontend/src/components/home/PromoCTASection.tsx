@@ -37,9 +37,10 @@ export default function PromoCTASection() {
       <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 max-w-7xl">
         <div className="grid md:grid-cols-2 gap-4 sm:gap-5">
           {cards.map((card) => (
-            <div
+            <Link
               key={card.id}
-              className="flex flex-col sm:flex-row items-center gap-5 rounded-2xl p-5 sm:p-7"
+              to={card.cta_link || '/products'}
+              className="flex flex-col sm:flex-row items-center gap-5 rounded-2xl p-5 sm:p-7 hover:opacity-95 transition-opacity"
               style={{ border: `1px solid ${card.bg_color || '#D1FAE5'}`, background: card.bg_color || 'white' }}
             >
               {card.image_url && (
@@ -54,18 +55,18 @@ export default function PromoCTASection() {
                 />
               )}
               <div className="flex flex-col gap-2.5">
-
-                {card.cta_text && (
-                  <Link
-                    to={card.cta_link || '#'}
-                    className="mt-auto inline-block w-fit px-6 py-2.5 text-sm font-medium rounded-lg text-white transition hover:opacity-90"
-                    style={{ backgroundColor: card.text_color || '#16A34A' }}
-                  >
-                    {card.cta_text}
-                  </Link>
+                {card.title && (
+                  <h3 className="text-lg sm:text-xl font-bold text-gray-900">
+                    {card.title}
+                  </h3>
+                )}
+                {card.subtitle && (
+                  <p className="text-sm text-gray-600">
+                    {card.subtitle}
+                  </p>
                 )}
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>

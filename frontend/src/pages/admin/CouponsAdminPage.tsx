@@ -13,7 +13,7 @@ interface Coupon {
 }
 
 const INITIAL_COUPONS: Coupon[] = [
-  { id: 1, code: 'GOGREEN15', type: 'percent', value: 15, minAmount: 999, isActive: true, timesUsed: 142 },
+  { id: 1, code: 'PLANTOGA15', type: 'percent', value: 15, minAmount: 999, isActive: true, timesUsed: 142 },
   { id: 2, code: 'WELCOME200', type: 'fixed', value: 200, minAmount: 1499, isActive: true, timesUsed: 89 },
   { id: 3, code: 'MONSOON50', type: 'percent', value: 50, minAmount: 2999, isActive: false, timesUsed: 312 },
   { id: 4, code: 'PLANTLOVE', type: 'fixed', value: 100, minAmount: 500, isActive: true, timesUsed: 23 },
