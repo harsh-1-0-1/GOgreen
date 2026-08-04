@@ -97,9 +97,16 @@ function CategoryTile({ tile }: { tile: Tile }) {
     >
       <img
         src={tile.image}
-        alt={tile.label}
-        className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+        alt=""
+        aria-hidden
         loading="lazy"
+        className="absolute inset-0 w-full h-full object-cover blur-lg scale-125"
+      />
+      <img
+        src={tile.image}
+        alt={tile.label}
+        loading="lazy"
+        className="absolute inset-0 w-full h-full object-contain p-1.5 drop-shadow-sm"
       />
       <div className="absolute inset-x-0 bottom-0 bg-white/90 backdrop-blur-md px-3 py-2.5 border-t border-white/20">
         <span className="text-sm font-bold text-gray-800 leading-tight block text-center truncate">

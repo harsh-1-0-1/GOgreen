@@ -82,18 +82,54 @@ export function useDeleteCategory() {
     mutationFn: async (id: number) => {
       await api.delete(`/categories/${id}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['categories'] });
+      qc.invalidateQueries({ queryKey: ['categories-admin'] });
+    },
   });
 }
 
 export function useCreateCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { name: string; parent_id?: number | null }) => {
+    mutationFn: async (body: {
+      name: string;
+      parent_id?: number | null;
+      image_url?: string | null;
+    }) => {
       const { data } = await api.post('/categories', body);
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['categories'] });
+      qc.invalidateQueries({ queryKey: ['categories-admin'] });
+    },
+  });
+}
+
+export function useUpdateCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: number;
+      body: {
+        name?: string;
+        parent_id?: number | null;
+        image_url?: string | null;
+        is_active?: boolean;
+        sort_order?: number;
+      };
+    }) => {
+      const { data } = await api.put(`/categories/${id}`, body);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['categories'] });
+      qc.invalidateQueries({ queryKey: ['categories-admin'] });
+    },
   });
 }
 

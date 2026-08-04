@@ -16,7 +16,21 @@ def _slugify(text: str) -> str:
 
 async def get_all_categories(db: AsyncSession) -> list[Category]:
     result = await db.execute(
-        select(Category).where(Category.is_active == True)  # noqa: E712
+        select(Category)
+        .where(Category.is_active == True)  # noqa: E712
+        .order_by(Category.sort_order.asc(), Category.name.asc(), Category.id.asc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_all_categories_include_inactive(db: AsyncSession) -> list[Category]:
+    result = await db.execute(
+        select(Category).order_by(
+            Category.parent_id.nulls_first(),
+            Category.sort_order.asc(),
+            Category.name.asc(),
+            Category.id.asc(),
+        )
     )
     return list(result.scalars().all())
 
@@ -31,6 +45,7 @@ def build_tree(categories: list[Category]) -> list[CategoryTree]:
             parent_id=cat.parent_id,
             image_url=cat.image_url,
             is_active=cat.is_active,
+            sort_order=cat.sort_order,
             children=[],
         )
 
@@ -54,7 +69,7 @@ async def get_category_by_id(db: AsyncSession, category_id: int) -> Category | N
 
 
 async def create_category(
-    db: AsyncSession, payload: CategoryCreate, image_url: str | None = None,
+    db: AsyncSession, payload: CategoryCreate,
 ) -> Category:
     slug = _slugify(payload.name)
     existing = await db.execute(select(Category).where(Category.slug == slug))
@@ -65,8 +80,9 @@ async def create_category(
         name=payload.name,
         slug=slug,
         parent_id=payload.parent_id,
-        image_url=image_url,
+        image_url=payload.image_url,
         is_active=payload.is_active,
+        sort_order=payload.sort_order,
     )
     db.add(category)
     await db.flush()

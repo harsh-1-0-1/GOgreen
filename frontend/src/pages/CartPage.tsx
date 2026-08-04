@@ -5,6 +5,7 @@ import { useCartStore } from '@/store/cartStore';
 import RecommendationBar from '@/components/cart/RecommendationBar';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
 import { getApiErrorDetail } from '@/lib/apiError';
+import { useSuggestionTiles } from '@/hooks/useSuggestionTiles';
 
 function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
   if (!item.selected_options) return null;
@@ -13,6 +14,7 @@ function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][n
 
 export default function CartPage() {
   const { items, total, itemCount, updateItem, removeItem, lastAddedProduct } = useCartStore();
+  const suggestionTiles = useSuggestionTiles(6);
 
   async function handleUpdate(itemId: number, qty: number) {
     try {
@@ -52,50 +54,7 @@ export default function CartPage() {
             Shop Popular Collections
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-            {[
-              {
-                title: 'Price Drop',
-                subtitle: 'Up to 50% OFF',
-                image: 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?w=500&q=80',
-                link: '/products?tags=offers',
-                color: 'text-amber-600',
-              },
-              {
-                title: 'XL Plants',
-                subtitle: 'Grow Big & Bold',
-                image: 'https://images.unsplash.com/photo-1614594975525-e45190c55d0b?w=500&q=80',
-                link: '/products?category=xl-plants',
-                color: 'text-emerald-700',
-              },
-              {
-                title: 'Plant Care',
-                subtitle: 'Thrive Guarantee',
-                image: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=500&q=80',
-                link: '/products?category=plant-care',
-                color: 'text-emerald-700',
-              },
-              {
-                title: 'Fertilizers',
-                subtitle: '100% Organic Nutrition',
-                image: 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?w=500&q=80',
-                link: '/products?category=potting-mix-fertilizers',
-                color: 'text-emerald-700',
-              },
-              {
-                title: 'Pots & Planters',
-                subtitle: 'Premium Ceramic Pots',
-                image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=500&q=80',
-                link: '/products?category=pots-planters',
-                color: 'text-emerald-700',
-              },
-              {
-                title: 'Plant Stands',
-                subtitle: 'Elevate Your Plants',
-                image: 'https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=500&q=80',
-                link: '/products?category=plant-stands',
-                color: 'text-emerald-700',
-              },
-            ].map((col) => (
+            {suggestionTiles.map((col) => (
               <Link
                 key={col.title}
                 to={col.link}

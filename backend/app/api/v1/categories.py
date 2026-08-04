@@ -33,6 +33,15 @@ async def list_categories(response: Response, db: AsyncSession = Depends(get_db)
     return tree
 
 
+@router.get("/admin", response_model=list[CategoryTree])
+async def list_categories_admin(
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    cats = await category_service.get_all_categories_include_inactive(db)
+    return category_service.build_tree(cats)
+
+
 @router.get("/{slug}", response_model=CategoryTree)
 async def get_category(slug: str, response: Response, db: AsyncSession = Depends(get_db)):
     response.headers["Cache-Control"] = "public, max-age=60"
@@ -62,6 +71,10 @@ async def create_category(
     _admin=Depends(require_admin),
 ):
     try:
+        if body.image_url is not None:
+            body = body.model_copy(
+                update={"image_url": extract_relative_key(body.image_url)}
+            )
         cat = await category_service.create_category(db, body)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

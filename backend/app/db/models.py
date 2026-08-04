@@ -52,6 +52,7 @@ class Category(Base):
     parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("categories.id"), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     parent: Mapped["Category | None"] = relationship(
         back_populates="children", remote_side="Category.id"

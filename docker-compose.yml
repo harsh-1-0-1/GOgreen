@@ -136,6 +136,27 @@ services:
     command: sh -c "uv run alembic upgrade head && uv run python seed.py"
     restart: "no"
 
+  seed-catalog:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    profiles:
+      - seed
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-plantoga}:${POSTGRES_PASSWORD:-plantoga}@postgres:5432/${POSTGRES_DB:-plantoga}
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - backend_static:/app/static
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    command: sh -c "uv run alembic upgrade head && uv run python seed.py --only-catalog"
+    restart: "no"
+
 volumes:
   postgres_data:
   redis_data:

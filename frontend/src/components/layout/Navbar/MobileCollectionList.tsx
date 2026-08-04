@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
-import { useBanners } from '@/hooks/useBanners';
-import { MOBILE_COLLECTIONS, LABEL_TO_NAV, bannerToCollection } from './navData';
+import { useCategories } from '@/hooks/useCategories';
+import { buildLabelToNav, categoryTreeToMobileCollections } from './navData';
 import type { MobileCollection, NavItemDef } from './navData';
 
 function CollectionAccordionRow({
@@ -138,18 +138,16 @@ function CollectionAccordionRow({
 }
 
 export function MobileCollectionList({ onNavigate }: { onNavigate: () => void }) {
-  const { data: banners = [] } = useBanners('menu_banner');
-  const rows: MobileCollection[] =
-    banners.length > 0
-      ? banners.map(bannerToCollection)
-      : MOBILE_COLLECTIONS;
+  const { data: categories = [] } = useCategories();
+  const rows: MobileCollection[] = categoryTreeToMobileCollections(categories);
+  const labelToNav = buildLabelToNav(categories);
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
     <ul className="flex flex-col gap-2.5 px-3 py-3 bg-[#fafafa]">
       {rows.map((item) => {
-        const navItem = LABEL_TO_NAV[item.label];
+        const navItem = labelToNav[item.label];
         return (
           <CollectionAccordionRow
             key={item.label}

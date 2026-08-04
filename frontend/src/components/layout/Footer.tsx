@@ -3,32 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { X, LogIn } from 'lucide-react';
 import { LOGO_PATH } from '@/lib/branding';
 import { useAuthStore } from '@/store/authStore';
+import { useCategories } from '@/hooks/useCategories';
+import { categoryLink, sortByMenuOrder } from '@/components/layout/Navbar/navData';
 
-const LINK_COLUMNS = [
-  {
-    title: 'Plants',
-    links: [
-      { label: 'Indoor Plants', to: '/products?category=indoor-plants' },
-      { label: 'Outdoor Plants', to: '/products?category=outdoor-plants' },
-      { label: 'Air Purifying', to: '/products?tags=air-purifying' },
-      { label: 'Low Maintenance', to: '/products?tags=low-maintenance' },
-      { label: 'XL Plants', to: '/products?category=xl-plants' },
-      { label: 'Hanging Plants', to: '/products?tags=hanging' },
-      { label: 'Flowering Plants', to: '/products?category=flowering-plants' },
-    ],
-  },
-  {
-    title: 'Seeds & Pots',
-    links: [
-      { label: 'Vegetable Seeds', to: '/products?category=vegetable-seeds' },
-      { label: 'Flower Seeds', to: '/products?category=flower-seeds' },
-      { label: 'Herb Seeds', to: '/products?tags=herb,seeds' },
-      { label: 'Ceramic Pots', to: '/products?tags=ceramic' },
-      { label: 'Plastic Pots', to: '/products?tags=plastic' },
-      { label: 'Hanging Planters', to: '/products?tags=hanging' },
-      { label: 'Plant Stands', to: '/products?category=plant-stands' },
-    ],
-  },
+const STATIC_COLUMNS = [
   {
     title: 'Company',
     links: [
@@ -153,6 +131,21 @@ export default function Footer() {
   const { user, openAuthModal } = useAuthStore();
   const navigate = useNavigate();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const { data: categories = [] } = useCategories();
+
+  const categoryColumns = sortByMenuOrder(categories)
+    .filter((root) => (root.children ?? []).length > 0)
+    .map((root) => ({
+      title: root.name,
+      links: [
+        { label: `All ${root.name}`, to: categoryLink(root) },
+        ...sortByMenuOrder(root.children ?? []).map((child) => ({
+          label: child.name,
+          to: categoryLink(child),
+        })),
+      ],
+    }));
+  const linkColumns = [...categoryColumns, ...STATIC_COLUMNS];
 
   function handleTrackOrder() {
     if (user) {
@@ -205,7 +198,7 @@ export default function Footer() {
             </div>
 
             {/* Link columns */}
-            {LINK_COLUMNS.map((col) => (
+            {linkColumns.map((col) => (
               <div key={col.title}>
                 <h4 className="font-bold text-sm mb-3 sm:mb-4">{col.title}</h4>
                 <ul className="flex flex-col gap-2 text-sm text-white/60">

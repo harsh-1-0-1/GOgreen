@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 
 import api from '@/lib/api';
-import type { Banner } from '@/types';
+import type { Banner, BannerPlacement } from '@/types';
 
-export const useBanners = (placement: string) =>
+export const useBanners = (placement: BannerPlacement) =>
   useQuery<Banner[]>({
     queryKey: ['banners', placement],
     queryFn: () =>

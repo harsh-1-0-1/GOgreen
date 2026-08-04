@@ -6,6 +6,7 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import RecommendationBar from './RecommendationBar';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
 import { getApiErrorDetail } from '@/lib/apiError';
+import { useSuggestionTiles } from '@/hooks/useSuggestionTiles';
 
 function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
   if (!item.selected_options) return null;
@@ -15,6 +16,7 @@ function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][n
 export default function CartDrawer() {
   const { isDrawerOpen, closeDrawer, items, total, itemCount, updateItem, removeItem, lastAddedProduct } =
     useCartStore();
+  const suggestionTiles = useSuggestionTiles(4);
 
   useBodyScrollLock(isDrawerOpen);
 
@@ -81,36 +83,7 @@ export default function CartDrawer() {
                   Shop Popular Collections
                 </h4>
                 <div className="grid grid-cols-2 gap-3.5">
-                  {[
-                    {
-                      title: 'Price Drop',
-                      subtitle: 'Up to 50% OFF',
-                      image: 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?w=150&q=80',
-                      link: '/products?tags=offers',
-                      color: 'text-amber-600',
-                    },
-                    {
-                      title: 'XL Plants',
-                      subtitle: 'Grow Big & Bold',
-                      image: 'https://images.unsplash.com/photo-1614594975525-e45190c55d0b?w=150&q=80',
-                      link: '/products?category=xl-plants',
-                      color: 'text-emerald-700',
-                    },
-                    {
-                      title: 'Pots & Planters',
-                      subtitle: 'Ceramic Pots',
-                      image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=150&q=80',
-                      link: '/products?category=pots-planters',
-                      color: 'text-emerald-700',
-                    },
-                    {
-                      title: 'Plant Care',
-                      subtitle: 'Thrive Guides',
-                      image: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=150&q=80',
-                      link: '/products?category=plant-care',
-                      color: 'text-emerald-700',
-                    },
-                  ].map((col) => (
+                  {suggestionTiles.map((col) => (
                     <Link
                       key={col.title}
                       to={col.link}

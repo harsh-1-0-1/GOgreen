@@ -1,22 +1,43 @@
-"""Seed script: 10 categories + 50 products for Plantoga.
+"""Seed script: 30 categories + 26 products (1 per subcategory) for Plantoga.
 
 Usage:
-    uv run python seed.py
+    uv run python seed.py                 # full reset (all tables)
+    uv run python seed.py --only-catalog  # categories + products only
+
+WARNING: the full run wipes ALL rows (categories, products, users,
+carts, orders, banners, ...) before seeding. NEVER run it against a
+live/production database. Run it only on a fresh or throwaway test
+database.
+
+--only-catalog only touches categories and products and is safe to run
+against an existing dev DB (banners, blog posts, users, carts, orders
+and addresses are left untouched).
 """
 
 import asyncio
 import os
 import random
 import re
-import sys
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.security import hash_password
 from app.db.models import (
-    Address, Banner, BlogCategory, BlogPost, Cart, CartItem,
-    Category, Order, OrderItem, Product, ProductReview, User,
+    Address,
+    Banner,
+    BlogCategory,
+    BlogPost,
+    Cart,
+    CartItem,
+    Category,
+    DamageClaim,
+    Order,
+    OrderItem,
+    Product,
+    ProductReview,
+    Story,
+    User,
 )
 
 
@@ -56,42 +77,76 @@ PLANT_IMAGES = [
 ]
 
 CATEGORIES = [
-    # Top-level
-    {"name": "Plants", "slug": "plants", "parent_id": None},
-    {"name": "Seeds", "slug": "seeds", "parent_id": None},
-    {"name": "Pots & Planters", "slug": "pots-planters", "parent_id": None},
-    {"name": "Plant Care", "slug": "plant-care", "parent_id": None},
+    # Top-level (menu order 1-4)
+    {"name": "Plants", "slug": "plants", "parent_id": None, "sort_order": 1},
+    {"name": "Seeds", "slug": "seeds", "parent_id": None, "sort_order": 2},
+    {"name": "Pots & Planters", "slug": "pots-planters", "parent_id": None, "sort_order": 3},
+    {"name": "Plant Care", "slug": "plant-care", "parent_id": None, "sort_order": 4},
     # Plants subcategories
-    {"name": "Indoor Plants", "slug": "indoor-plants", "parent_slug": "plants"},
-    {"name": "Outdoor Plants", "slug": "outdoor-plants", "parent_slug": "plants"},
-    {"name": "Flowering Plants", "slug": "flowering-plants", "parent_slug": "plants"},
-    {"name": "Cacti & Succulents", "slug": "cacti-succulents", "parent_slug": "plants"},
-    {"name": "XL Plants", "slug": "xl-plants", "parent_slug": "plants"},
-    {"name": "Low Maintenance Plants", "slug": "low-maintenance-plants", "parent_slug": "plants"},
-    {"name": "Air Purifying Plants", "slug": "air-purifying-plants", "parent_slug": "plants"},
-    {"name": "Hanging Plants", "slug": "hanging-plants", "parent_slug": "plants"},
-    {"name": "Pet-Friendly Plants", "slug": "pet-friendly-plants", "parent_slug": "plants"},
-    {"name": "Fruit Plants", "slug": "fruit-plants", "parent_slug": "plants"},
+    {"name": "Indoor Plants", "slug": "indoor-plants", "parent_slug": "plants", "sort_order": 1},
+    {"name": "Outdoor Plants", "slug": "outdoor-plants", "parent_slug": "plants", "sort_order": 2},
+    {"name": "Flowering Plants", "slug": "flowering-plants", "parent_slug": "plants", "sort_order": 3},
+    {"name": "Cacti & Succulents", "slug": "cacti-succulents", "parent_slug": "plants", "sort_order": 4},
+    {"name": "XL Plants", "slug": "xl-plants", "parent_slug": "plants", "sort_order": 5},
+    {"name": "Low Maintenance Plants", "slug": "low-maintenance-plants", "parent_slug": "plants", "sort_order": 6},
+    {"name": "Air Purifying Plants", "slug": "air-purifying-plants", "parent_slug": "plants", "sort_order": 7},
+    {"name": "Hanging Plants", "slug": "hanging-plants", "parent_slug": "plants", "sort_order": 8},
+    {"name": "Pet-Friendly Plants", "slug": "pet-friendly-plants", "parent_slug": "plants", "sort_order": 9},
+    {"name": "Fruit Plants", "slug": "fruit-plants", "parent_slug": "plants", "sort_order": 10},
     # Seeds subcategories
-    {"name": "Vegetable Seeds", "slug": "vegetable-seeds", "parent_slug": "seeds"},
-    {"name": "Flower Seeds", "slug": "flower-seeds", "parent_slug": "seeds"},
-    {"name": "Microgreen Seeds", "slug": "microgreen-seeds", "parent_slug": "seeds"},
-    {"name": "Herb Seeds", "slug": "herb-seeds", "parent_slug": "seeds"},
-    {"name": "Flower Bulbs", "slug": "flower-bulbs", "parent_slug": "seeds"},
-    {"name": "Seeds Kits", "slug": "seeds-kits", "parent_slug": "seeds"},
+    {"name": "Vegetable Seeds", "slug": "vegetable-seeds", "parent_slug": "seeds", "sort_order": 1},
+    {"name": "Flower Seeds", "slug": "flower-seeds", "parent_slug": "seeds", "sort_order": 2},
+    {"name": "Microgreen Seeds", "slug": "microgreen-seeds", "parent_slug": "seeds", "sort_order": 3},
+    {"name": "Herb Seeds", "slug": "herb-seeds", "parent_slug": "seeds", "sort_order": 4},
+    {"name": "Flower Bulbs", "slug": "flower-bulbs", "parent_slug": "seeds", "sort_order": 5},
+    {"name": "Seeds Kits", "slug": "seeds-kits", "parent_slug": "seeds", "sort_order": 6},
     # Pots subcategories
-    {"name": "Plastic Pots", "slug": "plastic-pots", "parent_slug": "pots-planters"},
-    {"name": "Ceramic Pots", "slug": "ceramic-pots", "parent_slug": "pots-planters"},
-    {"name": "Metal Planters", "slug": "metal-planters", "parent_slug": "pots-planters"},
-    {"name": "Wooden Planters", "slug": "wooden-planters", "parent_slug": "pots-planters"},
-    {"name": "Hanging Planters", "slug": "hanging-planters", "parent_slug": "pots-planters"},
-    {"name": "Plant Stands", "slug": "plant-stands", "parent_slug": "pots-planters"},
+    {"name": "Plastic Pots", "slug": "plastic-pots", "parent_slug": "pots-planters", "sort_order": 1},
+    {"name": "Ceramic Pots", "slug": "ceramic-pots", "parent_slug": "pots-planters", "sort_order": 2},
+    {"name": "Metal Planters", "slug": "metal-planters", "parent_slug": "pots-planters", "sort_order": 3},
+    {"name": "Wooden Planters", "slug": "wooden-planters", "parent_slug": "pots-planters", "sort_order": 4},
+    {"name": "Hanging Planters", "slug": "hanging-planters", "parent_slug": "pots-planters", "sort_order": 5},
+    {"name": "Plant Stands", "slug": "plant-stands", "parent_slug": "pots-planters", "sort_order": 6},
     # Plant Care subcategories
-    {"name": "Potting Mix & Fertilizers", "slug": "potting-mix-fertilizers", "parent_slug": "plant-care"},
-    {"name": "Garden Tools", "slug": "garden-tools", "parent_slug": "plant-care"},
-    {"name": "Watering Tools", "slug": "watering-tools", "parent_slug": "plant-care"},
-    {"name": "Pest Control", "slug": "pest-control", "parent_slug": "plant-care"},
+    {"name": "Potting Mix & Fertilizers", "slug": "potting-mix-fertilizers", "parent_slug": "plant-care", "sort_order": 1},
+    {"name": "Garden Tools", "slug": "garden-tools", "parent_slug": "plant-care", "sort_order": 2},
+    {"name": "Watering Tools", "slug": "watering-tools", "parent_slug": "plant-care", "sort_order": 3},
+    {"name": "Pest Control", "slug": "pest-control", "parent_slug": "plant-care", "sort_order": 4},
 ]
+
+# Representative thumbnail per category, used by the DB-driven menu.
+CATEGORY_IMAGES = {
+    "plants": "1459411552884-841db9b3cc2a",
+    "seeds": "1592321675774-3de57f3ee0dc",
+    "pots-planters": "1616486338812-3dadae4b4ace",
+    "plant-care": "1584132967334-10e028bd69f7",
+    "indoor-plants": "1545241047-6083a3684587",
+    "outdoor-plants": "1466692476868-aef1dfb1e735",
+    "flowering-plants": "1416879595882-3373a0480b5b",
+    "cacti-succulents": "1509587584298-0f3b3a3a1797",
+    "xl-plants": "1485955900006-d5666c72437d",
+    "low-maintenance-plants": "1509423350716-97f9360b4e09",
+    "air-purifying-plants": "1501004318776-cd2ba00a9cee",
+    "hanging-plants": "1614594975525-e45190c55d0b",
+    "pet-friendly-plants": "1496096265110-f83ad7f96608",
+    "fruit-plants": "1544971587-b8420c2e1512",
+    "vegetable-seeds": "1599599810769-bcde5a160d32",
+    "flower-seeds": "1592321675774-3de57f3ee0dc",
+    "microgreen-seeds": "1545241047-6083a3684587",
+    "herb-seeds": "1416879595882-3373a0480b5b",
+    "flower-bulbs": "1506880018603-83d5b814b5a6",
+    "seeds-kits": "1593014606132-7360706692aa",
+    "plastic-pots": "1592150621744-aca64f48394a",
+    "ceramic-pots": "1616486338812-3dadae4b4ace",
+    "metal-planters": "1497366216548-37526070297c",
+    "wooden-planters": "1520412099551-62b6bafeb5bb",
+    "hanging-planters": "1614594975525-e45190c55d0b",
+    "plant-stands": "1592150621744-aca64f48394a",
+    "potting-mix-fertilizers": "1501004318641-b39e6451bec6",
+    "garden-tools": "1502082553048-f009c37129b9",
+    "watering-tools": "1481349518771-20055b2a7b24",
+    "pest-control": "1599599810769-bcde5a160d32",
+}
 def _make_variants(stock_per_option: int = 10) -> dict:
     """Standard plant variant: Select Pot Colour + Select Pot Material."""
     import uuid
@@ -258,7 +313,6 @@ def _attach_stock_map(variants: dict) -> dict:
 
 
 PRODUCTS = [
-    # Indoor Plants (cat: indoor-plants)
         {"name": "Money Plant Golden", "cat": "indoor-plants", "price": 249,
          "desc": "Air-purifying trailing vine perfect for shelves and hanging baskets.",
          "sunlight": "Low to Bright Indirect", "watering": "Once a week",
@@ -266,190 +320,31 @@ PRODUCTS = [
          "care_tips": ["Water when topsoil feels dry", "Prune to encourage bushier growth"],
          "badge": "Bestseller",
          "variants": _make_variants_with_sizes()},
-
-        {"name": "Snake Plant Sansevieria", "cat": "indoor-plants", "price": 399,
-         "desc": "Hardy succulent that thrives on neglect and purifies air at night.",
-         "sunlight": "Low to Bright Indirect", "watering": "Every 2 weeks",
-         "tags": ["air-purifying", "low-maintenance", "bedroom", "beginner-friendly", "workspace"],
-         "care_tips": ["Avoid overwatering", "Tolerates low light well"], "badge": "Trending",
-         "variants": _make_variants_with_sizes()},
-
-        {"name": "Peace Lily", "cat": "indoor-plants", "price": 549,
-         "desc": "Elegant white-flowering plant that removes toxins from indoor air.",
-         "sunlight": "Low to Medium Indirect", "watering": "Twice a week",
-         "tags": ["air-purifying", "flowering", "indoor", "beginner-friendly", "living-room", "exotic"],
-         "care_tips": ["Keep soil moist but not soggy", "Mist leaves in dry weather"],
-         "variants": _make_variants_with_sizes()},
-
-        {"name": "Pothos Marble Queen", "cat": "indoor-plants", "price": 199,
-         "desc": "Variegated trailing plant with stunning white and green leaves.",
-         "sunlight": "Bright Indirect", "watering": "Once a week",
-         "tags": ["trailing", "variegated", "indoor", "low-maintenance", "beginner-friendly"],
-         "care_tips": ["More light means more variegation", "Trim yellow leaves"],
-         "variants": _make_variants()},
-
-        {"name": "Areca Palm", "cat": "indoor-plants", "price": 699,
-         "desc": "Tropical palm that adds lush greenery and humidifies your room.",
-         "sunlight": "Bright Indirect", "watering": "Twice a week",
-         "tags": ["air-purifying", "tropical", "large", "living-room", "vastu-friendly"],
-         "care_tips": ["Mist regularly", "Avoid direct sunlight to prevent leaf burn"], "badge": "Popular",
-         "variants": _make_variants_with_sizes()},
-
-        {"name": "ZZ Plant", "cat": "indoor-plants", "price": 449,
-         "desc": "Glossy-leaved virtually indestructible houseplant.",
-         "sunlight": "Low to Bright Indirect", "watering": "Every 2-3 weeks",
-         "tags": ["low-maintenance", "modern", "indoor", "beginner-friendly", "workspace", "living-room"],
-         "care_tips": ["Drought tolerant – do not overwater", "Wipe leaves for shine"],
-         "variants": _make_variants_with_sizes()},
-
-        {"name": "Rubber Plant", "cat": "indoor-plants", "price": 499,
-         "desc": "Bold burgundy leaves that make a dramatic statement in any room.",
-         "sunlight": "Bright Indirect", "watering": "Once a week",
-         "tags": ["statement", "air-purifying", "indoor", "living-room"],
-         "care_tips": ["Clean leaves monthly", "Rotate for even growth"],
-         "variants": _make_size_only_variants()},
-
-        {"name": "Jade Plant", "cat": "indoor-plants", "price": 349,
-         "desc": "Lucky succulent symbolising prosperity and good fortune.",
-         "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks",
-         "tags": ["succulent", "lucky", "desktop", "low-maintenance", "beginner-friendly", "workspace", "vastu-friendly"],
-         "care_tips": ["Let soil dry completely between waterings", "Avoid cold drafts"],
-         "variants": _make_variants()},
-
-        {"name": "Spider Plant", "cat": "indoor-plants", "price": 199,
-         "desc": "Cheerful cascading foliage with baby plantlets on arching stems.",
-         "sunlight": "Bright Indirect", "watering": "Once a week",
-         "tags": ["pet-safe", "hanging", "beginner", "low-maintenance", "beginner-friendly", "bedroom", "vastu-friendly"],
-         "care_tips": ["Safe for cats and dogs", "Propagate babies in water"],
-         "variants": _make_variants()},
-
-        {"name": "Philodendron Brasil", "cat": "indoor-plants", "price": 299,
-         "desc": "Heart-shaped variegated leaves in lime green and dark green.",
-         "sunlight": "Medium to Bright Indirect", "watering": "Once a week",
-         "tags": ["trailing", "variegated", "tropical"],
-         "care_tips": ["Grows fast in bright light", "Trim leggy vines"],
-         "variants": _make_variants()},
-    # Outdoor Plants
     {"name": "Bougainvillea", "cat": "outdoor-plants", "price": 349, "desc": "Vibrant paper-like flowers in magenta that bloom year round.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["flowering", "drought-tolerant", "climber", "balcony"], "care_tips": ["Needs 6+ hours of sun", "Prune after each flowering cycle"], "badge": "Bestseller"},
-    {"name": "Hibiscus Red", "cat": "outdoor-plants", "price": 299, "desc": "Classic tropical shrub with large scarlet blooms.", "sunlight": "Full Sun", "watering": "Daily in summer", "tags": ["flowering", "tropical", "outdoor", "balcony"], "care_tips": ["Feed monthly during growing season", "Protect from frost"]},
-    {"name": "Mogra Jasmine", "cat": "outdoor-plants", "price": 399, "desc": "Intensely fragrant white flowers, a beloved Indian garden classic.", "sunlight": "Full Sun to Part Shade", "watering": "Every 2 days", "tags": ["fragrant", "flowering", "traditional"], "care_tips": ["Prune in early spring", "Apply organic compost monthly"]},
-    {"name": "Curry Leaf Plant", "cat": "outdoor-plants", "price": 249, "desc": "Essential kitchen garden herb with aromatic leaves.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["herb", "edible", "kitchen-garden", "balcony"], "care_tips": ["Full sun is essential", "Pick leaves regularly to encourage growth"]},
-    {"name": "Tulsi Holy Basil", "cat": "outdoor-plants", "price": 149, "desc": "Sacred Indian herb with medicinal and culinary uses.", "sunlight": "Full Sun", "watering": "Daily", "tags": ["herb", "medicinal", "sacred", "vastu-friendly"], "care_tips": ["Pinch flower buds for bushy growth", "Keep well-watered in summer"]},
-    # Flowering Plants
     {"name": "Anthurium Red", "cat": "flowering-plants", "price": 599, "desc": "Glossy heart-shaped red spathes that bloom for weeks.", "sunlight": "Bright Indirect", "watering": "Twice a week", "tags": ["flowering", "indoor", "gift", "gifting"], "care_tips": ["High humidity preferred", "Avoid direct sun"], "badge": "Gift Pick"},
-    {"name": "Orchid Phalaenopsis White", "cat": "flowering-plants", "price": 799, "desc": "Elegant butterfly orchid with long-lasting cascading blooms.", "sunlight": "Bright Indirect", "watering": "Once a week (ice cube method)", "tags": ["flowering", "elegant", "gift", "gifting", "exotic"], "care_tips": ["Water with 3 ice cubes weekly", "Repot every 2 years"]},
-    {"name": "Chrysanthemum Yellow", "cat": "flowering-plants", "price": 199, "desc": "Cheerful pom-pom blooms in bright sunshine yellow.", "sunlight": "Full Sun to Part Shade", "watering": "Every 2 days", "tags": ["flowering", "outdoor", "festive"], "care_tips": ["Deadhead spent flowers", "Feed fortnightly"]},
-    {"name": "Rose Plant Red", "cat": "flowering-plants", "price": 349, "desc": "Classic hybrid tea rose bush with fragrant deep-red blooms.", "sunlight": "Full Sun", "watering": "Every 2 days", "tags": ["flowering", "fragrant", "classic"], "care_tips": ["Prune in winter", "Spray neem oil for pests"]},
-    {"name": "Kalanchoe Pink", "cat": "flowering-plants", "price": 249, "desc": "Long-blooming succulent with clusters of tiny pink flowers.", "sunlight": "Bright Direct", "watering": "Every 10 days", "tags": ["succulent", "flowering", "desktop"], "care_tips": ["Drought tolerant", "Short daylight triggers reblooming"]},
-    # Cacti & Succulents
     {"name": "Echeveria Elegans", "cat": "cacti-succulents", "price": 199, "desc": "Blue-green rosette succulent, perfect for terrariums.", "sunlight": "Bright Direct", "watering": "Every 2 weeks", "tags": ["succulent", "rosette", "terrarium"], "care_tips": ["Use well-draining soil", "Avoid water on leaves"]},
-    {"name": "Haworthia Zebra", "cat": "cacti-succulents", "price": 249, "desc": "Compact striped succulent that thrives on a bright windowsill.", "sunlight": "Bright Indirect", "watering": "Every 2-3 weeks", "tags": ["succulent", "compact", "desktop"], "care_tips": ["Perfect for small pots", "Tolerates some shade"]},
-    {"name": "Barrel Cactus", "cat": "cacti-succulents", "price": 349, "desc": "Spherical ribbed cactus with golden spines.", "sunlight": "Full Sun", "watering": "Monthly", "tags": ["cactus", "drought-tolerant", "statement"], "care_tips": ["Minimal watering in winter", "Needs excellent drainage"]},
-    {"name": "Aloe Vera", "cat": "cacti-succulents", "price": 199, "desc": "Medicinal gel-filled leaves useful for skin care.", "sunlight": "Bright Direct to Indirect", "watering": "Every 2 weeks", "tags": ["medicinal", "succulent", "beginner", "low-maintenance", "beginner-friendly"], "care_tips": ["Harvest outer leaves for gel", "Let soil dry between waterings"], "badge": "Essential"},
-    {"name": "String of Pearls", "cat": "cacti-succulents", "price": 299, "desc": "Delicate trailing succulent with bead-like leaves.", "sunlight": "Bright Indirect", "watering": "Every 2 weeks", "tags": ["trailing", "hanging", "unique", "exotic"], "care_tips": ["Bottom watering recommended", "Avoid overwatering"]},
-    # Vegetable Seeds
     {"name": "Tomato Seeds (Cherry)", "cat": "vegetable-seeds", "price": 99, "desc": "Pack of 50 seeds – sweet cherry tomatoes, harvest in 60 days.", "sunlight": "Full Sun", "watering": "Daily", "tags": ["seeds", "edible", "kitchen-garden"], "care_tips": ["Start indoors 6 weeks before last frost", "Stake when 30 cm tall"]},
-    {"name": "Spinach Seeds", "cat": "vegetable-seeds", "price": 79, "desc": "Easy-to-grow leafy green, perfect for winter sowing.", "sunlight": "Part Shade to Full Sun", "watering": "Every 2 days", "tags": ["seeds", "edible", "winter"], "care_tips": ["Sow directly in garden", "Harvest outer leaves first"]},
-    {"name": "Chilli Seeds (Bhut Jolokia)", "cat": "vegetable-seeds", "price": 149, "desc": "Ghost pepper seeds – one of the hottest chillies in the world.", "sunlight": "Full Sun", "watering": "Every 2 days", "tags": ["seeds", "edible", "hot"], "care_tips": ["Germination takes 2-4 weeks", "Use gloves when harvesting"]},
-    {"name": "Brinjal Seeds", "cat": "vegetable-seeds", "price": 89, "desc": "Purple long-variety aubergine, prolific producer in Indian summers.", "sunlight": "Full Sun", "watering": "Daily in summer", "tags": ["seeds", "edible", "summer"], "care_tips": ["Transplant seedlings at 4 leaf stage", "Rich compost helps"]},
-    {"name": "Coriander Seeds", "cat": "vegetable-seeds", "price": 69, "desc": "Fast-growing herb essential for Indian cooking.", "sunlight": "Part Shade", "watering": "Daily", "tags": ["seeds", "herb", "kitchen-garden"], "care_tips": ["Sow every 3 weeks for continuous harvest", "Bolts in heat"]},
-    # Flower Seeds
     {"name": "Sunflower Seeds", "cat": "flower-seeds", "price": 99, "desc": "Giant sunflower pack – grows up to 6 feet tall.", "sunlight": "Full Sun", "watering": "Every 2 days", "tags": ["seeds", "flowering", "tall"], "care_tips": ["Direct sow after last frost", "Support stems in wind"]},
-    {"name": "Marigold Seeds", "cat": "flower-seeds", "price": 79, "desc": "Bright orange and yellow blooms, natural pest deterrent.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["seeds", "flowering", "pest-deterrent"], "care_tips": ["Deadhead for continuous blooming", "Attracts beneficial insects"]},
-    {"name": "Zinnia Seeds Mix", "cat": "flower-seeds", "price": 99, "desc": "Vibrant mixed-colour zinnias – butterflies love them.", "sunlight": "Full Sun", "watering": "Every 2 days", "tags": ["seeds", "flowering", "butterfly"], "care_tips": ["Space 15 cm apart", "Avoid overhead watering"]},
-    {"name": "Petunia Seeds", "cat": "flower-seeds", "price": 119, "desc": "Cascading petunias in purple, ideal for hanging baskets.", "sunlight": "Full Sun to Part Shade", "watering": "Daily", "tags": ["seeds", "flowering", "hanging"], "care_tips": ["Pinch tips for bushier growth", "Feed weekly with liquid fertiliser"]},
-    {"name": "Cosmos Seeds", "cat": "flower-seeds", "price": 89, "desc": "Daisy-like blooms in pink and white, blooms all season.", "sunlight": "Full Sun", "watering": "Every 3 days", "tags": ["seeds", "flowering", "cottage-garden"], "care_tips": ["Poor soil produces more flowers", "Self-seeds readily"]},
-    # Pots & Planters
-    {"name": "Ceramic Planter White (6 inch)", "cat": "pots-planters", "price": 499, "desc": "Minimalist glossy white ceramic pot with drainage hole.", "tags": ["ceramic", "white", "modern"], "care_tips": ["Use a saucer to protect surfaces"]},
-    {"name": "Terracotta Pot Classic (8 inch)", "cat": "pots-planters", "price": 199, "desc": "Traditional breathable clay pot, ideal for most plants.", "tags": ["terracotta", "classic", "breathable"], "care_tips": ["Soak in water before first use"]},
-    {"name": "Self-Watering Planter (10 inch)", "cat": "pots-planters", "price": 899, "desc": "Built-in water reservoir keeps plants hydrated for days.", "tags": ["self-watering", "travel-friendly", "modern"], "care_tips": ["Fill reservoir every 5-7 days"], "badge": "Smart"},
-    {"name": "Hanging Macramé Planter", "cat": "pots-planters", "price": 349, "desc": "Hand-knotted cotton macramé hanger – fits 6 inch pots.", "tags": ["macrame", "hanging", "boho"], "care_tips": ["Hang from sturdy hook rated for weight"]},
-    {"name": "Metal Planter Gold (Set of 3)", "cat": "pots-planters", "price": 1299, "desc": "Set of 3 gold-finished geometric metal planters.", "tags": ["metal", "gold", "geometric", "set"], "care_tips": ["Use inner plastic liner to prevent rust"]},
-    # Plant Care
-    {"name": "Organic Vermicompost (5 kg)", "cat": "plant-care", "price": 299, "desc": "Nutrient-rich worm-cast compost for all plants.", "tags": ["organic", "compost", "fertiliser"], "care_tips": ["Mix into topsoil every 2 months"]},
-    {"name": "Neem Oil Spray (500 ml)", "cat": "plant-care", "price": 249, "desc": "Cold-pressed neem oil – natural pesticide and fungicide.", "tags": ["organic", "pest-control", "neem", "spray"], "care_tips": ["Dilute before spraying", "Apply in evening to avoid leaf burn"], "badge": "Essential"},
-    {"name": "Cocopeat Block (5 kg)", "cat": "plant-care", "price": 199, "desc": "Expands to 75 litres – improves soil aeration and water retention.", "tags": ["soil-amendment", "cocopeat", "organic"], "care_tips": ["Soak in water to expand", "Mix with perlite for best results"]},
-    {"name": "Perlite (1 litre)", "cat": "plant-care", "price": 149, "desc": "Lightweight volcanic glass for improving drainage.", "tags": ["soil-amendment", "drainage", "perlite"], "care_tips": ["Mix 20-30% with potting soil"]},
-    {"name": "Liquid Seaweed Fertiliser (500 ml)", "cat": "plant-care", "price": 349, "desc": "Concentrated organic feed that boosts root growth.", "tags": ["organic", "fertiliser", "liquid"], "care_tips": ["Dilute 5 ml per litre of water", "Apply fortnightly"]},
-    {"name": "Pruning Shears", "cat": "plant-care", "price": 499, "desc": "Sharp bypass pruners with ergonomic grip for clean cuts.", "tags": ["tools", "pruning", "garden"], "care_tips": ["Clean blades after each use", "Oil the pivot regularly"]},
-    {"name": "Plant Mister Brass (300 ml)", "cat": "plant-care", "price": 599, "desc": "Vintage brass mister for tropical plant humidity.", "tags": ["tools", "misting", "brass"], "care_tips": ["Mist plants in the morning"]},
-    {"name": "Garden Gloves (Pair)", "cat": "plant-care", "price": 199, "desc": "Thorn-proof nitrile-coated gloves for safe gardening.", "tags": ["tools", "gloves", "safety"], "care_tips": ["Wash after use and air dry"]},
-    {"name": "Seedling Tray (72 cells)", "cat": "plant-care", "price": 149, "desc": "Reusable plastic tray for starting seeds indoors.", "tags": ["tools", "propagation", "seeds"], "care_tips": ["Use dome lid for humidity until germination"]},
-    {"name": "Moss Stick (2 ft)", "cat": "plant-care", "price": 129, "desc": "Coir moss pole for supporting climbing plants like Money Plant.", "tags": ["support", "moss-stick", "climbing"], "care_tips": ["Keep moss moist for aerial roots to grip"]},
-    # ── XL Plants ──
     {"name": "Fiddle Leaf Fig XL", "cat": "xl-plants", "price": 2499, "desc": "Statement floor plant with large violin-shaped leaves, 4 ft tall.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["xl", "statement", "indoor", "living-room"], "care_tips": ["Wipe leaves monthly", "Rotate quarterly for even growth"], "badge": "XL"},
-    {"name": "Bird of Paradise XL", "cat": "xl-plants", "price": 1999, "desc": "Tropical beauty with banana-like leaves, 3.5 ft tall.", "sunlight": "Bright Direct to Indirect", "watering": "Twice a week", "tags": ["xl", "tropical", "statement", "exotic"], "care_tips": ["Needs high humidity", "Mist regularly"]},
-    # ── Low Maintenance Plants ──
     {"name": "Cast Iron Plant", "cat": "low-maintenance-plants", "price": 599, "desc": "Nearly indestructible plant that thrives in dark corners.", "sunlight": "Low to Bright Indirect", "watering": "Every 2 weeks", "tags": ["low-maintenance", "shade-tolerant", "beginner-friendly"], "care_tips": ["Tolerates neglect well", "Avoid direct sun"]},
-    {"name": "Dracaena Compacta", "cat": "low-maintenance-plants", "price": 499, "desc": "Compact rosette foliage that grows slowly and needs little care.", "sunlight": "Low to Medium Indirect", "watering": "Every 10 days", "tags": ["low-maintenance", "compact", "indoor", "beginner-friendly"], "care_tips": ["Sensitive to fluoride in tap water", "Let soil dry between waterings"]},
-    # ── Air Purifying Plants ──
     {"name": "Boston Fern", "cat": "air-purifying-plants", "price": 349, "desc": "Lush hanging fern that removes formaldehyde and adds humidity.", "sunlight": "Bright Indirect", "watering": "Keep moist", "tags": ["air-purifying", "hanging", "tropical"], "care_tips": ["Mist daily in dry weather", "Keep away from heating vents"]},
-    {"name": "English Ivy", "cat": "air-purifying-plants", "price": 249, "desc": "Classic trailing vine that filters airborne mold particles.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["air-purifying", "trailing", "indoor"], "care_tips": ["Trim regularly to control growth", "Spider mites love ivy – mist often"]},
-    # ── Hanging Plants ──
     {"name": "String of Hearts", "cat": "hanging-plants", "price": 399, "desc": "Delicate heart-shaped leaves on trailing silvery vines.", "sunlight": "Bright Indirect", "watering": "Every 10 days", "tags": ["trailing", "hanging", "romantic"], "care_tips": ["Let soil dry between waterings", "Propagate easily from cuttings"]},
-    {"name": "Lipstick Plant", "cat": "hanging-plants", "price": 449, "desc": "Cascading stems with tubular red flowers resembling lipstick.", "sunlight": "Bright Indirect", "watering": "Once a week", "tags": ["hanging", "flowering", "tropical"], "care_tips": ["High humidity encourages blooming", "Prune after flowering"]},
-    # ── Pet-Friendly Plants ──
     {"name": "Calathea Orbifolia", "cat": "pet-friendly-plants", "price": 599, "desc": "Large round striped leaves, completely safe for cats and dogs.", "sunlight": "Medium Indirect", "watering": "Twice a week", "tags": ["pet-safe", "tropical", "indoor"], "care_tips": ["Use filtered water", "Loves humidity"]},
-    {"name": "Parlor Palm", "cat": "pet-friendly-plants", "price": 449, "desc": "Compact palm safe for pets, thrives in low light.", "sunlight": "Low to Medium Indirect", "watering": "Once a week", "tags": ["pet-safe", "low-maintenance", "indoor", "beginner-friendly"], "care_tips": ["Avoid direct sun", "Wipe leaves to remove dust"]},
-    # ── Fruit Plants ──
     {"name": "Lemon Plant", "cat": "fruit-plants", "price": 599, "desc": "Dwarf lemon tree that fruits on balconies and terraces.", "sunlight": "Full Sun", "watering": "Every 2 days", "tags": ["fruit", "edible", "outdoor"], "care_tips": ["Needs 6+ hours of sun", "Feed with citrus fertiliser monthly"]},
-    {"name": "Pomegranate Plant", "cat": "fruit-plants", "price": 499, "desc": "Compact pomegranate variety perfect for container growing.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["fruit", "edible", "outdoor"], "care_tips": ["Prune to shape in winter", "Well-drained soil essential"]},
-    # ── Microgreen Seeds ──
     {"name": "Microgreen Seeds – Mustard", "cat": "microgreen-seeds", "price": 99, "desc": "Spicy microgreens ready to harvest in just 7 days.", "sunlight": "Indirect Light", "watering": "Mist twice daily", "tags": ["seeds", "microgreen", "edible"], "care_tips": ["Use shallow tray with soilless medium", "Harvest at 2 inch height"]},
-    {"name": "Microgreen Seeds – Sunflower", "cat": "microgreen-seeds", "price": 119, "desc": "Nutty, crunchy microgreens packed with nutrients.", "sunlight": "Indirect Light", "watering": "Mist twice daily", "tags": ["seeds", "microgreen", "edible"], "care_tips": ["Soak seeds overnight before sowing", "Blackout for first 3 days"]},
-    # ── Herb Seeds ──
     {"name": "Basil Seeds (Sweet)", "cat": "herb-seeds", "price": 79, "desc": "Aromatic Italian basil for pesto, salads and cooking.", "sunlight": "Full Sun", "watering": "Daily", "tags": ["seeds", "herb", "edible", "kitchen-garden"], "care_tips": ["Pinch flower buds to extend harvest", "Sow indoors 6 weeks before summer"]},
-    {"name": "Mint Seeds", "cat": "herb-seeds", "price": 69, "desc": "Refreshing spearmint – grows vigorously in pots.", "sunlight": "Part Shade to Full Sun", "watering": "Keep moist", "tags": ["seeds", "herb", "edible", "kitchen-garden"], "care_tips": ["Grows best in containers to control spreading", "Harvest regularly"]},
-    # ── Flower Bulbs ──
     {"name": "Tuberose Bulbs (Pack of 5)", "cat": "flower-bulbs", "price": 199, "desc": "Fragrant white flowers, a summer garden favourite.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["seeds", "bulb", "fragrant", "flowering"], "care_tips": ["Plant 4 inches deep", "Lift bulbs in winter in cold regions"]},
-    {"name": "Gladiolus Bulbs Mix (Pack of 10)", "cat": "flower-bulbs", "price": 299, "desc": "Tall colourful spikes in mixed colours – ideal for cutting.", "sunlight": "Full Sun", "watering": "Every 2-3 days", "tags": ["seeds", "bulb", "flowering", "cutting"], "care_tips": ["Stagger planting for continuous blooms", "Support tall stems"]},
-    # ── Seeds Kits ──
     {"name": "Kitchen Garden Starter Kit", "cat": "seeds-kits", "price": 499, "desc": "Everything to grow tomatoes, chillies, and coriander at home.", "tags": ["seeds", "kit", "kitchen-garden", "beginner-friendly"], "care_tips": ["Follow included instructions", "Place in sunny spot"]},
-    {"name": "Microgreen Growing Kit", "cat": "seeds-kits", "price": 399, "desc": "Tray, medium, and 4 seed varieties for fresh microgreens.", "tags": ["seeds", "kit", "microgreen", "beginner-friendly"], "care_tips": ["Harvest in 7-10 days", "Reuse tray for multiple batches"]},
-    # ── Plastic Pots ──
     {"name": "Plastic Nursery Pot Set (6 inch, 5 pcs)", "cat": "plastic-pots", "price": 199, "desc": "Durable black nursery pots with drainage holes.", "tags": ["plastic", "nursery", "drainage"], "care_tips": ["Great for repotting and starting plants"]},
-    {"name": "Colourful Plastic Planter (8 inch)", "cat": "plastic-pots", "price": 149, "desc": "Lightweight UV-resistant planter in assorted colours.", "tags": ["plastic", "colourful", "lightweight"], "care_tips": ["Ideal for balcony use"]},
-    # ── Ceramic Pots ──
     {"name": "Ceramic Planter Matte Black (6 inch)", "cat": "ceramic-pots", "price": 549, "desc": "Sleek matte black ceramic pot with saucer.", "tags": ["ceramic", "black", "modern"], "care_tips": ["Has drainage hole – use saucer indoors"]},
-    {"name": "Hand-Painted Ceramic Pot Blue (5 inch)", "cat": "ceramic-pots", "price": 699, "desc": "Artisan hand-painted pot with traditional blue pattern.", "tags": ["ceramic", "handmade", "decorative"], "care_tips": ["Handle with care – each piece is unique"]},
-    # ── Metal Planters ──
     {"name": "Iron Bucket Planter Rustic", "cat": "metal-planters", "price": 399, "desc": "Vintage-style galvanised iron bucket planter.", "tags": ["metal", "rustic", "vintage"], "care_tips": ["Drill drainage holes or use as cachepot"]},
-    {"name": "Copper Finish Planter (Set of 2)", "cat": "metal-planters", "price": 899, "desc": "Rose-gold copper finish planters for tabletop display.", "tags": ["metal", "copper", "set"], "care_tips": ["Use plastic liner to prevent oxidation"]},
-    # ── Wooden Planters ──
     {"name": "Teak Wood Planter Box (12 inch)", "cat": "wooden-planters", "price": 1299, "desc": "Solid teak planter box, weather-resistant for outdoor use.", "tags": ["wooden", "teak", "outdoor"], "care_tips": ["Oil annually to maintain finish"]},
-    {"name": "Pine Crate Planter (Small)", "cat": "wooden-planters", "price": 499, "desc": "Rustic pine crate planter with plastic liner.", "tags": ["wooden", "rustic", "boho"], "care_tips": ["Keep liner intact to prevent rot"]},
-    # ── Hanging Planters ──
     {"name": "Rattan Hanging Basket (8 inch)", "cat": "hanging-planters", "price": 349, "desc": "Natural rattan basket with coconut coir liner.", "tags": ["hanging", "rattan", "natural"], "care_tips": ["Water slowly to prevent dripping"]},
-    {"name": "Ceramic Hanging Planter White", "cat": "hanging-planters", "price": 599, "desc": "Minimalist white ceramic hanging pot with leather strap.", "tags": ["hanging", "ceramic", "modern"], "care_tips": ["Ensure ceiling hook rated for weight when watered"]},
-    # ── Plant Stands ──
     {"name": "Bamboo Plant Stand (3-Tier)", "cat": "plant-stands", "price": 1499, "desc": "Three-tier bamboo shelf for displaying multiple plants.", "tags": ["stand", "bamboo", "multi-tier"], "care_tips": ["Wipe with damp cloth", "Place on even surface"]},
-    {"name": "Metal Plant Stand Single (Mid-Century)", "cat": "plant-stands", "price": 699, "desc": "Gold metal mid-century modern plant stand for 8 inch pots.", "tags": ["stand", "metal", "modern"], "care_tips": ["Use felt pads under legs to protect floors"]},
-    # ── Potting Mix & Fertilizers ──
     {"name": "Premium Potting Mix (10 litres)", "cat": "potting-mix-fertilizers", "price": 349, "desc": "Ready-to-use mix with cocopeat, perlite, and vermicompost.", "tags": ["potting-mix", "organic", "all-purpose"], "care_tips": ["Suitable for all indoor and outdoor plants"]},
-    {"name": "Bone Meal Fertiliser (1 kg)", "cat": "potting-mix-fertilizers", "price": 199, "desc": "High phosphorus organic feed for flowering and fruiting plants.", "tags": ["organic", "fertiliser", "flowering"], "care_tips": ["Mix into soil every 6-8 weeks"]},
-    # ── Garden Tools ──
     {"name": "3-Piece Garden Tool Set", "cat": "garden-tools", "price": 399, "desc": "Trowel, cultivator, and transplanter with wooden handles.", "tags": ["tools", "garden", "set"], "care_tips": ["Clean after each use to prevent rust"]},
-    {"name": "Garden Knee Pad", "cat": "garden-tools", "price": 249, "desc": "Thick foam knee pad for comfortable gardening sessions.", "tags": ["tools", "comfort", "garden"], "care_tips": ["Wash with soap and water"]},
-    # ── Watering Tools ──
     {"name": "Long Spout Watering Can (1.5L)", "cat": "watering-tools", "price": 449, "desc": "Precision long-spout can for indoor plants and seedlings.", "tags": ["tools", "watering", "indoor"], "care_tips": ["Copper finish – wipe dry to prevent water spots"]},
-    {"name": "Garden Hose Nozzle (7 Pattern)", "cat": "watering-tools", "price": 349, "desc": "Adjustable spray nozzle with 7 patterns for different tasks.", "tags": ["tools", "watering", "outdoor"], "care_tips": ["Drain water before storing to prevent freezing"]},
-    # ── Pest Control ──
     {"name": "Organic Insecticidal Soap (500 ml)", "cat": "pest-control", "price": 249, "desc": "Kills aphids, mealybugs, and whiteflies on contact.", "tags": ["organic", "pest-control", "spray", "garden-services"], "care_tips": ["Spray undersides of leaves", "Apply in evening"]},
-    {"name": "Yellow Sticky Traps (Pack of 20)", "cat": "pest-control", "price": 149, "desc": "Non-toxic glue traps for fungus gnats and whiteflies.", "tags": ["pest-control", "trap", "non-toxic"], "care_tips": ["Replace every 2-3 weeks", "Place near plant base"]},
-    # ── Gifting tagged products ──
-    {"name": "Gift Box – Succulent Trio", "cat": "cacti-succulents", "price": 799, "desc": "Three mini succulents in a beautiful gift box with card.", "tags": ["gifting", "succulent", "gift", "combo"], "care_tips": ["Water sparingly – once every 2 weeks"], "badge": "Gift"},
-    {"name": "Gift Set – Money Plant in Ceramic", "cat": "indoor-plants", "price": 599, "desc": "Money Plant in a premium ceramic pot, gift-wrapped.", "tags": ["gifting", "gift", "indoor", "beginner-friendly"], "care_tips": ["Water once a week", "Thrives in any light"], "badge": "Gift"},
-    # ── Offers / combo tagged products ──
-    {"name": "Combo – 4 Air Purifying Plants", "cat": "indoor-plants", "price": 699, "op": 1299, "desc": "Snake Plant, Peace Lily, Money Plant, and Spider Plant bundle.", "tags": ["combo", "offers", "air-purifying", "beginner-friendly", "bundle"], "care_tips": ["Each plant has different watering needs"], "badge": "Value Pack"},
-    {"name": "Combo – Herb Garden Kit", "cat": "seeds", "price": 249, "op": 449, "desc": "Basil, Mint, and Coriander seeds with potting mix and tray.", "tags": ["combo", "offers", "herb", "kitchen-garden", "bundle"], "care_tips": ["Place in sunny spot", "Harvest regularly"]},
-    {"name": "Seed Starter Mega Pack", "cat": "seeds", "price": 399, "desc": "Assorted 10-variety seed pack including vegetables, herbs, and flowers.", "tags": ["seeds", "kit", "beginner-friendly", "variety"], "care_tips": ["Refer to individual seed packets for sowing depth", "Start indoors for best results"]},
-    # ── Corporate Gifts ──
-    {"name": "Corporate Gift – Lucky Bamboo in Glass", "cat": "indoor-plants", "price": 499, "desc": "Elegant lucky bamboo arrangement in a glass vase, perfect for office desks.", "sunlight": "Low to Bright Indirect", "watering": "Keep water level consistent", "tags": ["corporate-gifts", "gifting", "gift", "workspace", "lucky"], "care_tips": ["Change water every 2 weeks", "Avoid direct sunlight"], "badge": "Corporate"},
-    {"name": "Corporate Gift – Air Purifying Desk Set", "cat": "indoor-plants", "price": 899, "desc": "Set of 3 mini air-purifying plants in branded ceramic pots for offices.", "sunlight": "Low to Bright Indirect", "watering": "Once a week", "tags": ["corporate-gifts", "gifting", "gift", "workspace", "air-purifying", "combo"], "care_tips": ["Perfect for conference rooms and desks"], "badge": "Corporate"},
-    {"name": "Corporate Gift – Succulent Terrarium", "cat": "cacti-succulents", "price": 1299, "desc": "Handcrafted glass terrarium with 5 premium succulents, ideal for corporate events.", "tags": ["corporate-gifts", "gifting", "gift", "terrarium", "succulent"], "care_tips": ["Water sparingly once every 3 weeks"], "badge": "Corporate"},
-    # ── Garden Services tagged products ──
-    {"name": "Balcony Garden Setup Service", "cat": "plant-care", "price": 2999, "desc": "Complete balcony garden setup with 10 plants, pots, soil, and expert installation.", "tags": ["garden-services", "balcony", "outdoor", "combo"], "care_tips": ["Our team will guide you on maintenance after setup"]},
-    {"name": "Indoor Plant Styling Service", "cat": "plant-care", "price": 1999, "desc": "Professional plant stylist visits your space and creates a curated indoor garden.", "tags": ["garden-services", "indoor", "living-room", "workspace"], "care_tips": ["Includes plant selection and placement consultation"]},
 ]
 
 
@@ -609,37 +504,54 @@ def _original_price(price: float) -> float:
     return round(price * markup)
 
 
-async def seed() -> None:
+async def seed(catalog_only: bool = False) -> None:
     if not async_session_factory or not engine:
         print("DATABASE_URL not set – skipping seed.")
         return
     async with async_session_factory() as db:
         # Clear in dependency order (children first, then parents)
-        await db.execute(CartItem.__table__.delete())
-        await db.execute(Cart.__table__.delete())
-        await db.execute(OrderItem.__table__.delete())
-        await db.execute(Order.__table__.delete())
-        await db.execute(Address.__table__.delete())
-        await db.execute(ProductReview.__table__.delete())
-        await db.execute(Banner.__table__.delete())
-        await db.execute(Product.__table__.delete())
-        await db.execute(Category.__table__.delete())
-        await db.execute(BlogPost.__table__.delete())
-        await db.execute(User.__table__.delete())
-        await db.flush()
-        print("Cleared existing data.\n")
+        if catalog_only:
+            # Re-seed only the catalog. Keeps banners, blog posts, users,
+            # orders, addresses and carts. The rows that reference products
+            # (cart items, order items, reviews, story links) must be cleared
+            # because re-seeded products get new IDs.
+            await db.execute(DamageClaim.__table__.update().values(order_item_id=None))
+            await db.execute(OrderItem.__table__.delete())
+            await db.execute(CartItem.__table__.delete())
+            await db.execute(ProductReview.__table__.delete())
+            await db.execute(Story.__table__.update().values(linked_product_id=None))
+            await db.execute(Product.__table__.delete())
+            await db.execute(Category.__table__.delete())
+            await db.flush()
+            print("Cleared categories + products (and rows referencing products).\n")
+        else:
+            await db.execute(DamageClaim.__table__.delete())
+            await db.execute(CartItem.__table__.delete())
+            await db.execute(Cart.__table__.delete())
+            await db.execute(OrderItem.__table__.delete())
+            await db.execute(Order.__table__.delete())
+            await db.execute(Address.__table__.delete())
+            await db.execute(ProductReview.__table__.delete())
+            await db.execute(Banner.__table__.delete())
+            await db.execute(Story.__table__.delete())
+            await db.execute(Product.__table__.delete())
+            await db.execute(Category.__table__.delete())
+            await db.execute(BlogPost.__table__.delete())
+            await db.execute(User.__table__.delete())
+            await db.flush()
+            print("Cleared existing data.\n")
 
-        # Admin user
-        admin = User(
-            email="admin@example.com",
-            hashed_password=hash_password("adminadmin"),
-            full_name="Admin",
-            is_active=True,
-            is_admin=True,
-        )
-        db.add(admin)
-        await db.flush()
-        print(f"  Admin user: {admin.email} (id={admin.id})")
+            # Admin user
+            admin = User(
+                email="admin@example.com",
+                hashed_password=hash_password("adminadmin"),
+                full_name="Admin",
+                is_active=True,
+                is_admin=True,
+            )
+            db.add(admin)
+            await db.flush()
+            print(f"  Admin user: {admin.email} (id={admin.id})")
 
         slug_to_id: dict[str, int] = {}
 
@@ -653,7 +565,9 @@ async def seed() -> None:
                 name=cat_data["name"],
                 slug=cat_data["slug"],
                 parent_id=parent_id,
+                image_url=UNSPLASH.format(id=CATEGORY_IMAGES[cat_data["slug"]]),
                 is_active=True,
+                sort_order=cat_data.get("sort_order", 0),
             )
             db.add(cat)
             await db.flush()
@@ -695,103 +609,155 @@ async def seed() -> None:
             )
             db.add(product)
 
-        for bp in BLOG_POSTS:
-            slug = bp["title"].lower().strip()
-            slug = re.sub(r"[^\w\s-]", "", slug)
-            slug = re.sub(r"[\s_]+", "-", slug)
-            slug = re.sub(r"-+", "-", slug).strip("-")
+        if not catalog_only:
+            for bp in BLOG_POSTS:
+                slug = bp["title"].lower().strip()
+                slug = re.sub(r"[^\w\s-]", "", slug)
+                slug = re.sub(r"[\s_]+", "-", slug)
+                slug = re.sub(r"-+", "-", slug).strip("-")
 
-            post = BlogPost(
-                title=bp["title"],
-                slug=slug,
-                excerpt=bp["excerpt"],
-                content=bp["content"],
-                cover_image_url=bp["cover"],
-                category=bp["category"],
-                author_name=bp["author"],
-                is_published=True,
-                published_at=datetime.now(timezone.utc),
-            )
-            db.add(post)
+                post = BlogPost(
+                    title=bp["title"],
+                    slug=slug,
+                    excerpt=bp["excerpt"],
+                    content=bp["content"],
+                    cover_image_url=bp["cover"],
+                    category=bp["category"],
+                    author_name=bp["author"],
+                    is_published=True,
+                    published_at=datetime.now(timezone.utc),
+                )
+                db.add(post)
 
-        banners_seed = [
-            Banner(
-                title="Get your first plant set!",
-                subtitle="Handpicked plants delivered to your door",
-                cta_text="Shop Now",
-                cta_link="/products",
-                badge_text="4 Plants @ ₹699",
-                placement="hero",
-                position=0,
-                bg_color="#F5F0E8",
-                text_color="#1B4332",
-                image_url="https://images.unsplash.com/photo-1545241047-6083a3684587?w=1400&h=600&fit=crop&crop=center",
-            ),
-            Banner(
-                title="Less care. More green.",
-                subtitle="Low-maintenance plants for your home.",
-                cta_text="Shop Plants",
-                cta_link="/products?tags=low-maintenance",
-                placement="hero",
-                position=1,
-                bg_color="#E8F0E8",
-                text_color="#1B4332",
-                image_url="https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&h=600&fit=crop&crop=center",
-            ),
-            Banner(
-                title="New to plants?",
-                subtitle="Start with the easy ones.",
-                cta_text="See Beginner Plants",
-                cta_link="/products?tags=beginner-friendly",
-                placement="hero",
-                position=2,
-                bg_color="#1B4332",
-                text_color="#FFFFFF",
-                image_url="https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&h=600&fit=crop&crop=center",
-            ),
-            Banner(
-                title="Free Delivery Above ₹499 | Shop Now",
-                cta_link="/products",
-                placement="announcement",
-                position=0,
-                bg_color="#1B4332",
-                text_color="#FFFFFF",
-            ),
-            Banner(
-                title="Get 4 Plants @ just ₹699!",
-                cta_link="/products?tags=bundle",
-                placement="announcement",
-                position=1,
-                bg_color="#1B4332",
-                text_color="#FFFFFF",
-            ),
-            Banner(
-                title="Next-Day Delivery Available",
-                cta_link="/next-day-delivery",
-                placement="announcement",
-                position=2,
-                bg_color="#1B4332",
-                text_color="#FFFFFF",
-            ),
-            Banner(
-                title="Gardening ka full range. Sirf idhar milega!",
-                cta_link="/products",
-                placement="page",
-                position=0,
-                bg_color="#F4EFE5",
-                text_color="#1B4332",
-                image_url="/page-banner-default.jpeg",
-            ),
-        ]
-        db.add_all(banners_seed)
+            banners_seed = [
+                Banner(
+                    title="Get your first plant set!",
+                    subtitle="Handpicked plants delivered to your door",
+                    cta_text="Shop Now",
+                    cta_link="/products",
+                    badge_text="4 Plants @ ₹699",
+                    placement="hero",
+                    position=0,
+                    bg_color="#F5F0E8",
+                    text_color="#1B4332",
+                    image_url="https://images.unsplash.com/photo-1545241047-6083a3684587?w=1400&h=600&fit=crop&crop=center",
+                ),
+                Banner(
+                    title="Less care. More green.",
+                    subtitle="Low-maintenance plants for your home.",
+                    cta_text="Shop Plants",
+                    cta_link="/products?tags=low-maintenance",
+                    placement="hero",
+                    position=1,
+                    bg_color="#E8F0E8",
+                    text_color="#1B4332",
+                    image_url="https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&h=600&fit=crop&crop=center",
+                ),
+                Banner(
+                    title="New to plants?",
+                    subtitle="Start with the easy ones.",
+                    cta_text="See Beginner Plants",
+                    cta_link="/products?tags=beginner-friendly",
+                    placement="hero",
+                    position=2,
+                    bg_color="#1B4332",
+                    text_color="#FFFFFF",
+                    image_url="https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&h=600&fit=crop&crop=center",
+                ),
+                Banner(
+                    title="Free Delivery Above ₹499 | Shop Now",
+                    cta_link="/products",
+                    placement="announcement",
+                    position=0,
+                    bg_color="#1B4332",
+                    text_color="#FFFFFF",
+                ),
+                Banner(
+                    title="Get 4 Plants @ just ₹699!",
+                    cta_link="/products?tags=bundle",
+                    placement="announcement",
+                    position=1,
+                    bg_color="#1B4332",
+                    text_color="#FFFFFF",
+                ),
+                Banner(
+                    title="Next-Day Delivery Available",
+                    cta_link="/next-day-delivery",
+                    placement="announcement",
+                    position=2,
+                    bg_color="#1B4332",
+                    text_color="#FFFFFF",
+                ),
+                Banner(
+                    title="Gardening ka full range. Sirf idhar milega!",
+                    cta_link="/products",
+                    placement="page",
+                    position=0,
+                    bg_color="#F4EFE5",
+                    text_color="#1B4332",
+                    image_url="/page-banner-default.jpeg",
+                ),
+            ]
+            db.add_all(banners_seed)
+
+            # Quick-access square tiles on the home page (placement "strip").
+            # Category tiles reuse the seeded category thumbnails + links.
+            strip_categories = [
+                ("xl-plants", "XL Plants"),
+                ("plant-stands", "Plant Stands"),
+                ("plant-care", "Plant Care"),
+                ("ceramic-pots", "Ceramic Pots"),
+                ("watering-tools", "Watering Tools"),
+                ("seeds", "Seeds"),
+                ("air-purifying-plants", "Air Purifying Plants"),
+            ]
+            strip_banners = [
+                Banner(
+                    title="Next-Day\nDelivery",
+                    cta_link="/products",
+                    placement="strip",
+                    position=0,
+                    bg_color="#1B4332",
+                    text_color="#A3E635",
+                ),
+                *(
+                    Banner(
+                        title=label,
+                        cta_link=f"/products?category={slug}",
+                        placement="strip",
+                        position=pos,
+                        bg_color="#F5F0E8",
+                        text_color="#16A34A",
+                        image_url=UNSPLASH.format(id=CATEGORY_IMAGES[slug]),
+                    )
+                    for pos, (slug, label) in enumerate(strip_categories, start=1)
+                ),
+            ]
+            db.add_all(strip_banners)
 
         await db.commit()
-        print(
-            f"\nSeeded 1 admin, {len(CATEGORIES)} categories, "
-            f"{len(PRODUCTS)} products, {len(BLOG_POSTS)} blog posts, "
-            f"and {len(banners_seed)} banners."
-        )
+        if catalog_only:
+            print(
+                f"\nSeeded {len(CATEGORIES)} categories and "
+                f"{len(PRODUCTS)} products (everything else untouched)."
+            )
+        else:
+            print(
+                f"\nSeeded 1 admin, {len(CATEGORIES)} categories, "
+                f"{len(PRODUCTS)} products, {len(BLOG_POSTS)} blog posts, "
+                f"and {len(banners_seed) + len(strip_banners)} banners."
+            )
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Seed the Plantoga database.")
+    parser.add_argument(
+        "--only-catalog",
+        action="store_true",
+        help="Re-seed only categories + products; leave banners, blog posts, "
+        "users, carts, orders and addresses untouched.",
+    )
+    args = parser.parse_args()
+    asyncio.run(seed(catalog_only=args.only_catalog))

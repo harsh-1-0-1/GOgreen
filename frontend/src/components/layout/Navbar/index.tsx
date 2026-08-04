@@ -24,25 +24,19 @@ import { useCartStore } from '@/store/cartStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useBanners } from '@/hooks/useBanners';
+import { useCategories } from '@/hooks/useCategories';
 import type { ProductListResponse } from '@/types';
 
-import { NAV_ITEMS, WHATSAPP_NUMBER } from './navData';
+import {
+  STATIC_LINKS,
+  WHATSAPP_NUMBER,
+  categoryLink,
+  categoryTreeToNavItems,
+  resolveSubcategories,
+} from './navData';
 import type { NavItemDef } from './navData';
 
 import { LOGO_PATH } from '@/lib/branding';
-
-const FALLBACK_MOBILE_MENU_ITEMS = [
-  { label: 'Plants', href: '/products?category=plants', img: 'https://images.unsplash.com/photo-1545241047-6083a3684587?w=80&h=80&fit=crop&q=80' },
-  { label: 'Seeds', href: '/products?category=seeds', img: 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?w=80&h=80&fit=crop&q=80' },
-  { label: 'Pots & Planters', href: '/products?category=pots-planters', img: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=80&h=80&fit=crop&q=80' },
-  { label: 'Plant Care', href: '/products?category=plant-care', img: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=80&h=80&fit=crop&q=80' },
-  { label: 'Gifting', href: '/products?tags=gifting', img: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=80&h=80&fit=crop&q=80' },
-  { label: 'Corporate / Bulk Gifting', href: '/corporate-gifting', img: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=80&h=80&fit=crop&q=80' },
-  { label: 'Vastu Plants', href: '/products?tags=vastu-friendly', img: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=80&h=80&fit=crop&q=80' },
-  { label: 'Air Purifying Plants', href: '/products?category=air-purifying-plants', img: 'https://images.unsplash.com/photo-1596547609652-9cf5d8d76921?w=80&h=80&fit=crop&q=80' },
-  { label: 'Offers', href: '/products?tags=offers', img: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=80&h=80&fit=crop&q=80' },
-  { label: 'Blog', href: '/blog', img: 'https://images.unsplash.com/photo-1506880018603-83d5b814b5a6?w=80&h=80&fit=crop&q=80' },
-];
 
 export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -76,16 +70,21 @@ export default function Navbar() {
     if (!isProductPage) setSearchOpen(false);
   }
   const { data: mobilePromoBanners = [] } = useBanners('mobile_promo');
-  const { data: menuBanners = [] } = useBanners('menu_banner');
   const mobilePromoBanner = mobilePromoBanners[0];
-  const mobileMenuItems =
-    menuBanners.length > 0
-      ? menuBanners.map((banner) => ({
-          label: banner.title,
-          href: banner.cta_link || '/products',
-          img: banner.image_url || '',
-        }))
-      : FALLBACK_MOBILE_MENU_ITEMS;
+  const { data: categories = [] } = useCategories();
+  const navItems = categoryTreeToNavItems(categories);
+  const mobileMenuItems = [
+    ...categories.map((root) => ({
+      label: root.name,
+      href: categoryLink(root),
+      img: root.image_url || '',
+    })),
+    ...STATIC_LINKS.map((link) => ({
+      label: link.label,
+      href: link.href,
+      img: link.image || '',
+    })),
+  ];
 
   useBodyScrollLock(drawerOpen);
 
@@ -186,51 +185,9 @@ export default function Navbar() {
     setActiveSubmenu(null);
   }
 
-  // Dynamic submenu resolver
+  // Dynamic submenu resolver (DB-driven category tree)
   function getSubcategories(label: string) {
-    const cleanLabel = label.toLowerCase().trim();
-    
-    // Find matching nav item in desktop NAV_ITEMS
-    const navItem = NAV_ITEMS.find(
-      (item) => {
-        const itemLabel = item.label.toLowerCase().trim();
-        return itemLabel === cleanLabel || 
-               (cleanLabel === 'plants' && itemLabel === 'plants') ||
-               (cleanLabel === 'seeds' && itemLabel === 'seeds') ||
-               (cleanLabel === 'pots & planters' && itemLabel === 'pots & planters') ||
-               (cleanLabel === 'plant care' && itemLabel === 'plant care');
-      }
-    );
-
-    if (navItem && navItem.groups) {
-      const flatLinks: { label: string; href: string }[] = [];
-      
-      // Prepend an "All [Label]" link
-      flatLinks.push({ label: `All ${label}`, href: navItem.href });
-      
-      navItem.groups.forEach((column) => {
-        column.forEach((group) => {
-          group.links.forEach((link) => {
-            if (!flatLinks.some((l) => l.label.toLowerCase() === link.label.toLowerCase())) {
-              flatLinks.push(link);
-            }
-          });
-        });
-      });
-      return flatLinks;
-    }
-
-    // Fallback/Custom list for Gifting
-    if (cleanLabel === 'gifting') {
-      return [
-        { label: 'All Gifts', href: '/products?tags=gifting' },
-        { label: 'Plant Gifting', href: '/products?tags=gifting' },
-        { label: 'Corporate Gifting', href: '/corporate-gifting' },
-        { label: 'Vastu Gifting', href: '/products?tags=vastu-friendly' },
-      ];
-    }
-
-    return null;
+    return resolveSubcategories(categories, label);
   }
 
   function isNavActive(item: NavItemDef): boolean {
@@ -427,7 +384,7 @@ export default function Navbar() {
       <nav className="hidden lg:block border-t border-gray-100">
         <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16">
           <ul className="flex items-center justify-center text-[14px] font-semibold tracking-[0.03em] gap-0">
-            {NAV_ITEMS.map((item) => {
+            {navItems.map((item) => {
               const hasDropdown = item.groups && item.groups.length > 0;
               const isOpen = activeDropdown === item.label;
               const active = isNavActive(item);

@@ -14,6 +14,7 @@ export interface Category {
   parent_id: number | null;
   image_url: string | null;
   is_active: boolean;
+  sort_order: number;
   children?: Category[];
 }
 
@@ -305,6 +306,20 @@ export interface CheckoutResponse {
   };
 }
 
+export type BannerPlacement =
+  | 'hero'
+  | 'announcement'
+  | 'page'
+  | 'themed'
+  | 'strip'
+  | 'highlight'
+  | 'mobile_promo'
+  | 'corporate_gifting'
+  | 'happy_planters'
+  | 'trending'
+  | 'product_detail'
+  | 'product_spec';
+
 export interface Banner {
   id: number;
   title: string;
@@ -316,7 +331,7 @@ export interface Banner {
   bg_color: string;
   text_color: string;
   position: number;
-  placement: string;
+  placement: BannerPlacement;
   target_path?: string | null;
   is_active: boolean;
   valid_from?: string;

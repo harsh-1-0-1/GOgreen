@@ -79,24 +79,6 @@ const PLACEMENTS = [
     helpText: 'Recommended size: 400x400px. The first active banner is used for the drawer promo card.',
   },
   {
-    key: 'menu_banner',
-    label: '🧭 Menu Banner',
-    description: 'Portrait banner displayed in the mobile collections menu.',
-    helpText: 'Recommended size: 320x450px. Use clear category imagery and short labels.',
-  },
-  {
-    key: 'mobile_category',
-    label: '📲 Home Mobile Category Chips',
-    description: 'Circular category shortcuts shown above the homepage hero on mobile.',
-    helpText: 'Recommended size: 300x300px square images. Title becomes the chip label.',
-  },
-  {
-    key: 'cart_suggestions',
-    label: '🛒 Empty Cart Suggestions',
-    description: 'Collection cards shown when the cart drawer or cart page is empty.',
-    helpText: 'Recommended size: 500x380px. Title, subtitle, link, and image are used.',
-  },
-  {
     key: 'corporate_gifting',
     label: '💼 Corporate Gifting Banner',
     description: 'Promotional banner displayed on the corporate gifting page.',
@@ -129,7 +111,7 @@ const bannerSchema = z
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
-    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'mobile_promo', 'menu_banner', 'mobile_category', 'cart_suggestions', 'corporate_gifting', 'happy_planters', 'product_detail', 'product_spec']),
+    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'mobile_promo', 'corporate_gifting', 'happy_planters', 'product_detail', 'product_spec']),
     target_path: z.string().max(255).optional().or(z.literal('')),
     bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #FFFFFF)'),
     text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #000000)'),
