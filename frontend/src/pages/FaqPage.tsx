@@ -14,6 +14,7 @@ import {
   CreditCard,
   Leaf
 } from 'lucide-react';
+import { SUPPORT_PHONE_DISPLAY, WHATSAPP_NUMBER } from '@/components/layout/Navbar/navData';
 
 interface FAQItem {
   id: number;
@@ -96,7 +97,7 @@ const FAQ_DATA: FAQItem[] = [
   {
     id: 12,
     question: "Can I cancel or modify my order?",
-    answer: "You can cancel or modify your order within 2 hours of placing it. Please call or WhatsApp our support team at +91 7083883105 to request changes.",
+    answer: `You can cancel or modify your order within 2 hours of placing it. Please call or WhatsApp our support team at ${SUPPORT_PHONE_DISPLAY} to request changes.`,
     category: "orders"
   }
 ];
@@ -256,7 +257,7 @@ export default function FaqPage() {
               Email Us
             </a>
             <a
-              href="tel:+917083883105"
+              href={`tel:+${WHATSAPP_NUMBER}`}
               className="flex items-center justify-center gap-2 py-3 px-5 bg-primary text-white text-xs sm:text-sm font-bold rounded-xl shadow-md hover:bg-primary/95 transition"
             >
               <Phone size={16} />

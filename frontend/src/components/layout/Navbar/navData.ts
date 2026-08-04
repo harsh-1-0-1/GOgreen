@@ -17,13 +17,6 @@ export interface NavItemDef {
   groups?: DropdownGroup[][];
 }
 
-export interface MobileCollection {
-  label: string;
-  href: string;
-  image: string;
-  accent: string;
-}
-
 export interface StaticLink {
   label: string;
   href: string;
@@ -32,9 +25,19 @@ export interface StaticLink {
   accent?: string;
 }
 
-export const WHATSAPP_NUMBER = '917083883105';
+export const WHATSAPP_NUMBER: string =
+  import.meta.env.VITE_WHATSAPP_NUMBER ?? '917083883105';
 
-const ACCENT_PALETTE = ['#f9c8d4', '#f9e4a0', '#cdebd7', '#d6e6f5', '#f3d9f5'];
+/** Display-friendly version: +91 XXXXX XXXXX */
+export const SUPPORT_PHONE_DISPLAY: string = (() => {
+  const raw: string = import.meta.env.VITE_SUPPORT_PHONE ?? '917083883105';
+  // Format 91XXXXXXXXXX → +91 XXXXX XXXXX
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+  }
+  return `+${digits}`;
+})();
 
 /**
  * Non-category site links. These are NOT taxonomy nodes and are merged
@@ -149,67 +152,6 @@ export function categoryTreeToNavItems(
       highlight: link.highlight,
     })),
   ];
-}
-
-/**
- * Mobile collection list items from the category tree + static links.
- */
-export function categoryTreeToMobileCollections(
-  categories: Category[],
-  staticLinks: StaticLink[] = STATIC_LINKS,
-): MobileCollection[] {
-  const roots = sortByMenuOrder(categories);
-  const items: MobileCollection[] = roots.map((root, i) => ({
-    label: root.name,
-    href: categoryLink(root),
-    image: root.image_url || '',
-    accent: ACCENT_PALETTE[i % ACCENT_PALETTE.length],
-  }));
-  return [
-    ...items,
-    ...staticLinks.map((link, i) => ({
-      label: link.label,
-      href: link.href,
-      image: link.image || '',
-      accent: link.accent || ACCENT_PALETTE[(roots.length + i) % ACCENT_PALETTE.length],
-    })),
-  ];
-}
-
-/**
- * label -> NavItemDef lookup for the mobile collections accordion.
- * Built from the category tree so it stays DB-driven.
- */
-export function buildLabelToNav(
-  categories: Category[],
-  staticLinks: StaticLink[] = STATIC_LINKS,
-): Record<string, NavItemDef | undefined> {
-  const map: Record<string, NavItemDef | undefined> = {};
-  for (const root of categories) {
-    const submenu = subcategoryLinks(root);
-    map[root.name] = {
-      label: root.name,
-      href: categoryLink(root),
-      groups: submenu
-        ? columnize(
-            (root.children ?? [])
-              .map((c) => ({ label: c.name, href: categoryLink(c) })),
-          )
-        : undefined,
-    };
-  }
-  for (const link of staticLinks) {
-    map[link.label] = {
-      label: link.label,
-      href: link.href,
-      highlight: link.highlight,
-      groups:
-        link.label === 'Gifting'
-          ? [[{ links: GIFTING_SUBMENU }]]
-          : undefined,
-    };
-  }
-  return map;
 }
 
 /** Resolve a submenu for a mobile/desktop menu label from the tree. */

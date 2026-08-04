@@ -1,66 +1,125 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Settings, CreditCard, Truck, Mail, Globe, Palette } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useSettings, useUpdateSettings } from '@/hooks/useSettings';
+import type { StoreSettings } from '@/hooks/useSettings';
+
+type Tab = 'store' | 'payments' | 'shipping' | 'emails' | 'seo' | 'branding';
+
+const MENU_ITEMS: { id: Tab; label: string; icon: React.ElementType }[] = [
+  { id: 'store',    label: '🏬 Store Info',           icon: Settings  },
+  { id: 'payments', label: '💳 Payments',              icon: CreditCard },
+  { id: 'shipping', label: '🚚 Shipping & Delivery',   icon: Truck     },
+  { id: 'emails',   label: '📧 Email Alerts',          icon: Mail      },
+  { id: 'seo',      label: '🌐 Search Engine (SEO)',   icon: Globe     },
+  { id: 'branding', label: '🎨 Branding & Colors',     icon: Palette   },
+];
+
+const INPUT = 'w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary mt-1 bg-white';
+
+function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${value ? 'bg-primary' : 'bg-gray-300'}`}
+      aria-pressed={value}
+    >
+      <span
+        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${value ? 'translate-x-[22px]' : 'translate-x-0.5'}`}
+      />
+    </button>
+  );
+}
 
 export default function SettingsAdminPage() {
-  const [activeTab, setActiveTab] = useState<'store' | 'payments' | 'shipping' | 'emails' | 'seo' | 'branding'>('store');
+  const { data: saved, isLoading, isError } = useSettings();
+  const updateSettings = useUpdateSettings();
+  const [activeTab, setActiveTab] = useState<Tab>('store');
 
-  // Store information state
-  const [storeName, setStoreName] = useState('Plantoga');
-  const [storeEmail, setStoreEmail] = useState('support@plantoga.com');
-  const [storePhone, setStorePhone] = useState('+91 99887 76655');
-  const [storeAddress, setStoreAddress] = useState('12, Green Enclave, Sector 5, Bangalore - 560001');
+  // Local form state — initialised from server data
+  const [form, setForm] = useState<Omit<StoreSettings, 'id' | 'updated_at'>>({
+    store_name: '',
+    support_email: '',
+    support_phone: '',
+    warehouse_address: '',
+    cod_enabled: true,
+    free_shipping_threshold: 999,
+    flat_shipping_rate: 75,
+    notify_new_order: true,
+    notify_low_stock: true,
+    meta_title: '',
+    meta_description: '',
+    primary_color: '#2D6A4F',
+    accent_color: '#52B788',
+  });
 
-  // Payments state
-  const [razorpayKey, setRazorpayKey] = useState('rzp_live_ABC123XYZ');
-  const [enableCod, setEnableCod] = useState(true);
+  // Sync server → form once data arrives
+  useEffect(() => {
+    if (!saved) return;
+    setForm({
+      store_name:              saved.store_name,
+      support_email:           saved.support_email,
+      support_phone:           saved.support_phone,
+      warehouse_address:       saved.warehouse_address,
+      cod_enabled:             saved.cod_enabled,
+      free_shipping_threshold: saved.free_shipping_threshold,
+      flat_shipping_rate:      saved.flat_shipping_rate,
+      notify_new_order:        saved.notify_new_order,
+      notify_low_stock:        saved.notify_low_stock,
+      meta_title:              saved.meta_title,
+      meta_description:        saved.meta_description,
+      primary_color:           saved.primary_color,
+      accent_color:            saved.accent_color,
+    });
+  }, [saved]);
 
-  // Shipping state
-  const [freeShippingLimit, setFreeShippingLimit] = useState('999');
-  const [flatShippingCost, setFlatShippingCost] = useState('75');
+  function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
 
-  // Emails state
-  const [notifyNewOrder, setNotifyNewOrder] = useState(true);
-  const [notifyLowStock, setNotifyLowStock] = useState(true);
-
-  // SEO state
-  const [metaTitle, setMetaTitle] = useState('Plantoga - Buy Indoor Plants & Pots Online India');
-  const [metaDescription, setMetaDescription] = useState('Order fresh indoor air-purifier plants, succulents, premium ceramic pots, and garden combos. Fast home delivery across India.');
-
-  // Branding state
-  const [primaryColor, setPrimaryColor] = useState('#2D6A4F');
-  const [accentColor, setAccentColor] = useState('#52B788');
-
-  const handleSave = (e: React.FormEvent) => {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    toast.success('Store configuration saved successfully!');
-  };
+    try {
+      await updateSettings.mutateAsync(form);
+      toast.success('Settings saved successfully.');
+    } catch {
+      toast.error('Failed to save settings. Please try again.');
+    }
+  }
 
-  const menuItems = [
-    { id: 'store', label: '🏬 Store Info', icon: Settings },
-    { id: 'payments', label: '💳 Payments', icon: CreditCard },
-    { id: 'shipping', label: '🚚 Shipping & Delivery', icon: Truck },
-    { id: 'emails', label: '📧 Email Alerts', icon: Mail },
-    { id: 'seo', label: '🌐 Search Engine (SEO)', icon: Globe },
-    { id: 'branding', label: '🎨 Branding & Colors', icon: Palette },
-  ] as const;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+        Loading settings…
+      </div>
+    );
+  }
 
-  const inputClass = "w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary mt-1 bg-white";
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-40 text-sm text-red-500">
+        Could not load settings. Make sure you are logged in as admin.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">System Settings</h1>
-        <p className="text-xs text-gray-500 mt-0.5">Control global store details, transaction methods, delivery limits, notification rules, and branding styles.</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Control global store details, transaction methods, delivery limits, notification rules, and branding styles.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-        
-        {/* Left Side Tab Navigation */}
+        {/* Left tab nav */}
         <div className="md:col-span-1 bg-white rounded-xl border p-2 shadow-sm space-y-1 h-fit">
-          {menuItems.map((item) => (
+          {MENU_ITEMS.map((item) => (
             <button
               key={item.id}
+              type="button"
               onClick={() => setActiveTab(item.id)}
               className={`w-full py-2.5 px-3 rounded-lg text-xs font-semibold text-left transition flex items-center gap-2 ${
                 activeTab === item.id
@@ -74,182 +133,248 @@ export default function SettingsAdminPage() {
           ))}
         </div>
 
-        {/* Right Side Settings Form */}
+        {/* Right form */}
         <div className="md:col-span-3 bg-white p-5 rounded-xl border shadow-sm">
           <form onSubmit={handleSave} className="space-y-4">
-            
+
+            {/* ── Store Info ── */}
             {activeTab === 'store' && (
               <div className="space-y-4">
-                <div className="border-b pb-2">
-                  <h3 className="text-sm font-bold text-gray-800">🏬 Store Information</h3>
-                  <p className="text-[10px] text-gray-400">Configure contact coordinates that appear in customer invoice receipts and footer.</p>
-                </div>
+                <SectionHeader
+                  title="🏬 Store Information"
+                  desc="Contact details that appear in customer invoice receipts and the site footer."
+                />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-700">Business Name</label>
-                    <input value={storeName} onChange={(e) => setStoreName(e.target.value)} required className={inputClass} />
+                    <input
+                      value={form.store_name}
+                      onChange={(e) => set('store_name', e.target.value)}
+                      required
+                      className={INPUT}
+                    />
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-700">Support Email Address</label>
-                    <input type="email" value={storeEmail} onChange={(e) => setStoreEmail(e.target.value)} required className={inputClass} />
+                    <input
+                      type="email"
+                      value={form.support_email}
+                      onChange={(e) => set('support_email', e.target.value)}
+                      className={INPUT}
+                    />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-700">Contact Hotline</label>
-                    <input value={storePhone} onChange={(e) => setStorePhone(e.target.value)} required className={inputClass} />
+                    <label className="text-xs font-semibold text-gray-700">Contact Phone</label>
+                    <input
+                      value={form.support_phone}
+                      onChange={(e) => set('support_phone', e.target.value)}
+                      placeholder="917083883105"
+                      className={INPUT}
+                    />
+                    <p className="text-[9px] text-gray-400 mt-1">E.164 without +, e.g. 917083883105</p>
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-700">Physical Warehouse Address</label>
-                  <textarea rows={2} value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} required className={inputClass} />
+                  <label className="text-xs font-semibold text-gray-700">Warehouse Address</label>
+                  <textarea
+                    rows={2}
+                    value={form.warehouse_address}
+                    onChange={(e) => set('warehouse_address', e.target.value)}
+                    className={INPUT}
+                  />
                 </div>
               </div>
             )}
 
+            {/* ── Payments ── */}
             {activeTab === 'payments' && (
               <div className="space-y-4">
-                <div className="border-b pb-2">
-                  <h3 className="text-sm font-bold text-gray-800">💳 Merchant Payment Gateways</h3>
-                  <p className="text-[10px] text-gray-400">Link payment services for order settlement.</p>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-700">Razorpay API Key (Live)</label>
-                  <input value={razorpayKey} onChange={(e) => setRazorpayKey(e.target.value)} className={inputClass} />
-                  <p className="text-[9px] text-gray-400 mt-1">Obtain this key from razorpay developer panel.</p>
-                </div>
-                <div className="pt-2 border-t flex items-center justify-between">
+                <SectionHeader
+                  title="💳 Merchant Payment Gateways"
+                  desc="Razorpay keys are managed via environment variables on the server. Only operational toggles live here."
+                />
+                <div className="pt-2 flex items-center justify-between">
                   <div>
-                    <label className="text-xs font-semibold text-gray-800">Enable Cash on Delivery (COD)</label>
-                    <p className="text-[9px] text-gray-400">Allow customers to choose COD checkout option.</p>
+                    <p className="text-xs font-semibold text-gray-800">Enable Cash on Delivery (COD)</p>
+                    <p className="text-[9px] text-gray-400">Allow customers to choose COD at checkout.</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setEnableCod(!enableCod)}
-                    className={`relative w-10 h-5.5 rounded-full transition-colors ${enableCod ? 'bg-primary' : 'bg-gray-300'}`}
-                  >
-                    <span className={`absolute top-0.5 w-4.5 h-4.5 bg-white rounded-full shadow transition-transform ${enableCod ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-                  </button>
+                  <Toggle value={form.cod_enabled} onChange={(v) => set('cod_enabled', v)} />
+                </div>
+                <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-100 text-[11px] text-amber-800 leading-relaxed">
+                  <span className="font-bold">Razorpay API keys</span> are configured via{' '}
+                  <code className="font-mono bg-amber-100 px-1 rounded">RAZORPAY_KEY_ID</code> and{' '}
+                  <code className="font-mono bg-amber-100 px-1 rounded">RAZORPAY_KEY_SECRET</code> env vars on the server — they are never stored in the database.
                 </div>
               </div>
             )}
 
+            {/* ── Shipping ── */}
             {activeTab === 'shipping' && (
               <div className="space-y-4">
-                <div className="border-b pb-2">
-                  <h3 className="text-sm font-bold text-gray-800">🚚 Shipping & Delivery Thresholds</h3>
-                  <p className="text-[10px] text-gray-400">Set shipping costs and basket limits.</p>
-                </div>
+                <SectionHeader
+                  title="🚚 Shipping & Delivery Thresholds"
+                  desc="Set shipping costs and the free-delivery basket minimum."
+                />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs font-semibold text-gray-700">Free Delivery Minimum Total (₹)</label>
-                    <input type="number" value={freeShippingLimit} onChange={(e) => setFreeShippingLimit(e.target.value)} required className={inputClass} />
-                    <p className="text-[9px] text-gray-400 mt-1">Orders above this amount get free delivery.</p>
+                    <label className="text-xs font-semibold text-gray-700">Free Delivery Minimum (₹)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.free_shipping_threshold}
+                      onChange={(e) => set('free_shipping_threshold', Number(e.target.value))}
+                      required
+                      className={INPUT}
+                    />
+                    <p className="text-[9px] text-gray-400 mt-1">Orders at or above this total get free delivery.</p>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-700">Flat Shipping Charge (₹)</label>
-                    <input type="number" value={flatShippingCost} onChange={(e) => setFlatShippingCost(e.target.value)} required className={inputClass} />
-                    <p className="text-[9px] text-gray-400 mt-1">Standard cost for orders below minimum limit.</p>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.flat_shipping_rate}
+                      onChange={(e) => set('flat_shipping_rate', Number(e.target.value))}
+                      required
+                      className={INPUT}
+                    />
+                    <p className="text-[9px] text-gray-400 mt-1">Charged on orders below the minimum.</p>
                   </div>
                 </div>
               </div>
             )}
 
+            {/* ── Emails ── */}
             {activeTab === 'emails' && (
               <div className="space-y-4">
-                <div className="border-b pb-2">
-                  <h3 className="text-sm font-bold text-gray-800">📧 Email Notifications</h3>
-                  <p className="text-[10px] text-gray-400">Configure status triggers for operational emails.</p>
-                </div>
-                
+                <SectionHeader
+                  title="📧 Email Notifications"
+                  desc="Configure which events trigger operational emails."
+                />
                 <div className="space-y-3">
                   <div className="flex items-center justify-between py-1.5">
                     <div>
-                      <label className="text-xs font-semibold text-gray-850">Client Order Email Alerts</label>
-                      <p className="text-[9px] text-gray-400">Send order summary emails to customer immediately after purchase.</p>
+                      <p className="text-xs font-semibold text-gray-800">Customer Order Confirmation Emails</p>
+                      <p className="text-[9px] text-gray-400">Send an order summary email to the customer immediately after purchase.</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setNotifyNewOrder(!notifyNewOrder)}
-                      className={`relative w-10 h-5.5 rounded-full transition-colors ${notifyNewOrder ? 'bg-primary' : 'bg-gray-300'}`}
-                    >
-                      <span className={`absolute top-0.5 w-4.5 h-4.5 bg-white rounded-full shadow transition-transform ${notifyNewOrder ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-                    </button>
+                    <Toggle value={form.notify_new_order} onChange={(v) => set('notify_new_order', v)} />
                   </div>
-
                   <div className="flex items-center justify-between py-1.5 border-t">
                     <div>
-                      <label className="text-xs font-semibold text-gray-850">Warehouse Low-Stock Notifications</label>
-                      <p className="text-[9px] text-gray-400">Receive alert mail if products drop below healthy levels.</p>
+                      <p className="text-xs font-semibold text-gray-800">Low-Stock Alerts</p>
+                      <p className="text-[9px] text-gray-400">Receive an alert when product stock drops below safe levels.</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setNotifyLowStock(!notifyLowStock)}
-                      className={`relative w-10 h-5.5 rounded-full transition-colors ${notifyLowStock ? 'bg-primary' : 'bg-gray-300'}`}
-                    >
-                      <span className={`absolute top-0.5 w-4.5 h-4.5 bg-white rounded-full shadow transition-transform ${notifyLowStock ? 'translate-x-[18px]' : 'translate-x-0.5'}`} stroke-width="1.5" />
-                    </button>
+                    <Toggle value={form.notify_low_stock} onChange={(v) => set('notify_low_stock', v)} />
                   </div>
                 </div>
               </div>
             )}
 
+            {/* ── SEO ── */}
             {activeTab === 'seo' && (
               <div className="space-y-4">
-                <div className="border-b pb-2">
-                  <h3 className="text-sm font-bold text-gray-800">🌐 Search Engine Optimization (SEO)</h3>
-                  <p className="text-[10px] text-gray-400">Tune store visibility settings for Google and Bing search index crawlers.</p>
-                </div>
+                <SectionHeader
+                  title="🌐 Search Engine Optimization (SEO)"
+                  desc="Global homepage meta tags for Google and Bing."
+                />
                 <div>
-                  <label className="text-xs font-semibold text-gray-700">Global Homepage Meta Title</label>
-                  <input value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} required className={inputClass} />
-                  <p className="text-[9px] text-gray-400 mt-1">Recommended length: 50-60 characters.</p>
+                  <label className="text-xs font-semibold text-gray-700">Homepage Meta Title</label>
+                  <input
+                    value={form.meta_title}
+                    onChange={(e) => set('meta_title', e.target.value)}
+                    className={INPUT}
+                  />
+                  <p className="text-[9px] text-gray-400 mt-1">Recommended: 50–60 characters.</p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Homepage Meta Description</label>
-                  <textarea rows={3} value={metaDescription} onChange={(e) => setMetaDescription(e.target.value)} required className={inputClass} />
-                  <p className="text-[9px] text-gray-400 mt-1">Recommended length: 120-160 characters.</p>
+                  <textarea
+                    rows={3}
+                    value={form.meta_description}
+                    onChange={(e) => set('meta_description', e.target.value)}
+                    className={INPUT}
+                  />
+                  <p className="text-[9px] text-gray-400 mt-1">Recommended: 120–160 characters.</p>
                 </div>
               </div>
             )}
 
+            {/* ── Branding ── */}
             {activeTab === 'branding' && (
               <div className="space-y-4">
-                <div className="border-b pb-2">
-                  <h3 className="text-sm font-bold text-gray-800">🎨 Branding & Themes</h3>
-                  <p className="text-[10px] text-gray-400">Modify design theme attributes for buttons and page styles.</p>
-                </div>
+                <SectionHeader
+                  title="🎨 Branding & Theme"
+                  desc="Modify primary and accent colours used across the store."
+                />
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-700">Primary Brand Color</label>
                     <div className="flex gap-2 items-center mt-1">
-                      <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="w-8 h-8 rounded border cursor-pointer shrink-0" />
-                      <input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg uppercase" />
+                      <input
+                        type="color"
+                        value={form.primary_color}
+                        onChange={(e) => set('primary_color', e.target.value)}
+                        className="w-8 h-8 rounded border cursor-pointer shrink-0"
+                      />
+                      <input
+                        value={form.primary_color}
+                        onChange={(e) => set('primary_color', e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border rounded-lg uppercase"
+                      />
                     </div>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-700">Accent Highlights Color</label>
                     <div className="flex gap-2 items-center mt-1">
-                      <input type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} className="w-8 h-8 rounded border cursor-pointer shrink-0" />
-                      <input value={accentColor} onChange={(e) => setAccentColor(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg uppercase" />
+                      <input
+                        type="color"
+                        value={form.accent_color}
+                        onChange={(e) => set('accent_color', e.target.value)}
+                        className="w-8 h-8 rounded border cursor-pointer shrink-0"
+                      />
+                      <input
+                        value={form.accent_color}
+                        onChange={(e) => set('accent_color', e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border rounded-lg uppercase"
+                      />
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Save Buttons */}
-            <div className="pt-4 border-t flex justify-end">
+            {/* Save */}
+            <div className="pt-4 border-t flex items-center justify-between">
+              {saved && (
+                <p className="text-[10px] text-gray-400">
+                  Last saved:{' '}
+                  {new Date(saved.updated_at).toLocaleString('en-IN', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  })}
+                </p>
+              )}
               <button
                 type="submit"
-                className="px-5 py-2.5 bg-primary text-white text-xs font-semibold rounded-xl hover:bg-primary/95 transition shadow-sm"
+                disabled={updateSettings.isPending}
+                className="ml-auto px-5 py-2.5 bg-primary text-white text-xs font-semibold rounded-xl hover:bg-primary/95 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Save Settings
+                {updateSettings.isPending ? 'Saving…' : 'Save Settings'}
               </button>
             </div>
 
           </form>
         </div>
-
       </div>
+    </div>
+  );
+}
+
+function SectionHeader({ title, desc }: { title: string; desc: string }) {
+  return (
+    <div className="border-b pb-2">
+      <h3 className="text-sm font-bold text-gray-800">{title}</h3>
+      <p className="text-[10px] text-gray-400 mt-0.5">{desc}</p>
     </div>
   );
 }

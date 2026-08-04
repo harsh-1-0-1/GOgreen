@@ -350,6 +350,45 @@ class DamageClaim(Base):
     order_item: Mapped["OrderItem | None"] = relationship("OrderItem")
 
 
+class StoreSettings(Base):
+    """Single-row table that holds all mutable store configuration.
+
+    The row is always created with id=1 on first access (upsert).
+    """
+    __tablename__ = "store_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+
+    # Store info
+    store_name: Mapped[str] = mapped_column(String(255), nullable=False, default="Plantoga")
+    support_email: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    support_phone: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    warehouse_address: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    # Payments
+    cod_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Shipping
+    free_shipping_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=999)
+    flat_shipping_rate: Mapped[int] = mapped_column(Integer, nullable=False, default=75)
+
+    # Notifications
+    notify_new_order: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notify_low_stock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # SEO
+    meta_title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    meta_description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    # Branding
+    primary_color: Mapped[str] = mapped_column(String(20), nullable=False, default="#2D6A4F")
+    accent_color: Mapped[str] = mapped_column(String(20), nullable=False, default="#52B788")
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
 class Story(Base):
     __tablename__ = "stories"
 

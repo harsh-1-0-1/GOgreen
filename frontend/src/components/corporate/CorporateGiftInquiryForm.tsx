@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { z } from 'zod';
 import { submitCorporateGiftInquiry } from '@/lib/corporateGifting';
+import { SUPPORT_PHONE_DISPLAY, WHATSAPP_NUMBER } from '@/components/layout/Navbar/navData';
 
 const inquirySchema = z.object({
   fullName: z.string().trim().min(2, 'Please enter your full name.'),
@@ -89,11 +90,11 @@ export default function CorporateGiftInquiryForm() {
             Fill out the form below &amp; our team will get in touch with you.
           </p>
           <a
-            href="tel:+917083883105"
+            href={`tel:+${WHATSAPP_NUMBER}`}
             className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#F2F8F1] px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary hover:text-white"
           >
             <Phone size={16} />
-            Call Us On : +91 7083883105
+            Call Us On : {SUPPORT_PHONE_DISPLAY}
           </a>
         </div>
 

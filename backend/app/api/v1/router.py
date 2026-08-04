@@ -14,6 +14,7 @@ from app.api.v1 import (
     payments,
     products,
     reviews,
+    settings,
     stories,
 )
 
@@ -32,3 +33,4 @@ api_router.include_router(admin.router)
 api_router.include_router(blog.router)
 api_router.include_router(banners.router)
 api_router.include_router(stories.router)
+api_router.include_router(settings.router)

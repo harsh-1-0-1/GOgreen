@@ -136,20 +136,8 @@ export default function PlantCareGrid({
   subtitle?: string;
   limit?: number;
 }) {
-  const { data: careData, isLoading: isLoadingCare } = useProducts({ category_slug: 'plant-care', limit });
-  const { data: kitsData, isLoading: isLoadingKits } = useProducts({ category_slug: 'seeds-kits', limit });
-
-  const isLoading = isLoadingCare || isLoadingKits;
-
-  // Merge and deduplicate products
-  const productsMap = new Map();
-  if (careData?.items) {
-    careData.items.forEach(p => productsMap.set(p.id, p));
-  }
-  if (kitsData?.items) {
-    kitsData.items.forEach(p => productsMap.set(p.id, p));
-  }
-  const products = Array.from(productsMap.values()).slice(0, limit);
+  const { data, isLoading } = useProducts({ category_slug: 'plant-care', limit });
+  const products = data?.items ?? [];
 
   if (!isLoading && products.length === 0) return null;
 

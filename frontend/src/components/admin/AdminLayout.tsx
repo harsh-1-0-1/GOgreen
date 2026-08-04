@@ -20,7 +20,7 @@ const NAV = [
 ];
 
 const MOBILE_TABS = NAV.slice(0, 3); // Dashboard, Products, Categories
-const MORE_ITEMS = NAV.slice(3); // Orders, Users, Banners, Blog, Corporate, Coupons, Settings
+const MORE_ITEMS = NAV.slice(3); // Orders, Users, Banners, Stories, Blog, Corporate, Damage Claims, Coupons, Settings
 
 export default function AdminLayout() {
   const { user } = useAuthStore();

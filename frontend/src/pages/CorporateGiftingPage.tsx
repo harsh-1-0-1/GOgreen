@@ -1,6 +1,7 @@
 import { ArrowDown, Building2, CheckCircle2, Gift, Leaf, PackageCheck, ShieldCheck, Sparkles, Truck } from 'lucide-react';
 import CorporateGiftInquiryForm from '@/components/corporate/CorporateGiftInquiryForm';
 import { useBanners } from '@/hooks/useBanners';
+import { SUPPORT_PHONE_DISPLAY, WHATSAPP_NUMBER } from '@/components/layout/Navbar/navData';
 
 const TRUST_POINTS = [
   { icon: Truck, title: 'Last Mile Delivery', text: 'Coordinated dispatches for offices, events, and distributed teams.' },
@@ -82,10 +83,10 @@ export default function CorporateGiftingPage() {
                 <ArrowDown size={17} />
               </a>
               <a
-                href="tel:+917083883105"
+                href={`tel:+${WHATSAPP_NUMBER}`}
                 className="inline-flex items-center justify-center rounded-full bg-white px-7 py-3.5 text-sm font-bold text-primary shadow-sm ring-1 ring-primary-light/30 transition hover:-translate-y-0.5 hover:ring-primary"
               >
-                Call +91 7083883105
+                Call {SUPPORT_PHONE_DISPLAY}
               </a>
             </div>
           </div>

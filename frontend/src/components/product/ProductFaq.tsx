@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { FAQItem } from '@/types';
+import { SUPPORT_PHONE_DISPLAY } from '@/components/layout/Navbar/navData';
 
 const DEFAULT_FAQS: FAQItem[] = [
   {
@@ -25,7 +26,7 @@ const DEFAULT_FAQS: FAQItem[] = [
   },
   {
     question: "Can I cancel or modify my order?",
-    answer: "You can cancel or modify your order within 2 hours of placing it. Please call or WhatsApp our support team at +91 7083883105 to request changes."
+    answer: `You can cancel or modify your order within 2 hours of placing it. Please call or WhatsApp our support team at ${SUPPORT_PHONE_DISPLAY} to request changes.`
   }
 ];
 

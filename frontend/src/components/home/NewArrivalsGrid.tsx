@@ -138,7 +138,7 @@ export default function NewArrivalsGrid({
   limit?: number;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const { data, isLoading } = useProducts({ limit, sort_by: 'created_at' });
+  const { data, isLoading } = useProducts({ limit, sort_by: 'newest' });
   const products = data?.items ?? [];
 
   if (!isLoading && products.length === 0) return null;
