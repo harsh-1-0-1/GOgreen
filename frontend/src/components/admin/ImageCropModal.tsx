@@ -155,45 +155,46 @@ export default function ImageCropModal({
 
     setIsProcessing(true);
     try {
-      // Try to fetch the image through fetch API first (works with CORS)
-      // If that fails, fall back to direct image loading
+      // For already-uploaded images from CDN, we need to fetch through a proxy
+      // or re-fetch through the backend to avoid CORS issues
       let imageBlob: Blob;
-      let imageBitmapSrc: ImageBitmap | HTMLImageElement;
       
       try {
-        // Try fetch first - this respects CORS but may work better with CDN
-        const response = await fetch(imageSrc);
-        if (!response.ok) throw new Error('Fetch failed');
-        imageBlob = await response.blob();
-        
-        // Use createImageBitmap for better performance and CORS handling
-        imageBitmapSrc = await createImageBitmap(imageBlob);
-      } catch (fetchError) {
-        console.warn('Fetch approach failed, trying direct image load:', fetchError);
-        
-        // Fallback to traditional image loading
-        const image = new window.Image();
-        image.crossOrigin = 'anonymous';
-        
-        await new Promise((resolve, reject) => {
-          image.onload = () => {
-            if (image.naturalWidth > 0 && image.naturalHeight > 0) {
-              resolve(null);
-            } else {
-              reject(new Error('Image loaded but has invalid dimensions'));
-            }
-          };
-          image.onerror = () => reject(new Error('Failed to load image'));
-          
-          image.src = imageSrc;
-          
-          if (image.complete && image.naturalWidth > 0 && image.naturalHeight > 0) {
-            resolve(null);
-          }
+        // Fetch the image as a blob (this bypasses canvas CORS restrictions)
+        const response = await fetch(imageSrc, {
+          mode: 'cors',
+          credentials: 'omit',
         });
         
-        imageBitmapSrc = image;
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.statusText}`);
+        }
+        
+        imageBlob = await response.blob();
+      } catch (fetchError) {
+        console.error('Failed to fetch image:', fetchError);
+        throw new Error('Cannot load image for cropping. The image may not be accessible.');
       }
+
+      // Create an object URL from the blob - this is same-origin and won't trigger CORS
+      const blobUrl = URL.createObjectURL(imageBlob);
+      
+      // Load the image from the blob URL
+      const image = new window.Image();
+      
+      await new Promise((resolve, reject) => {
+        image.onload = () => {
+          if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+            resolve(null);
+          } else {
+            reject(new Error('Image loaded but has invalid dimensions'));
+          }
+        };
+        image.onerror = () => reject(new Error('Failed to load image'));
+        
+        // No crossOrigin needed for blob URLs
+        image.src = blobUrl;
+      });
 
       const canvas = document.createElement('canvas');
       
@@ -206,7 +207,7 @@ export default function ImageCropModal({
 
       // Draw the cropped portion
       ctx.drawImage(
-        imageBitmapSrc,
+        image,
         croppedAreaPixels.x,
         croppedAreaPixels.y,
         croppedAreaPixels.width,
@@ -217,10 +218,8 @@ export default function ImageCropModal({
         croppedAreaPixels.height
       );
 
-      // Clean up ImageBitmap if used
-      if ('close' in imageBitmapSrc) {
-        imageBitmapSrc.close();
-      }
+      // Clean up the blob URL
+      URL.revokeObjectURL(blobUrl);
 
       canvas.toBlob((blob) => {
         if (!blob) {
@@ -242,7 +241,7 @@ export default function ImageCropModal({
       }, 'image/png');
     } catch (err) {
       console.error('Crop error:', err);
-      toast.error(`Failed to crop image: ${err instanceof Error ? err.message : 'Unknown error'}. Please check CORS configuration.`);
+      toast.error(`Failed to crop image: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsProcessing(false);
     }
