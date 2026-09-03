@@ -255,7 +255,7 @@ export default function CheckoutPage() {
     return Object.keys(next).length === 0;
   }
 
-  async function openRazorpay(response: CheckoutResponse) {
+  async function openRazorpay(response: CheckoutResponse, shouldClearCart: boolean = false) {
     const data = response.razorpay_order_data;
     if (!data) return;
     if (!(import.meta.env.VITE_RAZORPAY_KEY_ID || data.key_id) || !data.order_id) {
@@ -280,6 +280,9 @@ export default function CheckoutPage() {
       theme: { color: '#15945b' },
       handler: () => {
         clearDirectCheckoutSession();
+        if (shouldClearCart) {
+          cart.clearLocal();
+        }
         toast.success('Payment completed');
         navigate(`/orders/${response.order_id}`);
       },
@@ -333,7 +336,7 @@ export default function CheckoutPage() {
           payment_method: paymentMethod,
         });
         if (paymentMethod === 'cod') completeCodOrder(data.order_id);
-        else await openRazorpay(data);
+        else await openRazorpay(data, false);
       } else {
         const currentCartId = useCartStore.getState().cartId;
         if (!currentCartId) throw new Error('Cart not found');
@@ -343,10 +346,7 @@ export default function CheckoutPage() {
           payment_method: paymentMethod,
         });
         if (paymentMethod === 'cod') completeCodOrder(data.order_id);
-        else {
-          cart.clearLocal();
-          await openRazorpay(data);
-        }
+        else await openRazorpay(data, true);
       }
     } catch (err) {
       toast.error(getApiErrorDetail(err, 'Checkout failed'));
