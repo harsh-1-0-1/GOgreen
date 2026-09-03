@@ -49,10 +49,20 @@ async def get_banners(
     ]
 
     if category_slug:
-        # Try category-specific banner first (target_path == category_slug).
+        # Accept target_path saved as bare slug ("plants") OR as the full
+        # query-string path ("/products?category=plants") so banners work
+        # regardless of how they were entered in the admin. Also trim whitespace
+        # from stored target_path to handle accidental spaces.
+        from sqlalchemy import func
+        
+        full_path = f"/products?category={category_slug}"
         stmt = (
             select(Banner)
-            .where(*base_filter, Banner.target_path == category_slug)
+            .where(
+                *base_filter,
+                (func.trim(Banner.target_path).ilike(category_slug))
+                | (func.trim(Banner.target_path).ilike(full_path)),
+            )
             .order_by(Banner.position.asc())
         )
         result = await db.execute(stmt)

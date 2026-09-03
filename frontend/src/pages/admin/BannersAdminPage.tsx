@@ -646,15 +646,15 @@ function BannerDrawer({
           {watchedPlacement === 'page' && (
             <div>
               <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Target Path
+                Category Slug <span className="font-normal text-gray-400">(Target Path)</span>
               </label>
               <input
                 {...register('target_path')}
                 className={inputClass}
-                placeholder="e.g. /products, /cart, or * for fallback"
+                placeholder="e.g. plants, xl-plants, herb-seeds — leave blank for global fallback"
               />
               <p className="text-[10px] text-gray-400 mt-0.5">
-                Exact page path for this banner. Leave blank or use * to make it the fallback banner.
+                Enter just the category slug (e.g. <strong>xl-plants</strong>). Leave blank to show this banner on all category pages as a fallback.
               </p>
               {errors.target_path && (
                 <p className="text-xs text-red-500 mt-1">
