@@ -8,11 +8,13 @@ import {
   Eye,
   EyeOff,
   FolderTree,
+  Image,
   Info,
   Pencil,
   Plus,
   Trash2,
   Upload,
+  X,
   CheckCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -29,14 +31,40 @@ interface CategoryNodeProps {
   onRename: (id: number, name: string) => Promise<void>;
   onToggleActive: (id: number, isActive: boolean) => Promise<void>;
   onMove: (id: number, direction: -1 | 1) => Promise<void>;
+  onUpdateImage: (id: number, imageUrl: string | null) => Promise<void>;
 }
 
-function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove }: CategoryNodeProps) {
+function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onUpdateImage }: CategoryNodeProps) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(cat.name);
+  const [editingImage, setEditingImage] = useState(false);
+  const [imageMode, setImageMode] = useState<'none' | 'upload' | 'url'>('url');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [manualUrl, setManualUrl] = useState(cat.image_url || '');
+  const [urlValid, setUrlValid] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const hasChildren = cat.children && cat.children.length > 0;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setFilePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleUrlBlur = () => {
+    if (!manualUrl) {
+      setUrlValid(null);
+      return;
+    }
+    const img = new window.Image();
+    img.onload = () => setUrlValid(true);
+    img.onerror = () => setUrlValid(false);
+    img.src = manualUrl;
+  };
 
   async function saveRename() {
     const name = editValue.trim();
@@ -52,6 +80,32 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove }: Categ
       setEditing(false);
     } catch (err) {
       toast.error(getApiErrorDetail(err, 'Rename failed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveImage() {
+    setBusy(true);
+    try {
+      if (imageMode === 'upload' && selectedFile) {
+        const fd = new FormData();
+        fd.append('image', selectedFile);
+        await api.post(`/categories/${cat.id}/image`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else if (imageMode === 'url' && manualUrl) {
+        await onUpdateImage(cat.id, manualUrl.trim());
+      } else if (imageMode === 'none') {
+        await onUpdateImage(cat.id, null);
+      }
+      toast.success('Category image updated');
+      setEditingImage(false);
+      setSelectedFile(null);
+      setFilePreview(null);
+      setUrlValid(null);
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to update image'));
     } finally {
       setBusy(false);
     }
@@ -125,6 +179,17 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove }: Categ
             <Pencil size={13} />
           </button>
           <button
+            onClick={() => {
+              setEditingImage(!editingImage);
+              setImageMode(cat.image_url ? 'url' : 'none');
+              setManualUrl(cat.image_url || '');
+            }}
+            className="p-1.5 text-gray-400 hover:text-blue-600 transition"
+            title="Edit image"
+          >
+            <Image size={13} />
+          </button>
+          <button
             onClick={() => handleMove(-1)}
             disabled={busy}
             className="p-1.5 text-gray-400 hover:text-primary transition"
@@ -157,6 +222,93 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove }: Categ
           </button>
         </div>
       </div>
+
+      {/* Image editing section */}
+      {editingImage && (
+        <div className="px-3 py-3 bg-blue-50 border-l-2 border-blue-200 ml-3 rounded mb-2 space-y-2.5">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-semibold text-gray-700">Edit Category Image</label>
+            <button
+              onClick={() => setEditingImage(false)}
+              className="p-1 text-gray-400 hover:text-gray-600"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="flex gap-3 text-[10px] font-bold text-gray-600">
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" checked={imageMode === 'none'} onChange={() => setImageMode('none')} />
+              No Image
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" checked={imageMode === 'upload'} onChange={() => setImageMode('upload')} />
+              Upload
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" checked={imageMode === 'url'} onChange={() => setImageMode('url')} />
+              URL
+            </label>
+          </div>
+
+          {imageMode === 'upload' && (
+            <div className="border-2 border-dashed border-gray-200 hover:border-blue-400 rounded-lg p-3 text-center cursor-pointer relative transition-colors">
+              <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
+              {filePreview ? (
+                <img src={filePreview} alt="Preview" className="max-h-16 mx-auto object-cover rounded" />
+              ) : (
+                <div className="text-gray-400 text-[10px]">
+                  <Upload size={16} className="mx-auto mb-0.5" />
+                  <span className="font-semibold block">Click to upload image</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {imageMode === 'url' && (
+            <div className="space-y-1.5">
+              <input
+                type="url"
+                value={manualUrl}
+                onChange={(e) => {
+                  setManualUrl(e.target.value);
+                  setUrlValid(null);
+                }}
+                onBlur={handleUrlBlur}
+                placeholder="https://..."
+                className="w-full px-2.5 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              {urlValid === true && (
+                <p className="text-[10px] text-green-600 flex items-center gap-1 font-semibold">
+                  <CheckCircle size={11} /> Image loaded
+                </p>
+              )}
+              {manualUrl && (
+                <div className="h-12 w-12 border rounded overflow-hidden bg-gray-50">
+                  <img src={manualUrl} alt="" className="h-full w-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 justify-end pt-1">
+            <button
+              onClick={saveImage}
+              disabled={busy}
+              className="px-2 py-1 text-xs bg-green-600 text-white rounded font-semibold hover:bg-green-700 disabled:opacity-60 transition"
+            >
+              Save Image
+            </button>
+            <button
+              onClick={() => setEditingImage(false)}
+              className="px-2 py-1 text-xs border rounded font-semibold hover:bg-gray-100 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {expanded && hasChildren && (
         <div className="ml-4 sm:ml-6 border-l pl-2 space-y-0.5">
           {cat.children!.map((child) => (
@@ -167,6 +319,7 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove }: Categ
               onRename={onRename}
               onToggleActive={onToggleActive}
               onMove={onMove}
+              onUpdateImage={onUpdateImage}
             />
           ))}
         </div>
@@ -305,6 +458,11 @@ export default function CategoriesAdminPage() {
     const b = siblings[swapWith];
     await updateMutation.mutateAsync({ id: a.id, body: { sort_order: b.sort_order } });
     await updateMutation.mutateAsync({ id: b.id, body: { sort_order: a.sort_order } });
+    invalidate();
+  }
+
+  async function handleUpdateImage(id: number, imageUrl: string | null) {
+    await updateMutation.mutateAsync({ id, body: { image_url: imageUrl } });
     invalidate();
   }
 
@@ -453,6 +611,7 @@ export default function CategoriesAdminPage() {
                   onRename={handleRename}
                   onToggleActive={handleToggleActive}
                   onMove={handleMove}
+                  onUpdateImage={handleUpdateImage}
                 />
               ))}
             </div>
