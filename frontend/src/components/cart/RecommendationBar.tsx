@@ -18,15 +18,22 @@ export default function RecommendationBar({ lastAddedProduct, cartItems }: Recom
   const navigate = useNavigate();
   const [addingId, setAddingId] = useState<number | null>(null);
 
-  // Fetch a broad pool — same category, limit 20
+  // Fetch a broad pool — fetch more products to have enough candidates
   const { data } = useProducts({
-    limit: 20,
+    limit: 50,
     category_slug: undefined, // fetch broadly to have enough candidates
   });
 
   const recommendations = data?.items
     ? getRecommendedProducts(lastAddedProduct, data.items, cartItems, 4)
     : [];
+
+  console.log('RecommendationBar:', {
+    lastAddedProduct: lastAddedProduct?.name,
+    totalProducts: data?.items?.length,
+    recommendations: recommendations.length,
+    cartItems: cartItems.length,
+  });
 
   if (recommendations.length === 0) return null;
 
@@ -57,7 +64,7 @@ export default function RecommendationBar({ lastAddedProduct, cartItems }: Recom
       <div className="flex items-center gap-1.5 mb-2.5 px-1">
         <Sparkles size={13} className="text-[#16A34A]" />
         <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">
-          Complete your green space
+          Don't forget to buy
         </p>
       </div>
 

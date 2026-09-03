@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import Cropper from 'react-easy-crop';
 import { X, Info } from 'lucide-react';
+import toast from 'react-hot-toast';
 import type { Area } from 'react-easy-crop';
 
 type CropPreset = {
@@ -155,10 +156,17 @@ export default function ImageCropModal({
     setIsProcessing(true);
     try {
       const image = new window.Image();
-      image.src = imageSrc;
-
-      await new Promise((resolve) => {
+      image.crossOrigin = 'anonymous'; // Enable CORS for external images
+      
+      // Wait for image to load
+      await new Promise((resolve, reject) => {
         image.onload = resolve;
+        image.onerror = reject;
+        image.src = imageSrc;
+        // If image is already loaded (cached), resolve immediately
+        if (image.complete && image.naturalHeight !== 0) {
+          resolve(null);
+        }
       });
 
       const canvas = document.createElement('canvas');
@@ -198,10 +206,12 @@ export default function ImageCropModal({
 
         const preview = canvas.toDataURL('image/png');
         onCropComplete(file, preview);
+        toast.success('Image cropped successfully!');
         onClose();
       }, 'image/png');
     } catch (err) {
       console.error('Crop error:', err);
+      toast.error('Failed to crop image. Please try again.');
     } finally {
       setIsProcessing(false);
     }
@@ -215,31 +225,32 @@ export default function ImageCropModal({
         className="fixed inset-0 bg-black/60 z-50 transition-opacity"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 sm:p-6 border-b bg-gradient-to-r from-primary/5 to-primary/2 shrink-0">
+          <div className="flex items-center justify-between p-3 sm:p-4 md:p-6 border-b bg-gradient-to-r from-primary/5 to-primary/2 shrink-0">
             <div>
-              <h2 className="text-lg sm:text-xl font-bold text-gray-900">
+              <h2 className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
                 Crop Banner Image
               </h2>
-              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+              <p className="text-[10px] sm:text-xs md:text-sm text-gray-500 mt-0.5">
                 Adjust the crop area to fit your banner perfectly
               </p>
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+              className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
             >
-              <X size={20} />
+              <X size={18} className="sm:hidden" />
+              <X size={20} className="hidden sm:block" />
             </button>
           </div>
 
           {/* Main Content */}
-          <div className="flex-1 overflow-y-auto flex flex-col lg:flex-row gap-4 p-4 sm:p-6">
+          <div className="flex-1 overflow-y-auto flex flex-col lg:flex-row gap-3 sm:gap-4 p-3 sm:p-4 md:p-6">
             {/* Crop Area */}
             <div className="flex-1 flex flex-col min-h-0">
-              <div className="relative bg-gray-900 rounded-xl overflow-hidden flex-1 mb-3">
+              <div className="relative bg-gray-900 rounded-lg sm:rounded-xl overflow-hidden flex-1 mb-2 sm:mb-3 min-h-[250px] sm:min-h-[300px]">
                 <Cropper
                   image={imageSrc}
                   crop={crop}
@@ -254,8 +265,8 @@ export default function ImageCropModal({
               </div>
 
               {/* Zoom Slider */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold text-gray-600 whitespace-nowrap">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-600 whitespace-nowrap">
                   Zoom:
                 </span>
                 <input
@@ -265,25 +276,25 @@ export default function ImageCropModal({
                   step={0.1}
                   value={zoom}
                   onChange={(e) => setZoom(Number(e.target.value))}
-                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary"
+                  className="flex-1 h-1.5 sm:h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary"
                 />
-                <span className="text-xs font-semibold text-gray-600 w-10 text-right">
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-600 w-8 sm:w-10 text-right">
                   {zoom.toFixed(1)}x
                 </span>
               </div>
             </div>
 
             {/* Sidebar: Presets & Info */}
-            <div className="w-full lg:w-64 flex flex-col gap-4 pb-4 lg:pb-0">
+            <div className="w-full lg:w-64 flex flex-col gap-3 sm:gap-4 pb-3 sm:pb-4 lg:pb-0">
               {/* Size Info Card */}
               {croppedAreaPixels && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
-                  <p className="text-xs font-semibold text-blue-900">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 sm:p-3 space-y-1.5 sm:space-y-2">
+                  <p className="text-[10px] sm:text-xs font-semibold text-blue-900">
                     Crop Dimensions
                   </p>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-blue-800">
+                  <div className="grid grid-cols-2 gap-2 text-[10px] sm:text-xs text-blue-800">
                     <div>
-                      <span className="text-[10px] text-blue-600 font-semibold">
+                      <span className="text-[9px] sm:text-[10px] text-blue-600 font-semibold">
                         Width
                       </span>
                       <p className="font-bold">
@@ -291,7 +302,7 @@ export default function ImageCropModal({
                       </p>
                     </div>
                     <div>
-                      <span className="text-[10px] text-blue-600 font-semibold">
+                      <span className="text-[9px] sm:text-[10px] text-blue-600 font-semibold">
                         Height
                       </span>
                       <p className="font-bold">
@@ -303,11 +314,11 @@ export default function ImageCropModal({
               )}
 
               {/* Preset Selector */}
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-700">
+              <div className="space-y-1.5 sm:space-y-2">
+                <p className="text-[10px] sm:text-xs font-semibold text-gray-700">
                   Crop Presets
                 </p>
-                <div className="space-y-1 max-h-64 overflow-y-auto scrollbar-thin">
+                <div className="space-y-1 max-h-48 sm:max-h-64 overflow-y-auto scrollbar-thin">
                   {Object.entries(CROP_PRESETS).map(([key, p]) => (
                     <button
                       key={key}
@@ -318,7 +329,7 @@ export default function ImageCropModal({
                           setCustomHeight(p.height);
                         }
                       }}
-                      className={`w-full text-left px-3 py-2 rounded-lg transition-all text-xs font-medium border ${
+                      className={`w-full text-left px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all text-[10px] sm:text-xs font-medium border ${
                         selectedPreset === key
                           ? 'bg-primary text-white border-primary shadow-md'
                           : 'bg-white text-gray-700 border-gray-200 hover:border-primary/50 hover:bg-gray-50'
@@ -326,7 +337,7 @@ export default function ImageCropModal({
                     >
                       <div className="font-semibold">{p.label}</div>
                       <div
-                        className={`text-[10px] mt-0.5 ${
+                        className={`text-[9px] sm:text-[10px] mt-0.5 ${
                           selectedPreset === key
                             ? 'text-primary-light/80'
                             : 'text-gray-500'
@@ -341,13 +352,13 @@ export default function ImageCropModal({
 
               {/* Custom Dimensions */}
               {selectedPreset === 'custom' && (
-                <div className="space-y-2 pt-2 border-t">
-                  <p className="text-xs font-semibold text-gray-700">
+                <div className="space-y-1.5 sm:space-y-2 pt-1.5 sm:pt-2 border-t">
+                  <p className="text-[10px] sm:text-xs font-semibold text-gray-700">
                     Custom Dimensions
                   </p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-600 block mb-1">
+                      <label className="text-[9px] sm:text-[10px] font-semibold text-gray-600 block mb-1">
                         Width (px)
                       </label>
                       <input
@@ -356,11 +367,11 @@ export default function ImageCropModal({
                         max={4000}
                         value={customWidth}
                         onChange={(e) => setCustomWidth(Number(e.target.value))}
-                        className="w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
+                        className="w-full px-2 py-1 sm:py-1.5 border rounded-lg text-[10px] sm:text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-600 block mb-1">
+                      <label className="text-[9px] sm:text-[10px] font-semibold text-gray-600 block mb-1">
                         Height (px)
                       </label>
                       <input
@@ -369,7 +380,7 @@ export default function ImageCropModal({
                         max={4000}
                         value={customHeight}
                         onChange={(e) => setCustomHeight(Number(e.target.value))}
-                        className="w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
+                        className="w-full px-2 py-1 sm:py-1.5 border rounded-lg text-[10px] sm:text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
                       />
                     </div>
                   </div>
@@ -377,14 +388,15 @@ export default function ImageCropModal({
               )}
 
               {/* Preset Info */}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 space-y-1">
-                <div className="flex gap-2">
-                  <Info size={14} className="shrink-0 mt-0.5 text-amber-600" />
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 sm:p-3 text-[10px] sm:text-xs text-amber-800 space-y-1">
+                <div className="flex gap-1.5 sm:gap-2">
+                  <Info size={12} className="shrink-0 mt-0.5 text-amber-600 sm:hidden" />
+                  <Info size={14} className="shrink-0 mt-0.5 text-amber-600 hidden sm:block" />
                   <div>
-                    <p className="font-semibold text-amber-900 mb-1">
+                    <p className="font-semibold text-amber-900 mb-0.5 sm:mb-1">
                       {preset.label}
                     </p>
-                    <p className="text-[11px] text-amber-700">
+                    <p className="text-[9px] sm:text-[11px] text-amber-700">
                       {preset.hint}
                     </p>
                   </div>
@@ -394,17 +406,17 @@ export default function ImageCropModal({
           </div>
 
           {/* Footer Actions */}
-          <div className="flex gap-3 p-4 sm:p-6 border-t bg-gray-50 shrink-0">
+          <div className="flex gap-2 sm:gap-3 p-3 sm:p-4 md:p-6 border-t bg-gray-50 shrink-0">
             <button
               onClick={onClose}
-              className="flex-1 py-2.5 px-4 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition"
+              className="flex-1 py-2 sm:py-2.5 px-3 sm:px-4 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-100 transition"
             >
               Cancel
             </button>
             <button
               onClick={generateCroppedImage}
               disabled={isProcessing}
-              className="flex-1 py-2.5 px-4 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 disabled:cursor-not-allowed transition"
+              className="flex-1 py-2 sm:py-2.5 px-3 sm:px-4 bg-primary text-white rounded-lg text-xs sm:text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 disabled:cursor-not-allowed transition"
             >
               {isProcessing ? 'Processing...' : 'Apply Crop'}
             </button>

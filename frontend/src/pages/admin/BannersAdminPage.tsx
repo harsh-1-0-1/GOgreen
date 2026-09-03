@@ -918,13 +918,14 @@ function BannerDrawer({
               )}
 
               {isEdit && banner?.image_url && !imageCleared && (
-                <div className="relative rounded-lg overflow-hidden border">
+                <div className="relative rounded-lg overflow-hidden border group">
                   <img
                     src={banner.image_url}
                     alt="Current banner"
                     className="w-full h-32 object-cover"
                   />
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity gap-2">
+                  {/* Desktop hover overlay */}
+                  <div className="hidden sm:flex absolute inset-0 bg-black/40 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -945,6 +946,32 @@ function BannerDrawer({
                         }
                       }}
                       className="px-3 py-1.5 bg-primary text-white rounded text-xs font-semibold hover:bg-primary/95 transition flex items-center gap-1"
+                    >
+                      <Crop size={14} /> Crop
+                    </button>
+                  </div>
+                  {/* Mobile always-visible buttons */}
+                  <div className="sm:hidden absolute bottom-2 left-2 right-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImageCleared(true);
+                        setSelectedFile(null);
+                        setFilePreview(null);
+                      }}
+                      className="flex-1 px-3 py-1.5 bg-red-600/90 backdrop-blur-sm text-white rounded text-xs font-semibold active:bg-red-700 transition shadow-lg"
+                    >
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (banner?.image_url) {
+                          setCropImageSrc(banner.image_url);
+                          setCropModalOpen(true);
+                        }
+                      }}
+                      className="flex-1 px-3 py-1.5 bg-primary/90 backdrop-blur-sm text-white rounded text-xs font-semibold active:bg-primary transition flex items-center justify-center gap-1 shadow-lg"
                     >
                       <Crop size={14} /> Crop
                     </button>
@@ -983,11 +1010,28 @@ function BannerDrawer({
                       >
                         {filePreview ? (
                           <div className="flex flex-col items-center gap-3">
-                            <img
-                              src={filePreview}
-                              alt="Preview"
-                              className="max-h-32 mx-auto object-contain rounded"
-                            />
+                            <div className="relative w-full group">
+                              <img
+                                src={filePreview}
+                                alt="Preview"
+                                className="max-h-32 mx-auto object-contain rounded"
+                              />
+                              {/* Desktop hover crop button */}
+                              <div className="hidden sm:flex absolute inset-0 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCropImageSrc(filePreview);
+                                    setCropModalOpen(true);
+                                  }}
+                                  className="px-4 py-2 bg-primary/90 backdrop-blur-sm text-white rounded-lg hover:bg-primary transition flex items-center gap-1.5 text-xs font-semibold shadow-lg"
+                                >
+                                  <Crop size={14} /> Edit Crop
+                                </button>
+                              </div>
+                            </div>
+                            {/* Mobile always-visible crop button */}
                             <button
                               type="button"
                               onClick={(e) => {
@@ -995,7 +1039,23 @@ function BannerDrawer({
                                 setCropImageSrc(filePreview);
                                 setCropModalOpen(true);
                               }}
-                              className={`text-xs font-semibold flex items-center gap-1 ${
+                              className={`sm:hidden text-xs font-semibold flex items-center gap-1 ${
+                                watchedPlacement === 'trending'
+                                  ? 'px-4 py-2 bg-primary text-white rounded-lg active:bg-primary/90 transition shadow-md'
+                                  : 'text-primary active:text-primary/80 px-3 py-1.5'
+                              }`}
+                            >
+                              <Crop size={14} /> {watchedPlacement === 'trending' ? 'Crop to 600×600px (Required)' : 'Edit Crop'}
+                            </button>
+                            {/* Desktop crop button below image */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCropImageSrc(filePreview);
+                                setCropModalOpen(true);
+                              }}
+                              className={`hidden sm:flex text-xs font-semibold items-center gap-1 ${
                                 watchedPlacement === 'trending'
                                   ? 'px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition'
                                   : 'text-primary hover:text-primary/80'

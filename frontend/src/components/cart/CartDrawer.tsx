@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import RecommendationBar from './RecommendationBar';
+import DoNotForgetBar from './DoNotForgetBar';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
 import { getApiErrorDetail } from '@/lib/apiError';
 import { useSuggestionTiles } from '@/hooks/useSuggestionTiles';
@@ -113,58 +114,63 @@ export default function CartDrawer() {
               </div>
             </div>
           ) : (
-            items.map((item) => (
-              <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
-                <img
-                  src={item.resolved_image_url || item.product.images?.[0] || 'https://placehold.co/80x80?text=Plant'}
-                  alt={item.product.name}
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover shrink-0"
-                  loading="lazy"
-                />
-                <div className="flex-1 min-w-0">
-                  <Link
-                    to={`/products/${item.product.slug}`}
-                    className="text-sm font-medium line-clamp-1 hover:text-primary"
-                    onClick={closeDrawer}
-                  >
-                    {item.product.name}
-                  </Link>
-                  {optionSummary(item) && (
-                    <p className="text-[11px] text-gray-500 mt-0.5">{optionSummary(item)}</p>
-                  )}
-                  <p className="text-primary font-semibold text-sm mt-0.5">₹{item.unit_price}</p>
-                  {item.stock_warning && (
-                    <p className="text-[11px] text-red-500 mt-1">
-                      Only {item.available_stock} units available. Please adjust quantity.
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="flex items-center border rounded-lg">
-                      <button onClick={() => handleUpdate(item.id, item.quantity - 1)} className="p-1.5 hover:bg-gray-100 touch-target">
-                        <Minus size={14} />
-                      </button>
-                      <span className="px-2.5 text-sm font-medium">{item.quantity}</span>
-                      <button
-                        onClick={() => handleUpdate(item.id, item.quantity + 1)}
-                        disabled={item.quantity >= item.available_stock}
-                        className="p-1.5 hover:bg-gray-100 touch-target disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        <Plus size={14} />
+            <>
+              {items.map((item) => (
+                <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
+                  <img
+                    src={item.resolved_image_url || item.product.images?.[0] || 'https://placehold.co/80x80?text=Plant'}
+                    alt={item.product.name}
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover shrink-0"
+                    loading="lazy"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      to={`/products/${item.product.slug}`}
+                      className="text-sm font-medium line-clamp-1 hover:text-primary"
+                      onClick={closeDrawer}
+                    >
+                      {item.product.name}
+                    </Link>
+                    {optionSummary(item) && (
+                      <p className="text-[11px] text-gray-500 mt-0.5">{optionSummary(item)}</p>
+                    )}
+                    <p className="text-primary font-semibold text-sm mt-0.5">₹{item.unit_price}</p>
+                    {item.stock_warning && (
+                      <p className="text-[11px] text-red-500 mt-1">
+                        Only {item.available_stock} units available. Please adjust quantity.
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="flex items-center border rounded-lg">
+                        <button onClick={() => handleUpdate(item.id, item.quantity - 1)} className="p-1.5 hover:bg-gray-100 touch-target">
+                          <Minus size={14} />
+                        </button>
+                        <span className="px-2.5 text-sm font-medium">{item.quantity}</span>
+                        <button
+                          onClick={() => handleUpdate(item.id, item.quantity + 1)}
+                          disabled={item.quantity >= item.available_stock}
+                          className="p-1.5 hover:bg-gray-100 touch-target disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                      <button onClick={() => handleRemove(item.id)} className="p-1.5 text-red-400 hover:text-red-600 ml-auto touch-target">
+                        <Trash2 size={15} />
                       </button>
                     </div>
-                    <button onClick={() => handleRemove(item.id)} className="p-1.5 text-red-400 hover:text-red-600 ml-auto touch-target">
-                      <Trash2 size={15} />
-                    </button>
                   </div>
+                  <p className="text-sm font-semibold shrink-0">₹{item.line_total}</p>
                 </div>
-                <p className="text-sm font-semibold shrink-0">₹{item.line_total}</p>
-              </div>
-            ))
-          )}
+              ))}
+              
+              {/* Smart recommendations — show when cart has items */}
+              {lastAddedProduct && (
+                <RecommendationBar lastAddedProduct={lastAddedProduct} cartItems={items} />
+              )}
 
-          {/* Smart recommendations — show after add */}
-          {lastAddedProduct && items.length > 0 && (
-            <RecommendationBar lastAddedProduct={lastAddedProduct} cartItems={items} />
+              {/* Don't forget to buy section */}
+              <DoNotForgetBar cartItems={items} />
+            </>
           )}
         </div>
 
