@@ -51,6 +51,7 @@ class Category(Base):
     slug: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("categories.id"), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    banner_image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 

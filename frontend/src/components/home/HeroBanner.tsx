@@ -21,8 +21,6 @@ const FALLBACK_SLIDE: Banner = {
   is_active: true,
 };
 
-const STARBURST_CLIP =
-  'polygon(50% 0%,66% 18%,85% 5%,80% 28%,100% 35%,87% 50%,100% 65%,80% 72%,85% 95%,66% 82%,50% 100%,34% 82%,15% 95%,20% 72%,0% 65%,13% 50%,0% 35%,20% 28%,15% 5%,34% 18%)';
 
 function SlidesSkeleton() {
   return (
@@ -115,15 +113,7 @@ export default function HeroBanner() {
                 />
               )}
 
-              {slide.badge_text && (
-                <div
-                  className="absolute z-20 hidden md:flex left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[130px] h-[130px] lg:w-[148px] lg:h-[148px] items-center justify-center drop-shadow-xl"
-                  style={{
-                    clipPath: STARBURST_CLIP,
-                    backgroundColor: '#F4A261',
-                  }}
-                />
-              )}
+
             </>
           );
 

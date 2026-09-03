@@ -9,7 +9,7 @@ import { getTagStyle } from '@/components/product/productTagBadges.utils';
 import SkeletonCard from '@/components/ui/SkeletonCard';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import type { Banner } from '@/types';
+import type { Banner, Category } from '@/types';
 
 const SORT_OPTIONS = [
   { value: '', label: 'Relevance' },
@@ -171,6 +171,28 @@ function TrendingPromoBanner({
   );
 }
 
+// ─── Category Banner (mobile + desktop) ──────────────────────────────────────
+function CategoryBanner({ category }: { category: Category }) {
+  const bannerUrl = category.banner_image_url;
+  if (!bannerUrl) return null;
+
+  return (
+    <Link
+      to={`/products?category=${category.slug}`}
+      className="relative block -mx-3 mb-6 aspect-[5/2] overflow-hidden bg-gray-100 sm:mx-0 sm:mb-8 sm:rounded-2xl lg:aspect-[16/5]"
+      aria-label={`${category.name} banner`}
+    >
+      <img
+        src={bannerUrl}
+        alt={category.name}
+        className="absolute inset-0 h-full w-full object-cover"
+        loading="eager"
+      />
+    </Link>
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function FiltersSidebar({
   selectedCategory,
   onCategoryChange,
@@ -325,6 +347,16 @@ export default function ProductsPage() {
   });
   const { data: trendingBanners = [], isLoading: trendingBannersLoading } =
     useBanners('trending');
+  const { data: categories } = useCategories();
+  const activeCategory = useMemo(
+    () =>
+      category
+        ? (categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? []).find(
+            (c) => c.slug === category,
+          )
+        : undefined,
+    [category, categories],
+  );
 
   const isTrendingPage =
     sort === 'popular' &&
@@ -381,6 +413,11 @@ export default function ProductsPage() {
           images={trendingBannerImages}
           isLoading={isLoading || trendingBannersLoading}
         />
+      )}
+
+      {/* Category banner — shown on all screen sizes when a category is active */}
+      {!isTrendingPage && activeCategory?.banner_image_url && (
+        <CategoryBanner category={activeCategory} />
       )}
 
       {/* Header */}
