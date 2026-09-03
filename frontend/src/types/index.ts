@@ -135,6 +135,8 @@ export interface ProductReview {
   rating: number;
   title: string | null;
   body: string | null;
+  media_url: string | null;
+  youtube_url: string | null;
   is_verified_purchase: boolean;
   helpful_count: number;
   created_at: string;

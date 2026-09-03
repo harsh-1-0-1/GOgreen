@@ -8,6 +8,7 @@ class ReviewCreate(BaseModel):
     title: str | None = Field(default=None, max_length=140)
     body: str | None = Field(default=None, max_length=4000)
     author_name: str | None = Field(default=None, max_length=255)
+    youtube_url: str | None = Field(default=None, max_length=512)
 
 
 class ReviewResponse(BaseModel):
@@ -18,6 +19,8 @@ class ReviewResponse(BaseModel):
     rating: int
     title: str | None
     body: str | None
+    media_url: str | None
+    youtube_url: str | None
     is_verified_purchase: bool
     helpful_count: int
     created_at: datetime

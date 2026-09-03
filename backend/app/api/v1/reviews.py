@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_active_user, get_optional_user
@@ -8,6 +8,7 @@ from app.db.models import User
 from app.db.session import get_db
 from app.schemas.review import ReviewCreate, ReviewListResponse, ReviewResponse
 from app.services import review_service
+from app.utils.image_upload import upload_image_file
 
 router = APIRouter(tags=["reviews"])
 
@@ -46,12 +47,32 @@ async def list_product_reviews(
 )
 async def create_product_review(
     product_id: int,
-    payload: ReviewCreate,
+    rating: Annotated[int, Form(ge=1, le=5)],
+    title: Annotated[str | None, Form()] = None,
+    body: Annotated[str | None, Form()] = None,
+    author_name: Annotated[str | None, Form()] = None,
+    youtube_url: Annotated[str | None, Form()] = None,
+    media: UploadFile | None = File(default=None),
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
+    # Upload media file if provided
+    media_url = None
+    if media and media.filename:
+        media_key = await upload_image_file(media, folder="reviews", entity_id=product_id)
+        media_url = media_key
+    
+    # Create payload
+    payload = ReviewCreate(
+        rating=rating,
+        title=title,
+        body=body,
+        author_name=author_name,
+        youtube_url=youtube_url,
+    )
+    
     try:
-        review = await review_service.create_or_update_review(db, product_id, user, payload)
+        review = await review_service.create_or_update_review(db, product_id, user, payload, media_url)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return review_service.to_review_response(review)

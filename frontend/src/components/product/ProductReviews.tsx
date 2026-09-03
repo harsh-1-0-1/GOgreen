@@ -94,6 +94,24 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function extractYouTubeId(url: string): string | null {
+  if (!url) return null;
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /^([a-zA-Z0-9_-]{11})$/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function isVideoFile(url: string): boolean {
+  if (!url) return false;
+  return /\.(mp4|webm|mov)$/i.test(url);
+}
+
 export default function ProductReviews({ productId }: { productId: number }) {
   const [sortBy, setSortBy] = useState<'newest' | 'highest' | 'lowest'>('newest');
   const [ratingFilter, setRatingFilter] = useState<number | undefined>();
@@ -105,6 +123,7 @@ export default function ProductReviews({ productId }: { productId: number }) {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaName, setMediaName] = useState('');
 
   const { openAuthModal } = useAuthStore();
@@ -154,12 +173,15 @@ export default function ProductReviews({ productId }: { productId: number }) {
         title: title.trim() || undefined,
         body: body.trim() || undefined,
         author_name: displayName.trim() || undefined,
+        youtube_url: youtubeUrl.trim() || undefined,
+        media: mediaFile || undefined,
       });
       setTitle('');
       setBody('');
       setDisplayName('');
       setEmail('');
       setYoutubeUrl('');
+      setMediaFile(null);
       setMediaName('');
       setRating(5);
       setIsWriting(false);
@@ -171,7 +193,13 @@ export default function ProductReviews({ productId }: { productId: number }) {
 
   function handleMediaChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    setMediaName(file?.name ?? '');
+    if (file) {
+      setMediaFile(file);
+      setMediaName(file.name);
+    } else {
+      setMediaFile(null);
+      setMediaName('');
+    }
   }
 
   async function markHelpful(reviewId: number) {
@@ -401,6 +429,42 @@ export default function ProductReviews({ productId }: { productId: number }) {
 
                   {review.title && <h4 className="mt-4 text-base font-bold text-gray-950">{review.title}</h4>}
                   {review.body && <p className="mt-2 text-sm leading-6 text-gray-700">{review.body}</p>}
+
+                  {/* Display uploaded media (image or video) */}
+                  {review.media_url && (
+                    <div className="mt-4">
+                      {isVideoFile(review.media_url) ? (
+                        <video
+                          src={review.media_url}
+                          controls
+                          className="max-h-80 w-full rounded-lg border border-gray-200 object-contain"
+                        >
+                          Your browser does not support the video tag.
+                        </video>
+                      ) : (
+                        <img
+                          src={review.media_url}
+                          alt="Review media"
+                          className="max-h-80 w-full rounded-lg border border-gray-200 object-contain"
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Display YouTube embed */}
+                  {review.youtube_url && extractYouTubeId(review.youtube_url) && (
+                    <div className="mt-4">
+                      <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-gray-200">
+                        <iframe
+                          src={`https://www.youtube.com/embed/${extractYouTubeId(review.youtube_url)}`}
+                          title="YouTube video player"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          className="absolute inset-0 h-full w-full"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   <button
                     type="button"

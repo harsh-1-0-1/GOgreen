@@ -111,6 +111,8 @@ class ProductReview(Base):
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str | None] = mapped_column(String(140), nullable=True)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    youtube_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     status: Mapped[ReviewStatus] = mapped_column(Enum(ReviewStatus), default=ReviewStatus.PUBLISHED, index=True)
     is_verified_purchase: Mapped[bool] = mapped_column(Boolean, default=False)
     helpful_count: Mapped[int] = mapped_column(Integer, default=0)
