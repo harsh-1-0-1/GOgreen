@@ -29,7 +29,7 @@ class GoogleCallbackRequest(BaseModel):
 
 
 class GuestRequest(BaseModel):
-    email: EmailStr
+    email: str  # Can be email or mobile number
     full_name: str = Field(min_length=1, max_length=255)
     phone: str | None = None
 
