@@ -93,10 +93,11 @@ def make_list_cache_key(
     max_price: float | None,
     tags: str | None,
     sort_by: str | None,
+    display_section: str | None,
     page: int,
     limit: int,
 ) -> str:
-    raw = f"{category_slug}:{search}:{min_price}:{max_price}:{tags}:{sort_by}:{page}:{limit}"
+    raw = f"{category_slug}:{search}:{min_price}:{max_price}:{tags}:{sort_by}:{display_section}:{page}:{limit}"
     h = hashlib.md5(raw.encode()).hexdigest()[:12]
     return f"products:{h}"
 
@@ -116,6 +117,7 @@ async def list_products(
     max_price: float | None = None,
     tags: str | None = None,
     sort_by: str | None = None,
+    display_section: str | None = None,
     page: int = 1,
     limit: int = 20,
 ) -> tuple[list[Product], int, int]:
@@ -124,16 +126,25 @@ async def list_products(
     count_q = select(func.count()).select_from(Product).where(Product.is_active == True)  # noqa: E712
 
     if category_slug:
-        cat_ids = select(Category.id).where(
+        # Get the category that matches the slug
+        parent_cat_id = select(Category.id).where(Category.slug == category_slug).scalar_subquery()
+        # Get all products in this category or its children
+        query = query.where(
             or_(
-                Category.slug == category_slug,
-                Category.parent_id.in_(
-                    select(Category.id).where(Category.slug == category_slug)
-                ),
+                Product.category_id == parent_cat_id,
+                Product.category_id.in_(
+                    select(Category.id).where(Category.parent_id == parent_cat_id)
+                )
             )
         )
-        query = query.where(Product.category_id.in_(cat_ids))
-        count_q = count_q.where(Product.category_id.in_(cat_ids))
+        count_q = count_q.where(
+            or_(
+                Product.category_id == parent_cat_id,
+                Product.category_id.in_(
+                    select(Category.id).where(Category.parent_id == parent_cat_id)
+                )
+            )
+        )
 
     if search:
         pattern = f"%{search}%"
@@ -157,6 +168,10 @@ async def list_products(
             filt = _tag_filter(db, tag)
             query = query.where(filt)
             count_q = count_q.where(filt)
+
+    if display_section:
+        query = query.where(Product.display_section == display_section)
+        count_q = count_q.where(Product.display_section == display_section)
 
     match sort_by:
         case "price_asc":

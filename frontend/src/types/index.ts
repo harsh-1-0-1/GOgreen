@@ -39,6 +39,7 @@ export interface Product {
   sunlight: string | null;
   watering: string | null;
   badge: string | null;
+  display_section: string | null;
   is_active: boolean;
   created_at: string;
   variants: ProductVariants | null;

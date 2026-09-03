@@ -67,6 +67,7 @@ const productSchema = z.object({
   stock_qty: z.coerce.number().int().min(0, 'Stock cannot be negative'),
   category_id: z.coerce.number().int().positive('Please select a category'),
   badge: z.string().optional(),
+  display_section: z.string().optional(),
   how_to_guide: z.string().optional(),
   tags: z.array(z.object({ value: z.string() })).optional(),
   care_tips: z.array(z.object({ value: z.string() })).optional(),
@@ -249,6 +250,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       stock_qty: 0,
       category_id: undefined,
       badge: '',
+      display_section: '',
       how_to_guide: '',
       tags: [],
       care_tips: [],
@@ -266,6 +268,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       stock_qty: p.stock_qty ?? 0,
       category_id: p.category_id,
       badge: p.badge || '',
+      display_section: p.display_section || '',
       how_to_guide: p.how_to_guide || '',
       tags: p.tags?.length ? p.tags.map((value) => ({ value })) : [],
       care_tips: p.care_tips?.length ? p.care_tips.map((value) => ({ value })) : [],
@@ -535,6 +538,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         stock_qty: number;
         category_id: number;
         badge: string | null;
+        display_section: string | null;
         how_to_guide: string | null;
         tags: string[];
         care_tips: string[];
@@ -548,6 +552,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         stock_qty: totalStock,
         category_id: data.category_id,
         badge: data.badge || null,
+        display_section: data.display_section || null,
         how_to_guide: data.how_to_guide?.trim() || null,
         tags: data.tags?.map((t) => t.value).filter(Boolean) || [],
         care_tips: data.care_tips?.map((t) => t.value).filter(Boolean) || [],
@@ -845,14 +850,26 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     {errors.category_id && <p className="text-xs text-red-500 mt-1">{errors.category_id.message}</p>}
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Product Tag / Badge</label>
-                    <input
-                      {...register('badge')}
-                      placeholder="e.g., Bestseller, New Arrival, Sale"
-                      className={inputClass}
-                    />
-                    <p className="text-[11px] text-gray-400 mt-1">A colorful label shown over the product image.</p>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Display Section</label>
+                    <select {...register('display_section')} className={inputClass}>
+                      <option value="">None (Hidden from sections)</option>
+                      <option value="new_arrival">🆕 New Arrivals</option>
+                      <option value="trending">🔥 Trending</option>
+                      <option value="featured">⭐ Featured</option>
+                      <option value="seasonal">🌸 Seasonal</option>
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1">Where this product appears on the home page.</p>
                   </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">Product Tag / Badge</label>
+                  <input
+                    {...register('badge')}
+                    placeholder="e.g., Bestseller, New Arrival, Sale"
+                    className={inputClass}
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">A colorful label shown over the product image.</p>
                 </div>
 
                 <div>

@@ -40,12 +40,13 @@ async def list_products(
     max_price: float | None = None,
     tags: str | None = None,
     sort_by: str | None = None,
+    display_section: str | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ):
     response.headers["Cache-Control"] = "no-cache"
     cache_key = product_service.make_list_cache_key(
-        category_slug, search, min_price, max_price, tags, sort_by, page, limit,
+        category_slug, search, min_price, max_price, tags, sort_by, display_section, page, limit,
     )
     cached = await cache_get(cache_key)
     if cached:
@@ -59,6 +60,7 @@ async def list_products(
         max_price=max_price,
         tags=tags,
         sort_by=sort_by,
+        display_section=display_section,
         page=page,
         limit=limit,
     )

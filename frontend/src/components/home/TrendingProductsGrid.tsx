@@ -138,14 +138,14 @@ export default function TrendingProductsGrid({
   tags?: string;
   limit?: number;
 }) {
-  const { data, isLoading } = useProducts({ tags, limit });
+  const { data, isLoading } = useProducts({ tags, limit, display_section: 'trending' });
   const products = data?.items ?? [];
 
   if (!isLoading && products.length === 0) return null;
 
   const viewAllHref = tags
-    ? `/products?tags=${encodeURIComponent(tags)}&collection_title=${encodeURIComponent(title)}`
-    : `/products?collection_title=${encodeURIComponent(title)}`;
+    ? `/products?tags=${encodeURIComponent(tags)}&display_section=trending&collection_title=${encodeURIComponent(title)}`
+    : `/products?display_section=trending&collection_title=${encodeURIComponent(title)}`;
 
   return (
     <section className="w-full py-8 sm:py-10 bg-white">

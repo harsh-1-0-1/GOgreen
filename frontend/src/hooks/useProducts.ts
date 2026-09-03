@@ -9,6 +9,7 @@ interface ProductFilters {
   max_price?: number;
   tags?: string;
   sort_by?: string;
+  display_section?: string;
   page?: number;
   limit?: number;
 }

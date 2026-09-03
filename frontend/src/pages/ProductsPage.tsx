@@ -301,6 +301,7 @@ export default function ProductsPage() {
   const search = searchParams.get('search') || '';
   const collectionTitle = searchParams.get('collection_title') || '';
   const sort = searchParams.get('sort_by') || '';
+  const displaySection = searchParams.get('display_section') || '';
   const page = Number(searchParams.get('page')) || 1;
   const [minPrice, setMinPrice] = useState(searchParams.get('min_price') || '');
   const [maxPrice, setMaxPrice] = useState(searchParams.get('max_price') || '');
@@ -339,6 +340,7 @@ export default function ProductsPage() {
     category_slug: category || undefined,
     search: search || undefined,
     sort_by: sort || undefined,
+    display_section: displaySection || undefined,
     min_price: minPrice ? Number(minPrice) : undefined,
     max_price: maxPrice ? Number(maxPrice) : undefined,
     tags: selectedTags.length ? selectedTags.join(',') : undefined,

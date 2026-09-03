@@ -91,6 +91,7 @@ class ProductCreate(BaseModel):
     sunlight: str | None = None
     watering: str | None = None
     badge: str | None = None
+    display_section: str | None = None
     is_active: bool = True
     variants: dict | None = None
     promise_banner_image: str | None = None  # relative storage key
@@ -118,6 +119,7 @@ class ProductUpdate(BaseModel):
     sunlight: str | None = None
     watering: str | None = None
     badge: str | None = None
+    display_section: str | None = None
     is_active: bool | None = None
     # null  → field omitted from update (existing variants are preserved).
     # {}    → explicitly clear all variant data.
@@ -150,6 +152,7 @@ class ProductResponse(BaseModel):
     sunlight: str | None
     watering: str | None
     badge: str | None
+    display_section: str | None
     is_active: bool
     created_at: datetime
     variants: dict | None = None

@@ -136,12 +136,12 @@ export default function NewArrivalsGrid({
   subtitle?: string;
   limit?: number;
 }) {
-  const { data, isLoading } = useProducts({ limit, sort_by: 'newest' });
+  const { data, isLoading } = useProducts({ limit, sort_by: 'newest', display_section: 'new_arrival' });
   const products = data?.items ?? [];
 
   if (!isLoading && products.length === 0) return null;
 
-  const viewAllHref = `/products?sort_by=newest&collection_title=${encodeURIComponent(title)}`;
+  const viewAllHref = `/products?sort_by=newest&display_section=new_arrival&collection_title=${encodeURIComponent(title)}`;
 
   return (
     <section className="w-full py-8 sm:py-10 bg-white">
