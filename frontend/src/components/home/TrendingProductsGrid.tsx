@@ -145,7 +145,7 @@ export default function TrendingProductsGrid({
 
   const viewAllHref = tags
     ? `/products?tags=${encodeURIComponent(tags)}&collection_title=${encodeURIComponent(title)}`
-    : `/products?sort_by=popular&collection_title=${encodeURIComponent(title)}`;
+    : `/products?collection_title=${encodeURIComponent(title)}`;
 
   return (
     <section className="w-full py-8 sm:py-10 bg-white">

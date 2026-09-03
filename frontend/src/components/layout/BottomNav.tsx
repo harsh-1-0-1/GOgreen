@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/authStore';
 const NAV_ITEMS = [
   { to: '/', icon: Home, label: 'Home' },
   { to: '/products', icon: LayoutGrid, label: 'Collections' },
-  { to: '/products?sort_by=popular', icon: TrendingUp, label: 'Trending' },
+  { to: '/products', icon: TrendingUp, label: 'Trending' },
   { to: '/account', icon: UserCircle, label: 'Account' },
 ];
 

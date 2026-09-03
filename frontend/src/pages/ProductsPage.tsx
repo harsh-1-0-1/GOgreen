@@ -40,7 +40,7 @@ function TrendingPromoBanner({
       title: 'Perfect plants for effortless indoor garden',
       subtitle: 'starting ₹699',
       cta_text: 'SHOP NOW',
-      cta_link: '/products?sort_by=popular',
+      cta_link: '/products',
       image_url: images[0] || undefined,
       bg_color: '#e9dfc9',
       text_color: '#ffeb3b',
@@ -53,7 +53,7 @@ function TrendingPromoBanner({
       title: 'Fresh greens for every bright corner',
       subtitle: 'price drop',
       cta_text: 'SHOP NOW',
-      cta_link: '/products?sort_by=popular',
+      cta_link: '/products',
       image_url: images[1] || images[0] || undefined,
       bg_color: '#164d3b',
       text_color: '#ffeb3b',
@@ -66,7 +66,7 @@ function TrendingPromoBanner({
       title: 'Easy care picks for your home',
       subtitle: 'trending now',
       cta_text: 'SHOP NOW',
-      cta_link: '/products?sort_by=popular',
+      cta_link: '/products',
       image_url: images[2] || images[0] || undefined,
       bg_color: '#f1dfbd',
       text_color: '#ffeb3b',
@@ -118,7 +118,7 @@ function TrendingPromoBanner({
           return (
             <Link
               key={slide.id || slideIndex}
-              to={slide.cta_link || '/products?sort_by=popular'}
+              to={slide.cta_link || '/products'}
               className="relative h-full w-full shrink-0 overflow-hidden block"
               style={{ backgroundColor: slide.bg_color || '#e9dfc9' }}
             >
