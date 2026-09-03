@@ -368,6 +368,7 @@ export interface BlogListResponse {
 export interface StoryProductInfo {
   id: number;
   name: string;
+  slug: string;
   price: number;
   original_price?: number | null;
   thumbnail?: string | null;
