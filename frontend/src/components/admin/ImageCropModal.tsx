@@ -155,36 +155,48 @@ export default function ImageCropModal({
 
     setIsProcessing(true);
     try {
-      const image = new window.Image();
-      image.crossOrigin = 'anonymous'; // Enable CORS for external images
+      // Try to fetch the image through fetch API first (works with CORS)
+      // If that fails, fall back to direct image loading
+      let imageBlob: Blob;
+      let imageBitmapSrc: ImageBitmap | HTMLImageElement;
       
-      // Wait for image to load
-      await new Promise((resolve, reject) => {
-        image.onload = () => {
-          // Ensure the image has fully loaded with valid dimensions
-          if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+      try {
+        // Try fetch first - this respects CORS but may work better with CDN
+        const response = await fetch(imageSrc);
+        if (!response.ok) throw new Error('Fetch failed');
+        imageBlob = await response.blob();
+        
+        // Use createImageBitmap for better performance and CORS handling
+        imageBitmapSrc = await createImageBitmap(imageBlob);
+      } catch (fetchError) {
+        console.warn('Fetch approach failed, trying direct image load:', fetchError);
+        
+        // Fallback to traditional image loading
+        const image = new window.Image();
+        image.crossOrigin = 'anonymous';
+        
+        await new Promise((resolve, reject) => {
+          image.onload = () => {
+            if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+              resolve(null);
+            } else {
+              reject(new Error('Image loaded but has invalid dimensions'));
+            }
+          };
+          image.onerror = () => reject(new Error('Failed to load image'));
+          
+          image.src = imageSrc;
+          
+          if (image.complete && image.naturalWidth > 0 && image.naturalHeight > 0) {
             resolve(null);
-          } else {
-            reject(new Error('Image loaded but has invalid dimensions'));
           }
-        };
-        image.onerror = () => reject(new Error('Failed to load image'));
+        });
         
-        // Set src after attaching event listeners
-        image.src = imageSrc;
-        
-        // If image is already loaded (cached), manually trigger onload
-        if (image.complete && image.naturalWidth > 0 && image.naturalHeight > 0) {
-          resolve(null);
-        }
-      });
+        imageBitmapSrc = image;
+      }
 
       const canvas = document.createElement('canvas');
       
-      // Use natural dimensions for scale calculation (original image size)
-      const scaleX = image.naturalWidth / image.width || 1;
-      const scaleY = image.naturalHeight / image.height || 1;
-
       // Set canvas to desired output size
       canvas.width = croppedAreaPixels.width;
       canvas.height = croppedAreaPixels.height;
@@ -194,7 +206,7 @@ export default function ImageCropModal({
 
       // Draw the cropped portion
       ctx.drawImage(
-        image,
+        imageBitmapSrc,
         croppedAreaPixels.x,
         croppedAreaPixels.y,
         croppedAreaPixels.width,
@@ -204,6 +216,11 @@ export default function ImageCropModal({
         croppedAreaPixels.width,
         croppedAreaPixels.height
       );
+
+      // Clean up ImageBitmap if used
+      if ('close' in imageBitmapSrc) {
+        imageBitmapSrc.close();
+      }
 
       canvas.toBlob((blob) => {
         if (!blob) {
@@ -225,7 +242,7 @@ export default function ImageCropModal({
       }, 'image/png');
     } catch (err) {
       console.error('Crop error:', err);
-      toast.error(`Failed to crop image: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      toast.error(`Failed to crop image: ${err instanceof Error ? err.message : 'Unknown error'}. Please check CORS configuration.`);
     } finally {
       setIsProcessing(false);
     }
