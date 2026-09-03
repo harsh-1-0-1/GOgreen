@@ -20,13 +20,14 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Image as ImageIcon, Plus, X, Info, Layout, CheckCircle } from 'lucide-react';
+import { GripVertical, Image as ImageIcon, Plus, X, Info, Layout, CheckCircle, Crop } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import api from '@/lib/api';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useCategories } from '@/hooks/useCategories';
 import { getApiErrorDetail } from '@/lib/apiError';
+import ImageCropModal from '@/components/admin/ImageCropModal';
 import type { Banner, Category } from '@/types';
 
 const PLACEMENTS = [
@@ -511,6 +512,8 @@ function BannerDrawer({
   const [imageCleared, setImageCleared] = useState(false);
   const [fileError, setFileError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
 
   // react-hook-form's `watch()` is a React-Compiler-incompatible library (cannot be
   // memoized safely); the live banner preview needs its reactive values, so the
@@ -546,8 +549,18 @@ function BannerDrawer({
       setFileError('Only JPG, PNG, or WebP files accepted');
       return;
     }
-    setSelectedFile(file);
-    setFilePreview(URL.createObjectURL(file));
+    // Open crop modal instead of directly setting preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setCropImageSrc(e.target?.result as string);
+      setCropModalOpen(true);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleCropComplete(croppedFile: File, preview: string) {
+    setSelectedFile(croppedFile);
+    setFilePreview(preview);
     setImageCleared(false);
   }
 
@@ -878,7 +891,7 @@ function BannerDrawer({
                     alt="Current banner"
                     className="w-full h-32 object-cover"
                   />
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity gap-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -886,9 +899,21 @@ function BannerDrawer({
                         setSelectedFile(null);
                         setFilePreview(null);
                       }}
-                      className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold"
+                      className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold hover:bg-red-700 transition"
                     >
                       Replace Image
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (banner?.image_url) {
+                          setCropImageSrc(banner.image_url);
+                          setCropModalOpen(true);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-primary text-white rounded text-xs font-semibold hover:bg-primary/95 transition flex items-center gap-1"
+                    >
+                      <Crop size={14} /> Crop
                     </button>
                   </div>
                 </div>
@@ -924,11 +949,24 @@ function BannerDrawer({
                         className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
                       >
                         {filePreview ? (
-                          <img
-                            src={filePreview}
-                            alt="Preview"
-                            className="max-h-32 mx-auto object-contain rounded"
-                          />
+                          <div className="flex flex-col items-center gap-3">
+                            <img
+                              src={filePreview}
+                              alt="Preview"
+                              className="max-h-32 mx-auto object-contain rounded"
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCropImageSrc(filePreview);
+                                setCropModalOpen(true);
+                              }}
+                              className="text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1"
+                            >
+                              <Crop size={14} /> Edit Crop
+                            </button>
+                          </div>
                         ) : (
                           <div className="text-gray-400">
                             <ImageIcon
@@ -1071,6 +1109,17 @@ function BannerDrawer({
           </div>
         </form>
       </div>
+
+      <ImageCropModal
+        isOpen={cropModalOpen}
+        imageSrc={cropImageSrc || ''}
+        placement={watchedPlacement}
+        onCropComplete={handleCropComplete}
+        onClose={() => {
+          setCropModalOpen(false);
+          setCropImageSrc(null);
+        }}
+      />
     </>
   );
 }
