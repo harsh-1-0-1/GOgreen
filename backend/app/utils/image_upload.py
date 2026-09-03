@@ -148,6 +148,10 @@ def _upload_to_s3_sync(file_bytes: bytes, key: str, content_type: str) -> None:
         Key=key,
         Body=file_bytes,
         ContentType=content_type,
+        CacheControl="public, max-age=31536000, immutable",  # Cache for 1 year
+        Metadata={
+            "uploaded-by": "plantoga-backend",
+        },
     )
 
 

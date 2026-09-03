@@ -160,31 +160,45 @@ export default function ImageCropModal({
       
       // Wait for image to load
       await new Promise((resolve, reject) => {
-        image.onload = resolve;
-        image.onerror = reject;
+        image.onload = () => {
+          // Ensure the image has fully loaded with valid dimensions
+          if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+            resolve(null);
+          } else {
+            reject(new Error('Image loaded but has invalid dimensions'));
+          }
+        };
+        image.onerror = () => reject(new Error('Failed to load image'));
+        
+        // Set src after attaching event listeners
         image.src = imageSrc;
-        // If image is already loaded (cached), resolve immediately
-        if (image.complete && image.naturalHeight !== 0) {
+        
+        // If image is already loaded (cached), manually trigger onload
+        if (image.complete && image.naturalWidth > 0 && image.naturalHeight > 0) {
           resolve(null);
         }
       });
 
       const canvas = document.createElement('canvas');
-      const scaleX = image.naturalWidth / image.width;
-      const scaleY = image.naturalHeight / image.height;
+      
+      // Use natural dimensions for scale calculation (original image size)
+      const scaleX = image.naturalWidth / image.width || 1;
+      const scaleY = image.naturalHeight / image.height || 1;
 
+      // Set canvas to desired output size
       canvas.width = croppedAreaPixels.width;
       canvas.height = croppedAreaPixels.height;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Failed to get canvas context');
 
+      // Draw the cropped portion
       ctx.drawImage(
         image,
-        croppedAreaPixels.x * scaleX,
-        croppedAreaPixels.y * scaleY,
-        croppedAreaPixels.width * scaleX,
-        croppedAreaPixels.height * scaleY,
+        croppedAreaPixels.x,
+        croppedAreaPixels.y,
+        croppedAreaPixels.width,
+        croppedAreaPixels.height,
         0,
         0,
         croppedAreaPixels.width,
@@ -211,7 +225,7 @@ export default function ImageCropModal({
       }, 'image/png');
     } catch (err) {
       console.error('Crop error:', err);
-      toast.error('Failed to crop image. Please try again.');
+      toast.error(`Failed to crop image: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsProcessing(false);
     }

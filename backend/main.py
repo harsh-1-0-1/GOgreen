@@ -7,13 +7,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy.exc import IntegrityError
+from starlette.types import Scope
+import mimetypes
 
 import app.core.logging as _  # noqa: F401 – initialise loguru sinks
 from app.api.middleware import CloudFrontGateMiddleware
@@ -149,6 +151,54 @@ async def general_exception_handler(_request: Request, exc: Exception) -> JSONRe
 
 
 os.makedirs("static/banners", exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+class CORSStaticFiles(StaticFiles):
+    """StaticFiles with CORS headers and cache optimization for image access"""
+    
+    async def __call__(self, scope: Scope, receive, send):
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                # Add CORS headers to static file responses
+                headers = list(message.get("headers", []))
+                
+                # Check if headers already exist
+                header_names = {h[0].decode().lower() for h in headers}
+                
+                # Add CORS headers
+                if b"access-control-allow-origin" not in header_names:
+                    origin_header = next(
+                        (v for k, v in scope.get("headers", []) if k == b"origin"),
+                        None
+                    )
+                    
+                    if origin_header:
+                        headers.append((b"access-control-allow-origin", origin_header))
+                    else:
+                        headers.append((b"access-control-allow-origin", b"*"))
+                    
+                    headers.append((b"access-control-allow-methods", b"GET, OPTIONS"))
+                    headers.append((b"access-control-allow-credentials", b"true"))
+                
+                # Add cache headers for better performance
+                if b"cache-control" not in header_names:
+                    # Cache images for 1 year (immutable since we use UUID filenames)
+                    headers.append((b"cache-control", b"public, max-age=31536000, immutable"))
+                
+                # Add Content-Encoding hint for better compression
+                path = scope.get("path", "")
+                if path.endswith((".jpg", ".jpeg", ".png", ".webp")):
+                    # Hint to CDN/CloudFront to compress if not already compressed
+                    if b"vary" not in header_names:
+                        headers.append((b"vary", b"Accept-Encoding"))
+                
+                message["headers"] = headers
+            
+            await send(message)
+        
+        await super().__call__(scope, receive, send_wrapper)
+
+
+app.mount("/static", CORSStaticFiles(directory="static"), name="static")
 
 app.include_router(api_router)
