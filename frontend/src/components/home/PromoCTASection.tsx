@@ -40,32 +40,19 @@ export default function PromoCTASection() {
             <Link
               key={card.id}
               to={card.cta_link || '/products'}
-              className="flex flex-col sm:flex-row items-center gap-5 rounded-2xl p-5 sm:p-7 hover:opacity-95 transition-opacity"
-              style={{ border: `1px solid ${card.bg_color || '#D1FAE5'}`, background: card.bg_color || 'white' }}
+              className="block rounded-2xl overflow-hidden hover:opacity-95 transition-opacity"
             >
               {card.image_url && (
                 <img
                   src={card.image_url}
-                      alt=""
-                  className="w-full sm:w-[160px] h-44 sm:h-[160px] rounded-xl object-cover shrink-0"
+                  alt=""
+                  className="w-full h-auto object-cover"
                   loading="lazy"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                   }}
                 />
               )}
-              <div className="flex flex-col gap-2.5">
-                {card.title && (
-                  <h3 className="text-lg sm:text-xl font-bold text-gray-900">
-                    {card.title}
-                  </h3>
-                )}
-                {card.subtitle && (
-                  <p className="text-sm text-gray-600">
-                    {card.subtitle}
-                  </p>
-                )}
-              </div>
             </Link>
           ))}
         </div>

@@ -351,7 +351,7 @@ export default function ProductsPage() {
     useBanners('trending');
 
   const isTrendingPage =
-    sort === 'popular' &&
+    (sort === 'popular' || displaySection === 'trending') &&
     !search &&
     !category &&
     !minPrice &&

@@ -53,7 +53,7 @@ const PLACEMENTS = [
     key: 'trending',
     label: '🔥 Trending Carousel Banner',
     description: 'Square promotional banners displayed within the "Trending Now" homepage slider.',
-    helpText: 'Recommended size: 600x600px square format. Use vibrant colors.',
+    helpText: 'Required size: 600x600px (1:1 square format). Use the crop tool to ensure proper dimensions. Use vibrant colors.',
   },
   {
     key: 'themed',
@@ -420,36 +420,52 @@ function TrendingBannerPreview({
   imageSrc: string | null;
 }) {
   return (
-    <div className="mt-4 p-4 border rounded-xl bg-gray-50 flex flex-col items-center">
-      <p className="text-[11px] font-semibold text-gray-400 mb-2 uppercase tracking-wider">Carousel Banner Preview</p>
-      <div
-        className="relative aspect-square w-48 overflow-hidden rounded-xl border border-gray-200"
-        style={{ backgroundColor: bgColor || '#e9dfc9' }}
-      >
-        {imageSrc ? (
-          <img
-            src={imageSrc}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
-          />
-        ) : null}
-        <h3
-          className="absolute left-3 top-3 max-w-[80%] text-xs font-bold leading-tight text-white drop-shadow"
-          style={{ color: textColor || '#FFFFFF' }}
-        >
-          {title || 'Perfect Indoor Plants'}
-        </h3>
-        {subtitle && (
-          <div className="absolute right-3 top-3 bg-yellow-400 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
-            {subtitle}
-          </div>
-        )}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded bg-[#ffeb3b] px-3 py-1 text-[9px] font-bold text-primary shadow">
-          {ctaText || 'SHOP NOW'}
+    <div className="mt-4 p-4 border rounded-xl bg-gray-50">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Carousel Banner Preview</p>
+        <div className="text-[10px] text-gray-500 bg-white px-2 py-1 rounded border">
+          Fixed Size: 600×600px (1:1)
         </div>
+      </div>
+      <div className="flex justify-center">
+        <div
+          className="relative w-60 h-60 overflow-hidden rounded-xl border-2 border-gray-300 shadow-lg"
+          style={{ backgroundColor: bgColor || '#e9dfc9' }}
+        >
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
+              No image uploaded
+            </div>
+          )}
+          <h3
+            className="absolute left-3 top-3 max-w-[80%] text-xs font-bold leading-tight text-white drop-shadow"
+            style={{ color: textColor || '#FFFFFF' }}
+          >
+            {title || 'Perfect Indoor Plants'}
+          </h3>
+          {subtitle && (
+            <div className="absolute right-3 top-3 bg-yellow-400 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+              {subtitle}
+            </div>
+          )}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded bg-[#ffeb3b] px-3 py-1 text-[9px] font-bold text-primary shadow">
+            {ctaText || 'SHOP NOW'}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 text-center">
+        <p className="text-[10px] text-amber-600 bg-amber-50 inline-block px-3 py-1.5 rounded-lg border border-amber-200">
+          ⚠️ Images must be square (1:1 ratio). Use the crop tool to adjust your image to 600×600px.
+        </p>
       </div>
     </div>
   );
@@ -884,6 +900,23 @@ function BannerDrawer({
                 Banner Graphic / Image
               </label>
 
+              {/* Special notice for trending banners */}
+              {watchedPlacement === 'trending' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 space-y-1">
+                  <div className="flex items-start gap-2">
+                    <Info size={14} className="shrink-0 mt-0.5 text-blue-600" />
+                    <div>
+                      <p className="font-semibold text-blue-900 mb-1">
+                        Trending banners require square images (1:1 ratio)
+                      </p>
+                      <p className="text-[11px] text-blue-700">
+                        Upload any image, then use the <strong>Crop</strong> button to adjust it to 600×600px. The preview below shows exactly how it will appear.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {isEdit && banner?.image_url && !imageCleared && (
                 <div className="relative rounded-lg overflow-hidden border">
                   <img
@@ -962,9 +995,13 @@ function BannerDrawer({
                                 setCropImageSrc(filePreview);
                                 setCropModalOpen(true);
                               }}
-                              className="text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1"
+                              className={`text-xs font-semibold flex items-center gap-1 ${
+                                watchedPlacement === 'trending'
+                                  ? 'px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition'
+                                  : 'text-primary hover:text-primary/80'
+                              }`}
                             >
-                              <Crop size={14} /> Edit Crop
+                              <Crop size={14} /> {watchedPlacement === 'trending' ? 'Crop to 600×600px (Required)' : 'Edit Crop'}
                             </button>
                           </div>
                         ) : (
@@ -977,7 +1014,9 @@ function BannerDrawer({
                               Upload Banner Image
                             </p>
                             <p className="text-[10px] text-gray-400 mt-0.5">
-                              Drag file or click to select
+                              {watchedPlacement === 'trending' 
+                                ? 'After upload, you\'ll crop to 600×600px'
+                                : 'Drag file or click to select'}
                             </p>
                           </div>
                         )}

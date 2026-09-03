@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
-import { X, ShoppingBag } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, ShoppingBag, Info } from 'lucide-react';
 import { useCartStore } from '@/store/cartStore';
 import type { Story } from '@/types';
 import toast from 'react-hot-toast';
@@ -16,6 +17,7 @@ export function StoryViewer({ stories, startIndex, onClose }: StoryViewerProps) 
   const videoRef = useRef<HTMLVideoElement>(null);
   const addItem = useCartStore((s) => s.addItem);
   const { openDrawer } = useCartStore();
+  const navigate = useNavigate();
 
   const story = stories[index];
 
@@ -62,6 +64,14 @@ export function StoryViewer({ stories, startIndex, onClose }: StoryViewerProps) 
     }
   };
 
+  const handleMoreInfo = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!story.linked_product) return;
+    
+    onClose();
+    navigate(`/products/${story.linked_product.slug}`);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center backdrop-blur-sm">
       {/* Progress Bars */}
@@ -105,36 +115,49 @@ export function StoryViewer({ stories, startIndex, onClose }: StoryViewerProps) 
         {/* Product Overlay */}
         {story.linked_product && (
           <div 
-            className="absolute bottom-6 left-4 right-4 bg-white/95 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 z-20 shadow-2xl"
+            className="absolute bottom-6 left-4 right-4 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-2xl z-20"
             onClick={(e) => e.stopPropagation()}
           >
-            {story.linked_product.thumbnail && (
-              <img 
-                src={story.linked_product.thumbnail} 
-                className="w-14 h-14 rounded-xl object-cover shrink-0 bg-gray-100" 
-                alt={story.linked_product.name}
-              />
-            )}
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-gray-900 truncate text-sm">
-                {story.linked_product.name}
-              </h3>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="font-bold text-green-800 text-sm">₹{story.linked_product.price}</span>
-                {story.linked_product.original_price && (
-                  <span className="text-xs text-gray-400 line-through">
-                    ₹{story.linked_product.original_price}
-                  </span>
-                )}
+            <div className="flex items-center gap-3 mb-3">
+              {story.linked_product.thumbnail && (
+                <img 
+                  src={story.linked_product.thumbnail} 
+                  className="w-16 h-16 rounded-xl object-cover shrink-0 bg-gray-100" 
+                  alt={story.linked_product.name}
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-gray-900 truncate text-sm">
+                  {story.linked_product.name}
+                </h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="font-bold text-green-800 text-base">₹{story.linked_product.price}</span>
+                  {story.linked_product.original_price && (
+                    <span className="text-xs text-gray-400 line-through">
+                      ₹{story.linked_product.original_price}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-            <button 
-              onClick={handleAddToCart}
-              className="bg-green-800 hover:bg-green-700 text-white p-3 rounded-xl transition-colors shrink-0"
-              aria-label="Add to cart"
-            >
-              <ShoppingBag className="w-5 h-5" />
-            </button>
+            
+            {/* Action Buttons */}
+            <div className="flex gap-2">
+              <button 
+                onClick={handleMoreInfo}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2.5 rounded-xl transition-colors font-semibold text-sm flex items-center justify-center gap-2"
+              >
+                <Info className="w-4 h-4" />
+                More Info
+              </button>
+              <button 
+                onClick={handleAddToCart}
+                className="flex-1 bg-green-800 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl transition-colors font-semibold text-sm flex items-center justify-center gap-2"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                Add to Cart
+              </button>
+            </div>
           </div>
         )}
       </div>
