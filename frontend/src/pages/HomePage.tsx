@@ -51,7 +51,7 @@ export default function HomePage() {
       </ErrorBoundary>
       
       <ErrorBoundary>
-        <NewArrivalsGrid />
+        <NewArrivalsGrid limit={8} />
       </ErrorBoundary>
 
       <ErrorBoundary>
