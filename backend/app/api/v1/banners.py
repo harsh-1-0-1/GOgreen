@@ -16,9 +16,12 @@ from app.utils.redis import cache_delete, cache_get, cache_set
 router = APIRouter(prefix="/banners", tags=["banners"])
 
 
-async def _invalidate_banner_cache(placement: str) -> None:
-    await cache_delete(f"banners:{placement}")
+async def _invalidate_banner_cache(placement: str, target_path: str | None = None) -> None:
+    await cache_delete(f"banners:{placement}:")         # global (no slug)
+    await cache_delete(f"banners:{placement}")          # legacy key guard
     await cache_delete("banners:all")
+    if target_path:
+        await cache_delete(f"banners:{placement}:{target_path}")
 
 
 # ── PUBLIC ──────────────────────────────────────────────────────────────────
@@ -27,26 +30,54 @@ async def _invalidate_banner_cache(placement: str) -> None:
 @router.get("", response_model=list[BannerOut])
 async def get_banners(
     placement: str = "hero",
+    category_slug: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    cache_key = f"banners:{placement}"
+    # Cache key includes category_slug so category-scoped and global results
+    # are cached independently.
+    cache_key = f"banners:{placement}:{category_slug or ''}"
     cached = await cache_get(cache_key)
     if cached:
         return cached
 
     now = datetime.now(timezone.utc)
-    stmt = (
-        select(Banner)
-        .where(
-            Banner.placement == placement,
-            Banner.is_active == True,  # noqa: E712
-            (Banner.valid_from == None) | (Banner.valid_from <= now),  # noqa: E711
-            (Banner.valid_until == None) | (Banner.valid_until >= now),  # noqa: E711
+    base_filter = [
+        Banner.placement == placement,
+        Banner.is_active == True,  # noqa: E712
+        (Banner.valid_from == None) | (Banner.valid_from <= now),  # noqa: E711
+        (Banner.valid_until == None) | (Banner.valid_until >= now),  # noqa: E711
+    ]
+
+    if category_slug:
+        # Try category-specific banner first (target_path == category_slug).
+        stmt = (
+            select(Banner)
+            .where(*base_filter, Banner.target_path == category_slug)
+            .order_by(Banner.position.asc())
         )
-        .order_by(Banner.position.asc())
-    )
-    result = await db.execute(stmt)
-    banners = result.scalars().all()
+        result = await db.execute(stmt)
+        banners = result.scalars().all()
+
+        # Fall back to the global banner (target_path IS NULL) when no
+        # category-specific one exists yet.
+        if not banners:
+            stmt = (
+                select(Banner)
+                .where(*base_filter, Banner.target_path == None)  # noqa: E711
+                .order_by(Banner.position.asc())
+            )
+            result = await db.execute(stmt)
+            banners = result.scalars().all()
+    else:
+        # No slug provided — return global banners only (target_path IS NULL).
+        stmt = (
+            select(Banner)
+            .where(*base_filter, Banner.target_path == None)  # noqa: E711
+            .order_by(Banner.position.asc())
+        )
+        result = await db.execute(stmt)
+        banners = result.scalars().all()
+
     data = [BannerOut.model_validate(b).model_dump(mode="json") for b in banners]
     await cache_set(cache_key, data, ttl=300)
     return data
@@ -130,7 +161,7 @@ async def create_banner(
         banner.image_public_id = key
         await db.flush()
     await db.refresh(banner)
-    await _invalidate_banner_cache(placement)
+    await _invalidate_banner_cache(placement, target_path)
     logger.info("Banner created id={} placement={}", banner.id, placement)
     return banner
 
@@ -204,9 +235,9 @@ async def update_banner(
 
     await db.flush()
     await db.refresh(banner)
-    await _invalidate_banner_cache(old_placement)
+    await _invalidate_banner_cache(old_placement, banner.target_path)
     if banner.placement != old_placement:
-        await _invalidate_banner_cache(banner.placement)
+        await _invalidate_banner_cache(banner.placement, banner.target_path)
     return banner
 
 
@@ -221,9 +252,10 @@ async def delete_banner(
         raise HTTPException(404, "Banner not found")
     await delete_image_file(banner.image_public_id)
     placement = banner.placement
+    target_path = banner.target_path
     await db.delete(banner)
     await db.flush()
-    await _invalidate_banner_cache(placement)
+    await _invalidate_banner_cache(placement, target_path)
     logger.info("Banner deleted id={}", banner_id)
     return {"ok": True}
 
@@ -240,7 +272,7 @@ async def toggle_banner(
     banner.is_active = not banner.is_active
     await db.flush()
     await db.refresh(banner)
-    await _invalidate_banner_cache(banner.placement)
+    await _invalidate_banner_cache(banner.placement, banner.target_path)
     return banner
 
 

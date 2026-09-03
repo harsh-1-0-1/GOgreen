@@ -64,6 +64,7 @@ else:
     async_session_factory = None
 
 UNSPLASH = "https://images.unsplash.com/photo-{id}?w=600&q=80"
+UNSPLASH_BANNER = "https://images.unsplash.com/photo-{id}?w=1400&h=300&fit=crop&crop=center&q=85"
 
 PLANT_IMAGES = [
     UNSPLASH.format(id="1459411552884-841db9b3cc2a"),
@@ -695,7 +696,53 @@ async def seed(catalog_only: bool = False) -> None:
                     position=0,
                     bg_color="#F4EFE5",
                     text_color="#1B4332",
-                    image_url="/page-banner-default.jpeg",
+                    image_url=UNSPLASH_BANNER.format(id="1416879595882-3373a0480b5b"),
+                    target_path=None,  # global fallback — shown when no category-specific banner exists
+                ),
+                # ── Per-category page banners ──────────────────────────────────
+                *(
+                    Banner(
+                        title=f"{name} – explore the range",
+                        cta_link=f"/products?category={slug}",
+                        placement="page",
+                        position=0,
+                        bg_color="#F4EFE5",
+                        text_color="#1B4332",
+                        image_url=UNSPLASH_BANNER.format(id=CATEGORY_IMAGES[slug]),
+                        target_path=slug,
+                    )
+                    for slug, name in [
+                        ("plants",                  "Plants"),
+                        ("indoor-plants",           "Indoor Plants"),
+                        ("outdoor-plants",          "Outdoor Plants"),
+                        ("flowering-plants",        "Flowering Plants"),
+                        ("cacti-succulents",        "Cacti & Succulents"),
+                        ("xl-plants",               "XL Plants"),
+                        ("low-maintenance-plants",  "Low Maintenance Plants"),
+                        ("air-purifying-plants",    "Air Purifying Plants"),
+                        ("hanging-plants",          "Hanging Plants"),
+                        ("pet-friendly-plants",     "Pet-Friendly Plants"),
+                        ("fruit-plants",            "Fruit Plants"),
+                        ("seeds",                   "Seeds"),
+                        ("vegetable-seeds",         "Vegetable Seeds"),
+                        ("flower-seeds",            "Flower Seeds"),
+                        ("microgreen-seeds",        "Microgreen Seeds"),
+                        ("herb-seeds",              "Herb Seeds"),
+                        ("flower-bulbs",            "Flower Bulbs"),
+                        ("seeds-kits",              "Seeds Kits"),
+                        ("pots-planters",           "Pots & Planters"),
+                        ("plastic-pots",            "Plastic Pots"),
+                        ("ceramic-pots",            "Ceramic Pots"),
+                        ("metal-planters",          "Metal Planters"),
+                        ("wooden-planters",         "Wooden Planters"),
+                        ("hanging-planters",        "Hanging Planters"),
+                        ("plant-stands",            "Plant Stands"),
+                        ("plant-care",              "Plant Care"),
+                        ("potting-mix-fertilizers", "Potting Mix & Fertilizers"),
+                        ("garden-tools",            "Garden Tools"),
+                        ("watering-tools",          "Watering Tools"),
+                        ("pest-control",            "Pest Control"),
+                    ]
                 ),
             ]
             db.add_all(banners_seed)

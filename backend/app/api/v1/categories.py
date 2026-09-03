@@ -104,48 +104,6 @@ async def upload_category_image(
     return cat
 
 
-@router.post("/{category_id}/banner-image", response_model=CategoryResponse)
-async def upload_category_banner_image(
-    category_id: int,
-    image: UploadFile,
-    db: AsyncSession = Depends(get_db),
-    _admin=Depends(require_admin),
-):
-    cat = await category_service.get_category_by_id(db, category_id)
-    if not cat:
-        raise HTTPException(status_code=404, detail="Category not found")
-
-    old_key = cat.banner_image_url
-    key = await upload_image_file(image, folder="category-banners", entity_id=category_id)
-    cat.banner_image_url = key
-    await db.flush()
-    await db.refresh(cat)
-    if old_key and old_key != key:
-        await delete_image_file(old_key)
-    await cache_delete(CATS_ALL_KEY)
-    return cat
-
-
-@router.delete("/{category_id}/banner-image", response_model=CategoryResponse)
-async def delete_category_banner_image(
-    category_id: int,
-    db: AsyncSession = Depends(get_db),
-    _admin=Depends(require_admin),
-):
-    cat = await category_service.get_category_by_id(db, category_id)
-    if not cat:
-        raise HTTPException(status_code=404, detail="Category not found")
-
-    old_key = cat.banner_image_url
-    cat.banner_image_url = None
-    await db.flush()
-    await db.refresh(cat)
-    if old_key:
-        await delete_image_file(old_key)
-    await cache_delete(CATS_ALL_KEY)
-    return cat
-
-
 @router.put("/{category_id}", response_model=CategoryResponse)
 async def update_category(
     category_id: int,
@@ -159,10 +117,6 @@ async def update_category(
     if body.image_url is not None:
         body = body.model_copy(
             update={"image_url": extract_relative_key(body.image_url)}
-        )
-    if body.banner_image_url is not None:
-        body = body.model_copy(
-            update={"banner_image_url": extract_relative_key(body.banner_image_url)}
         )
     cat = await category_service.update_category(db, cat, body)
     await cache_delete(CATS_ALL_KEY)

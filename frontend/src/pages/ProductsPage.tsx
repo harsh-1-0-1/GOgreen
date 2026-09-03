@@ -9,7 +9,7 @@ import { getTagStyle } from '@/components/product/productTagBadges.utils';
 import SkeletonCard from '@/components/ui/SkeletonCard';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import type { Banner, Category } from '@/types';
+import type { Banner } from '@/types';
 
 const SORT_OPTIONS = [
   { value: '', label: 'Relevance' },
@@ -41,7 +41,7 @@ function TrendingPromoBanner({
       subtitle: 'starting ₹699',
       cta_text: 'SHOP NOW',
       cta_link: '/products?sort_by=popular',
-      image_url: images[0] || '/page-banner-default.jpeg',
+      image_url: images[0] || undefined,
       bg_color: '#e9dfc9',
       text_color: '#ffeb3b',
       placement: 'trending',
@@ -54,7 +54,7 @@ function TrendingPromoBanner({
       subtitle: 'price drop',
       cta_text: 'SHOP NOW',
       cta_link: '/products?sort_by=popular',
-      image_url: images[1] || images[0] || '/page-banner-default.jpeg',
+      image_url: images[1] || images[0] || undefined,
       bg_color: '#164d3b',
       text_color: '#ffeb3b',
       placement: 'trending',
@@ -67,7 +67,7 @@ function TrendingPromoBanner({
       subtitle: 'trending now',
       cta_text: 'SHOP NOW',
       cta_link: '/products?sort_by=popular',
-      image_url: images[2] || images[0] || '/page-banner-default.jpeg',
+      image_url: images[2] || images[0] || undefined,
       bg_color: '#f1dfbd',
       text_color: '#ffeb3b',
       placement: 'trending',
@@ -123,7 +123,7 @@ function TrendingPromoBanner({
               style={{ backgroundColor: slide.bg_color || '#e9dfc9' }}
             >
               <img
-                src={slide.image_url || images[0] || '/page-banner-default.jpeg'}
+                src={slide.image_url || images[0] || undefined}
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover"
                 loading={slideIndex === 0 ? 'eager' : 'lazy'}
@@ -171,21 +171,21 @@ function TrendingPromoBanner({
   );
 }
 
-// ─── Category Banner (mobile + desktop) ──────────────────────────────────────
-function CategoryBanner({ category }: { category: Category }) {
-  const bannerUrl = category.banner_image_url;
-  if (!bannerUrl) return null;
+// ─── Page Banner (category-scoped or global) ─────────────────────────────────
+function PageBanner({ banner }: { banner: Banner }) {
+  if (!banner.image_url) return null;
 
+  const href = banner.cta_link || '/products';
   return (
     <Link
-      to={`/products?category=${category.slug}`}
-      className="relative block -mx-3 mb-6 aspect-[5/2] overflow-hidden bg-gray-100 sm:mx-0 sm:mb-8 sm:rounded-2xl lg:aspect-[16/5]"
-      aria-label={`${category.name} banner`}
+      to={href}
+      className="relative block -mx-3 mb-6 overflow-hidden bg-gray-100 sm:mx-0 sm:mb-8 sm:rounded-2xl"
+      aria-label={banner.title}
     >
       <img
-        src={bannerUrl}
-        alt={category.name}
-        className="absolute inset-0 h-full w-full object-cover"
+        src={banner.image_url}
+        alt={banner.title}
+        className="w-full object-cover"
         loading="eager"
       />
     </Link>
@@ -347,16 +347,6 @@ export default function ProductsPage() {
   });
   const { data: trendingBanners = [], isLoading: trendingBannersLoading } =
     useBanners('trending');
-  const { data: categories } = useCategories();
-  const activeCategory = useMemo(
-    () =>
-      category
-        ? (categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? []).find(
-            (c) => c.slug === category,
-          )
-        : undefined,
-    [category, categories],
-  );
 
   const isTrendingPage =
     sort === 'popular' &&
@@ -413,11 +403,6 @@ export default function ProductsPage() {
           images={trendingBannerImages}
           isLoading={isLoading || trendingBannersLoading}
         />
-      )}
-
-      {/* Category banner — shown on all screen sizes when a category is active */}
-      {!isTrendingPage && activeCategory?.banner_image_url && (
-        <CategoryBanner category={activeCategory} />
       )}
 
       {/* Header */}

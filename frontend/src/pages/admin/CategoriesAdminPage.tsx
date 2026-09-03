@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -8,14 +8,12 @@ import {
   Eye,
   EyeOff,
   FolderTree,
-  Image,
   Info,
   Pencil,
   Plus,
   Trash2,
   Upload,
   CheckCircle,
-  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCategoriesAdmin } from '@/hooks/useCategories';
@@ -31,20 +29,13 @@ interface CategoryNodeProps {
   onRename: (id: number, name: string) => Promise<void>;
   onToggleActive: (id: number, isActive: boolean) => Promise<void>;
   onMove: (id: number, direction: -1 | 1) => Promise<void>;
-  onInvalidate: () => void;
 }
 
-function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onInvalidate }: CategoryNodeProps) {
+function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove }: CategoryNodeProps) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(cat.name);
   const [busy, setBusy] = useState(false);
-
-  // Banner panel state
-  const [bannerOpen, setBannerOpen] = useState(false);
-  const [bannerBusy, setBannerBusy] = useState(false);
-  const bannerFileRef = useRef<HTMLInputElement>(null);
-
   const hasChildren = cat.children && cat.children.length > 0;
 
   async function saveRename() {
@@ -74,38 +65,6 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onInval
       toast.error(getApiErrorDetail(err, 'Reorder failed'));
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function handleBannerUpload(file: File) {
-    setBannerBusy(true);
-    try {
-      const fd = new FormData();
-      fd.append('image', file);
-      await api.post(`/categories/${cat.id}/banner-image`, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      toast.success('Mobile banner updated');
-      onInvalidate();
-    } catch (err) {
-      toast.error(getApiErrorDetail(err, 'Upload failed'));
-    } finally {
-      setBannerBusy(false);
-      if (bannerFileRef.current) bannerFileRef.current.value = '';
-    }
-  }
-
-  async function handleBannerRemove() {
-    if (!confirm('Remove the mobile banner image for this category?')) return;
-    setBannerBusy(true);
-    try {
-      await api.delete(`/categories/${cat.id}/banner-image`);
-      toast.success('Mobile banner removed');
-      onInvalidate();
-    } catch (err) {
-      toast.error(getApiErrorDetail(err, 'Remove failed'));
-    } finally {
-      setBannerBusy(false);
     }
   }
 
@@ -157,13 +116,6 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onInval
           </span>
         )}
 
-        {/* Mobile banner indicator badge */}
-        {cat.banner_image_url && (
-          <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-1.5 py-0.5 shrink-0" title="Has mobile banner">
-            Banner
-          </span>
-        )}
-
         <div className="flex items-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
           <button
             onClick={() => setEditing(true)}
@@ -171,14 +123,6 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onInval
             title="Rename"
           >
             <Pencil size={13} />
-          </button>
-          {/* Mobile banner toggle */}
-          <button
-            onClick={() => setBannerOpen((v) => !v)}
-            className={`p-1.5 transition ${bannerOpen ? 'text-blue-600' : 'text-gray-400 hover:text-blue-500'}`}
-            title="Manage mobile banner"
-          >
-            <Image size={13} />
           </button>
           <button
             onClick={() => handleMove(-1)}
@@ -213,76 +157,6 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onInval
           </button>
         </div>
       </div>
-
-      {/* ── Mobile Banner Panel ── */}
-      {bannerOpen && (
-        <div className="mx-3 mb-2 p-3 bg-blue-50 border border-blue-100 rounded-xl space-y-2">
-          <p className="text-[10px] font-bold text-blue-700 flex items-center gap-1">
-            <Image size={11} /> Category Banner Image
-            <span className="font-normal text-blue-500 ml-1">— shown on /products?category={cat.slug} (mobile & desktop)</span>
-          </p>
-
-          {cat.banner_image_url ? (
-            <div className="space-y-2">
-              <img
-                src={cat.banner_image_url}
-                alt="Mobile banner preview"
-                className="w-full max-h-28 object-cover rounded-lg border"
-              />
-              <div className="flex gap-2">
-                {/* Replace */}
-                <label className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-white border border-blue-200 rounded-lg text-[10px] font-semibold text-blue-700 cursor-pointer hover:bg-blue-50 transition relative">
-                  <Upload size={11} />
-                  Replace
-                  <input
-                    ref={bannerFileRef}
-                    type="file"
-                    accept="image/*"
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                    disabled={bannerBusy}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleBannerUpload(file);
-                    }}
-                  />
-                </label>
-                {/* Remove */}
-                <button
-                  onClick={handleBannerRemove}
-                  disabled={bannerBusy}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 rounded-lg text-[10px] font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-60"
-                >
-                  <X size={11} /> Remove
-                </button>
-              </div>
-            </div>
-          ) : (
-            <label className="flex flex-col items-center justify-center gap-1.5 py-4 bg-white border-2 border-dashed border-blue-200 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition relative">
-              {bannerBusy ? (
-                <span className="text-[10px] text-blue-500 font-semibold">Uploading…</span>
-              ) : (
-                <>
-                  <Upload size={16} className="text-blue-400" />
-                  <span className="text-[10px] font-semibold text-blue-700">Upload mobile banner</span>
-                  <span className="text-[9px] text-blue-400">Full-width banner (recommended ~1400 × 450 px)</span>
-                </>
-              )}
-              <input
-                ref={bannerFileRef}
-                type="file"
-                accept="image/*"
-                className="absolute inset-0 opacity-0 cursor-pointer"
-                disabled={bannerBusy}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleBannerUpload(file);
-                }}
-              />
-            </label>
-          )}
-        </div>
-      )}
-
       {expanded && hasChildren && (
         <div className="ml-4 sm:ml-6 border-l pl-2 space-y-0.5">
           {cat.children!.map((child) => (
@@ -293,7 +167,6 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onInval
               onRename={onRename}
               onToggleActive={onToggleActive}
               onMove={onMove}
-              onInvalidate={onInvalidate}
             />
           ))}
         </div>
@@ -326,16 +199,12 @@ export default function CategoriesAdminPage() {
   const [newName, setNewName] = useState('');
   const [parentId, setParentId] = useState<string>('');
 
-  // Thumbnail image selection states
+  // Image selection states
   const [imageMode, setImageMode] = useState<'none' | 'upload' | 'url'>('none');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [manualUrl, setManualUrl] = useState('');
   const [urlValid, setUrlValid] = useState<boolean | null>(null);
-
-  // Mobile banner image states (URL paste only at create time; upload available after creation)
-  const [bannerUrl, setBannerUrl] = useState('');
-  const [bannerUrlValid, setBannerUrlValid] = useState<boolean | null>(null);
 
   const allCats = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
   const roots = categories?.filter((c) => !c.parent_id) ?? [];
@@ -359,17 +228,6 @@ export default function CategoriesAdminPage() {
     img.src = manualUrl;
   };
 
-  const handleBannerUrlBlur = () => {
-    if (!bannerUrl) {
-      setBannerUrlValid(null);
-      return;
-    }
-    const img = new window.Image();
-    img.onload = () => setBannerUrlValid(true);
-    img.onerror = () => setBannerUrlValid(false);
-    img.src = bannerUrl;
-  };
-
   function invalidate() {
     qc.invalidateQueries({ queryKey: ['categories'] });
     qc.invalidateQueries({ queryKey: ['categories-admin'] });
@@ -381,15 +239,14 @@ export default function CategoriesAdminPage() {
     if (!newName.trim()) return;
 
     try {
-      // 1. Create category (image_url and banner_image_url accepted inline)
+      // 1. Create category basic structure (image_url accepted inline)
       const newCat = await createMutation.mutateAsync({
         name: newName.trim(),
         parent_id: parentId ? Number(parentId) : null,
         ...(imageMode === 'url' && manualUrl ? { image_url: manualUrl } : {}),
-        ...(bannerUrl ? { banner_image_url: bannerUrl } : {}),
       });
 
-      // 2. Upload thumbnail if a file was chosen
+      // 2. Upload image if chosen (file upload requires a follow-up request)
       if (imageMode === 'upload' && selectedFile) {
         const fd = new FormData();
         fd.append('image', selectedFile);
@@ -408,8 +265,6 @@ export default function CategoriesAdminPage() {
       setFilePreview(null);
       setManualUrl('');
       setUrlValid(null);
-      setBannerUrl('');
-      setBannerUrlValid(null);
 
       invalidate();
     } catch (err) {
@@ -473,7 +328,7 @@ export default function CategoriesAdminPage() {
             <li><strong>Root Categories</strong> (no parent) appear in the main navigation menu, the mobile menu, the footer, and the homepage category slider. Use the arrows to control their order in the menu.</li>
             <li><strong>Subcategories</strong> (attached to a parent) show up as dropdown items under their root and in the catalog filters.</li>
             <li>Use the <strong>eye</strong> button to hide a category from the site; hidden categories still appear here so you can bring them back.</li>
-            <li>Use the <strong>image</strong> button (<Image size={10} className="inline" />) on any category to upload a <strong>category banner</strong> — a full-width image shown at the top of that category's product listing on all devices.</li>
+            <li>To change the <strong>page banner</strong> for a category, go to <strong>Banners → Page</strong> and set the <em>Target Path</em> field to the category slug (e.g. <code>xl-plants</code>).</li>
           </ul>
         </div>
       </div>
@@ -513,7 +368,7 @@ export default function CategoriesAdminPage() {
               <p className="text-[9px] text-gray-400 mt-1">If this is a subcategory, select its parent here.</p>
             </div>
 
-            {/* Thumbnail Image Options */}
+            {/* Category Image Options */}
             <div className="pt-2 border-t space-y-2">
               <label className="text-xs font-semibold text-gray-700 block">Category Thumbnail / Image</label>
               <div className="flex gap-3 text-[10px] font-bold text-gray-500 mb-2">
@@ -571,34 +426,6 @@ export default function CategoriesAdminPage() {
               )}
             </div>
 
-            {/* Mobile Banner URL (create-time, URL only; file upload available after creation) */}
-            <div className="pt-2 border-t space-y-2">
-              <label className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-                <Image size={12} className="text-blue-500" />
-                Category Banner Image
-                <span className="font-normal text-gray-400">(optional)</span>
-              </label>
-              <p className="text-[9px] text-gray-400 -mt-1">Full-width banner shown at the top of this category's product listing. Recommended ~1400 × 450 px.</p>
-              <input
-                type="url"
-                value={bannerUrl}
-                onChange={(e) => { setBannerUrl(e.target.value); setBannerUrlValid(null); }}
-                onBlur={handleBannerUrlBlur}
-                placeholder="https://... (or upload after creating)"
-                className="w-full px-2.5 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-300"
-              />
-              {bannerUrlValid === true && (
-                <p className="text-[10px] text-green-600 flex items-center gap-1 font-semibold">
-                  <CheckCircle size={11} /> Image loaded
-                </p>
-              )}
-              {bannerUrl && (
-                <div className="h-12 w-full border rounded overflow-hidden mt-1.5 bg-gray-50">
-                  <img src={bannerUrl} alt="" className="h-full w-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
-                </div>
-              )}
-            </div>
-
             <button
               type="submit"
               disabled={createMutation.isPending || !newName.trim()}
@@ -626,13 +453,12 @@ export default function CategoriesAdminPage() {
                   onRename={handleRename}
                   onToggleActive={handleToggleActive}
                   onMove={handleMove}
-                  onInvalidate={invalidate}
                 />
               ))}
             </div>
           )}
           <p className="text-[10px] text-gray-400 mt-3 border-t pt-2">
-            Tip: hover a category to see rename (pencil), mobile banner (<Image size={9} className="inline" />), reorder (arrows), hide/show (eye), and delete actions.
+            Tip: hover a category to see rename (pencil), reorder (arrows), hide/show (eye), and delete actions.
           </p>
         </div>
 

@@ -13,7 +13,6 @@ export interface Category {
   slug: string;
   parent_id: number | null;
   image_url: string | null;
-  banner_image_url?: string | null;
   is_active: boolean;
   sort_order: number;
   children?: Category[];
