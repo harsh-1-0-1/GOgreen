@@ -381,3 +381,27 @@ export interface Story {
   is_active: boolean;
   linked_product?: StoryProductInfo | null;
 }
+
+export interface DoNotForgetProduct {
+  id: number;
+  product_id: number;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  product: {
+    id: number;
+    name: string;
+    slug: string;
+    price: number;
+    original_price: number | null;
+    images: string[];
+    stock_qty: number;
+    is_active: boolean;
+  };
+}
+
+export interface DoNotForgetListResponse {
+  items: DoNotForgetProduct[];
+  total: number;
+}

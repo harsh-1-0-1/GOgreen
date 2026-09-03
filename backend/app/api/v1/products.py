@@ -173,6 +173,31 @@ async def get_product_raw(
     }
 
 
+@router.get("/admin/all", response_model=ProductListResponse)
+async def admin_get_all_products(
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_admin),
+    limit: Annotated[int, Query(ge=1, le=5000)] = 1000,
+):
+    """Admin endpoint to fetch all products without pagination limit.
+    
+    Used by admin panels that need to show full product lists for selection.
+    """
+    items, total, pages = await product_service.list_products(
+        db,
+        page=1,
+        limit=limit,
+    )
+    
+    return ProductListResponse(
+        items=[ProductResponse.model_validate(p) for p in items],
+        total=total,
+        page=1,
+        pages=pages,
+        limit=limit,
+    )
+
+
 @router.get("/{slug}", response_model=ProductResponse)
 async def get_product(slug: str, response: Response, db: AsyncSession = Depends(get_db)):
     response.headers["Cache-Control"] = "no-cache"

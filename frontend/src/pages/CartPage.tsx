@@ -3,6 +3,7 @@ import { ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import RecommendationBar from '@/components/cart/RecommendationBar';
+import DoNotForgetBar from '@/components/cart/DoNotForgetBar';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
 import { getApiErrorDetail } from '@/lib/apiError';
 import { useSuggestionTiles } from '@/hooks/useSuggestionTiles';
@@ -161,6 +162,11 @@ export default function CartPage() {
             <RecommendationBar lastAddedProduct={lastAddedProduct} cartItems={items} />
           </div>
         )}
+
+        {/* Do Not Forget to Buy section */}
+        <div className="lg:col-span-2">
+          <DoNotForgetBar cartItems={items} />
+        </div>
 
         {/* Order summary — desktop: sticky sidebar, mobile: stacked below */}
         <div className="lg:col-span-1 hidden lg:block">

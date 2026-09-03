@@ -390,6 +390,20 @@ class StoreSettings(Base):
     )
 
 
+class DoNotForgetProduct(Base):
+    """Curated list of products to show in "Do Not Forget to Buy" section in cart."""
+    __tablename__ = "do_not_forget_products"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False, unique=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    product: Mapped["Product"] = relationship("Product")
+
+
 class Story(Base):
     __tablename__ = "stories"
 

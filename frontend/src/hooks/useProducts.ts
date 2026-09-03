@@ -53,3 +53,17 @@ export function useProductRaw(productId: number | null) {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
+
+
+export function useAdminAllProducts(limit: number = 1000) {
+  return useQuery({
+    queryKey: ['admin-all-products', limit],
+    queryFn: async () => {
+      const { data } = await api.get<ProductListResponse>('/products/admin/all', { 
+        params: { limit } 
+      });
+      return data;
+    },
+    staleTime: 60 * 1000, // 1 minute
+  });
+}
