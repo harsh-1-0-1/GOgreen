@@ -20,6 +20,7 @@ from app.db.models import (
 )
 from app.schemas.order import DirectCheckoutItem
 from app.services.cart_service import resolve_variant_details
+from app.utils.redis import cache_delete, cache_delete_pattern
 from app.utils.variant_pricing import StockMapMissingError
 
 
@@ -125,6 +126,7 @@ async def _reserve_product_for_order(
 
     return {
         "product_id": product.id,
+        "product_slug": product.slug,
         "quantity": quantity,
         "unit_price": details["unit_price"],
         "selected_options": order_selected_options,
@@ -132,10 +134,16 @@ async def _reserve_product_for_order(
     }
 
 
+async def invalidate_product_caches(slugs: list[str]) -> None:
+    for slug in set(slugs):
+        await cache_delete(f"product:{slug}")
+    await cache_delete_pattern("products:*")
+
+
 async def checkout(
     db: AsyncSession, user_id: int, address_id: int, cart_id: int,
     email: str, full_name: str, phone: str, payment_method: str = "razorpay",
-) -> tuple[Order, dict | None]:
+) -> tuple[Order, dict | None, list[str]]:
     """
     1. Validate cart + stock
     2. Create order & order items (snapshot prices)
@@ -160,6 +168,7 @@ async def checkout(
 
     total_amount = 0.0
     order_items_data: list[dict] = []
+    affected_product_slugs: list[str] = []
 
     # Sort by product_id to guarantee a consistent lock-acquisition order across
     # concurrent checkouts and prevent deadlocks on the FOR UPDATE rows.
@@ -167,6 +176,7 @@ async def checkout(
         item_data = await _reserve_product_for_order(
             db, ci.product_id, ci.quantity, ci.selected_options,
         )
+        affected_product_slugs.append(item_data.pop("product_slug"))
         line = round(item_data["unit_price"] * item_data["quantity"], 2)
         total_amount += line
         order_items_data.append(item_data)
@@ -205,13 +215,13 @@ async def checkout(
     await db.flush()
 
     logger.info("Checkout complete: order_id={} amount={} payment_method={}", order.id, total_amount, payment_method)
-    return order, razorpay_data
+    return order, razorpay_data, affected_product_slugs
 
 
 async def direct_checkout(
     db: AsyncSession, user_id: int, address_id: int, items: list[DirectCheckoutItem],
     email: str, full_name: str, phone: str, payment_method: str = "razorpay",
-) -> tuple[Order, dict | None]:
+) -> tuple[Order, dict | None, list[str]]:
     address = await db.execute(
         select(Address).where(Address.id == address_id, Address.user_id == user_id)
     )
@@ -223,6 +233,7 @@ async def direct_checkout(
 
     total_amount = 0.0
     order_items_data: list[dict] = []
+    affected_product_slugs: list[str] = []
 
     # Sort by product_id to guarantee a consistent lock-acquisition order across
     # concurrent checkouts and prevent deadlocks on the FOR UPDATE rows.
@@ -230,6 +241,7 @@ async def direct_checkout(
         item_data = await _reserve_product_for_order(
             db, item.product_id, item.quantity, item.selected_options,
         )
+        affected_product_slugs.append(item_data.pop("product_slug"))
         total_amount += round(item_data["unit_price"] * item_data["quantity"], 2)
         order_items_data.append(item_data)
 
@@ -261,7 +273,7 @@ async def direct_checkout(
     await db.flush()
 
     logger.info("Direct checkout complete: order_id={} amount={} payment_method={}", order.id, order.total_amount, payment_method)
-    return order, razorpay_data
+    return order, razorpay_data, affected_product_slugs
 
 
 async def list_orders(

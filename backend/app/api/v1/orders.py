@@ -32,7 +32,7 @@ async def checkout(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        order, razorpay_data = await order_service.checkout(
+        order, razorpay_data, affected_product_slugs = await order_service.checkout(
             db,
             user_id=user.id,
             address_id=body.address_id,
@@ -46,8 +46,9 @@ async def checkout(
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    await db.commit()
+    await order_service.invalidate_product_caches(affected_product_slugs)
     if body.payment_method == "cod":
-        await db.commit()
         await _send_cod_order_notifications(db, order.id)
     return CheckoutResponse(order_id=order.id, razorpay_order_data=razorpay_data)
 
@@ -59,7 +60,7 @@ async def direct_checkout(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        order, razorpay_data = await order_service.direct_checkout(
+        order, razorpay_data, affected_product_slugs = await order_service.direct_checkout(
             db,
             user_id=user.id,
             address_id=body.address_id,
@@ -73,8 +74,9 @@ async def direct_checkout(
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    await db.commit()
+    await order_service.invalidate_product_caches(affected_product_slugs)
     if body.payment_method == "cod":
-        await db.commit()
         await _send_cod_order_notifications(db, order.id)
     return CheckoutResponse(order_id=order.id, razorpay_order_data=razorpay_data)
 

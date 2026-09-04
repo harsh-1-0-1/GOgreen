@@ -24,6 +24,9 @@ export function useProducts(filters: ProductFilters = {}) {
       const { data } = await api.get<ProductListResponse>('/products', { params });
       return data;
     },
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -35,6 +38,9 @@ export function useProduct(slug: string) {
       return data;
     },
     enabled: !!slug,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 }
 
