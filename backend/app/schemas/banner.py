@@ -15,7 +15,7 @@ class BannerBase(BaseModel):
     position: int = 0
     placement: str = Field(
         default="hero",
-        pattern=r"^(hero|announcement|page|themed|strip|highlight|mobile_promo|corporate_gifting|happy_planters|trending|product_detail|product_spec)$",
+        pattern=r"^(hero|announcement|page|themed|strip|highlight|mobile_promo|corporate_gifting|happy_planters|trending|product_detail|product_spec|product_strip)$",
     )
     target_path: Optional[str] = Field(None, max_length=255)
     is_active: bool = True

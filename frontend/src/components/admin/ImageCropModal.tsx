@@ -91,6 +91,13 @@ const CROP_PRESETS: Record<string, CropPreset> = {
     height: 600,
     hint: '600×600px — Product specification banner',
   },
+  product_strip: {
+    label: '🏷️ Product Strip (7:1)',
+    aspect: 7 / 1,
+    width: 1400,
+    height: 200,
+    hint: '1400×200px — Wide strip below Buy It Now button',
+  },
   custom: {
     label: 'Custom Size',
     aspect: 1,

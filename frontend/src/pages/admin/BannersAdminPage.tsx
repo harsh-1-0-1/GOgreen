@@ -103,6 +103,12 @@ const PLACEMENTS = [
     description: 'A wide promotional banner displayed on the product detail page, just above the Product Specification section.',
     helpText: 'Recommended aspect ratio 1:1 (square, e.g. 600×600px). Banner renders at the uploaded image size. Choose a product type for type-specific spec banners, or fallback for all products.',
   },
+  {
+    key: 'product_strip',
+    label: '🏷️ Product Strip Banner',
+    description: 'A wide horizontal strip banner displayed on the product detail page, just below the Buy It Now button.',
+    helpText: 'Recommended size: 1400×200px. Choose a product category for category-specific banners, or leave blank as fallback for all products.',
+  },
 ] as const;
 
 const bannerSchema = z
@@ -112,7 +118,7 @@ const bannerSchema = z
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
-    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'mobile_promo', 'corporate_gifting', 'happy_planters', 'product_detail', 'product_spec']),
+    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'mobile_promo', 'corporate_gifting', 'happy_planters', 'product_detail', 'product_spec', 'product_strip']),
     target_path: z.string().max(255).optional().or(z.literal('')),
     bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #FFFFFF)'),
     text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #000000)'),
@@ -198,8 +204,8 @@ function SortableBannerRow({
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-gray-800 truncate">{banner.title}</p>
         <p className="text-xs text-gray-400 truncate">
-          {(banner.placement === 'page' || banner.placement === 'product_detail' || banner.placement === 'product_spec') && banner.target_path
-            ? `${banner.placement === 'product_detail' || banner.placement === 'product_spec' ? 'Type' : 'Target'}: ${banner.target_path}`
+          {(banner.placement === 'page' || banner.placement === 'product_detail' || banner.placement === 'product_spec' || banner.placement === 'product_strip') && banner.target_path
+            ? `${banner.placement === 'product_detail' || banner.placement === 'product_spec' || banner.placement === 'product_strip' ? 'Type' : 'Target'}: ${banner.target_path}`
             : banner.subtitle || banner.cta_link || '—'}
         </p>
       </div>
@@ -708,7 +714,7 @@ function BannerDrawer({
             </div>
           )}
 
-          {(watchedPlacement === 'product_detail' || watchedPlacement === 'product_spec') && (
+          {(watchedPlacement === 'product_detail' || watchedPlacement === 'product_spec' || watchedPlacement === 'product_strip') && (
             <div>
               <label className="text-xs font-semibold text-gray-700 mb-1 block">
                 Product Type
@@ -1207,6 +1213,37 @@ function BannerDrawer({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {watchedPlacement === 'product_strip' && (
+            <div className="mt-4 p-4 border rounded-xl bg-gray-50">
+              <p className="text-[11px] font-semibold text-gray-400 mb-2 uppercase tracking-wider">Product Strip Preview</p>
+              <div
+                className="h-[50px] w-full overflow-hidden rounded-lg border border-gray-200"
+                style={{ backgroundColor: watchedBgColor }}
+              >
+                {previewImageSrc ? (
+                  <img
+                    src={previewImageSrc}
+                    alt=""
+                    className="h-full w-full object-cover object-center"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center px-4 text-center">
+                    <span
+                      className="text-[10px] font-bold"
+                      style={{ color: watchedTextColor }}
+                    >
+                      {watchedTitle || 'Free Delivery Above ₹499'}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1.5">Appears below the Buy It Now button on product pages.</p>
             </div>
           )}
 

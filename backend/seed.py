@@ -747,6 +747,42 @@ async def seed(catalog_only: bool = False) -> None:
             ]
             db.add_all(banners_seed)
 
+            # ── Product detail strip banners (placement "product_strip") ──
+            # Wide horizontal banners shown below the Buy It Now button.
+            product_strip_banners = [
+                Banner(
+                    title="Free Delivery on Orders Above ₹499",
+                    subtitle="Order now and get your plants delivered to your doorstep",
+                    cta_text="Shop Now",
+                    cta_link="/products",
+                    placement="product_strip",
+                    position=0,
+                    bg_color="#F5F0E8",
+                    text_color="#1B4332",
+                    image_url=UNSPLASH_BANNER.format(id="1416879595882-3373a0480b5b"),
+                    target_path=None,
+                ),
+                *(
+                    Banner(
+                        title=f"{name} – starting at ₹299",
+                        cta_link=f"/products?category={slug}",
+                        placement="product_strip",
+                        position=0,
+                        bg_color="#E8F5E9",
+                        text_color="#1B4332",
+                        image_url=UNSPLASH_BANNER.format(id=CATEGORY_IMAGES.get(slug, "1416879595882-3373a0480b5b")),
+                        target_path=slug,
+                    )
+                    for slug, name in [
+                        ("plants", "Plants"),
+                        ("seeds", "Seeds"),
+                        ("pots-planters", "Pots & Planters"),
+                        ("plant-care", "Plant Care"),
+                    ]
+                ),
+            ]
+            db.add_all(product_strip_banners)
+
             # Quick-access square tiles on the home page (placement "strip").
             # Category tiles reuse the seeded category thumbnails + links.
             strip_categories = [
@@ -792,7 +828,7 @@ async def seed(catalog_only: bool = False) -> None:
             print(
                 f"\nSeeded 1 admin, {len(CATEGORIES)} categories, "
                 f"{len(PRODUCTS)} products, {len(BLOG_POSTS)} blog posts, "
-                f"and {len(banners_seed) + len(strip_banners)} banners."
+                f"and {len(banners_seed) + len(product_strip_banners) + len(strip_banners)} banners."
             )
 
 

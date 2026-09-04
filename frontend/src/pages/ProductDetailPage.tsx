@@ -533,6 +533,7 @@ export default function ProductDetailPage() {
   const { data: reviewPreview } = useProductReviews(product?.id, { limit: 1 });
   const { data: productDetailBanners = [] } = useBanners('product_detail');
   const { data: productSpecBanners = [] } = useBanners('product_spec');
+  const { data: productStripBanners = [] } = useBanners('product_strip');
   const { data: stories = [] } = useStories();
 
   useEffect(() => {
@@ -793,6 +794,7 @@ export default function ProductDetailPage() {
     : similar?.items.filter((p) => p.id !== product.id).slice(0, 4) ?? [];
   const productDetailBanner = selectProductTypeBanner(productDetailBanners, categories, product.category_id);
   const productSpecBanner = selectProductTypeBanner(productSpecBanners, categories, product.category_id);
+  const productStripBanner = selectProductTypeBanner(productStripBanners, categories, product.category_id);
   const mrp = displayOriginalPrice ?? displayPrice;
   const productSpecs = [
     { label: 'Name', value: product.name },
@@ -1075,6 +1077,39 @@ export default function ProductDetailPage() {
                 >
                   Buy It Now
                 </button>
+              </div>
+            )}
+
+            {productStripBanner && (
+              <div className="mt-3">
+                {productStripBanner.cta_link ? (
+                  <Link
+                    to={productStripBanner.cta_link}
+                    className="block overflow-hidden rounded-xl"
+                    style={{ backgroundColor: productStripBanner.bg_color || '#F5F0E8' }}
+                  >
+                    <img
+                      src={productStripBanner.image_url || ''}
+                      alt={productStripBanner.title}
+                      className="w-full h-auto object-cover"
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </Link>
+                ) : (
+                  <div
+                    className="overflow-hidden rounded-xl"
+                    style={{ backgroundColor: productStripBanner.bg_color || '#F5F0E8' }}
+                  >
+                    <img
+                      src={productStripBanner.image_url || ''}
+                      alt={productStripBanner.title}
+                      className="w-full h-auto object-cover"
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </div>
+                )}
               </div>
             )}
 

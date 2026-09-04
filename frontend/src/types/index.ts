@@ -322,7 +322,8 @@ export type BannerPlacement =
   | 'happy_planters'
   | 'trending'
   | 'product_detail'
-  | 'product_spec';
+  | 'product_spec'
+  | 'product_strip';
 
 export interface Banner {
   id: number;
