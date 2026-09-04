@@ -3,6 +3,7 @@ import Cropper from 'react-easy-crop';
 import { X, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Area } from 'react-easy-crop';
+import api from '@/lib/api';
 
 type CropPreset = {
   label: string;
@@ -168,26 +169,13 @@ export default function ImageCropModal({
           throw new Error('Server-side crop requires banner ID');
         }
         
-        const response = await fetch(`/api/v1/banners/admin/${bannerId}/crop`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            x: Math.round(croppedAreaPixels.x),
-            y: Math.round(croppedAreaPixels.y),
-            width: Math.round(croppedAreaPixels.width),
-            height: Math.round(croppedAreaPixels.height),
-          }),
+        const { data: updatedBanner } = await api.post(`/banners/admin/${bannerId}/crop`, {
+          x: Math.round(croppedAreaPixels.x),
+          y: Math.round(croppedAreaPixels.y),
+          width: Math.round(croppedAreaPixels.width),
+          height: Math.round(croppedAreaPixels.height),
         });
 
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-          throw new Error(error.detail || 'Failed to crop image');
-        }
-
-        const updatedBanner = await response.json();
         onServerCropComplete(updatedBanner.image_url);  // Distinct callback for server-side crop
         toast.success('Image cropped successfully!');
         onClose();
