@@ -410,12 +410,41 @@ class Story(Base):
     __tablename__ = "stories"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    video: Mapped[str] = mapped_column(String(500), nullable=False)       # storage key
-    thumbnail: Mapped[str | None] = mapped_column(String(500), nullable=True)     # poster frame, optional
-    caption: Mapped[str | None] = mapped_column(String(255), nullable=True)        # e.g. small label overlay, optional
+    video: Mapped[str] = mapped_column(String(500), nullable=False)
+    thumbnail: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    caption: Mapped[str | None] = mapped_column(String(255), nullable=True)
     linked_product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     linked_product: Mapped["Product | None"] = relationship("Product")
+
+
+class MenuItem(Base):
+    """Dynamic navigation menu item. Max depth = 1 (top-level + one level of children)."""
+    __tablename__ = "menu_items"
+    __table_args__ = (
+        UniqueConstraint("label", "parent_id", name="uq_menu_items_label_parent"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    href: Mapped[str] = mapped_column(String(512), nullable=False)
+    parent_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("menu_items.id"), nullable=True
+    )
+    image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    accent_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    highlight: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    parent: Mapped["MenuItem | None"] = relationship(
+        "MenuItem", remote_side="MenuItem.id", back_populates="children"
+    )
+    children: Mapped[list["MenuItem"]] = relationship("MenuItem", back_populates="parent")

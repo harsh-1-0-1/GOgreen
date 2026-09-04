@@ -408,3 +408,17 @@ export interface DoNotForgetListResponse {
   items: DoNotForgetProduct[];
   total: number;
 }
+
+export interface MenuItem {
+  id: number;
+  label: string;
+  href: string;
+  parent_id: number | null;
+  image_url: string | null;
+  accent_color: string | null;
+  highlight: boolean;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string | null;
+}

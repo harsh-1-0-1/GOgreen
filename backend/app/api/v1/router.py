@@ -11,6 +11,7 @@ from app.api.v1 import (
     damage_claims,
     do_not_forget,
     health,
+    menu_items,
     orders,
     payments,
     products,
@@ -36,3 +37,4 @@ api_router.include_router(banners.router)
 api_router.include_router(do_not_forget.router)
 api_router.include_router(stories.router)
 api_router.include_router(settings.router)
+api_router.include_router(menu_items.router)

@@ -1,4 +1,4 @@
-import type { Category } from '@/types';
+import type { Category, MenuItem } from '@/types';
 
 export interface DropdownLink {
   label: string;
@@ -40,10 +40,11 @@ export const SUPPORT_PHONE_DISPLAY: string = (() => {
 })();
 
 /**
- * Non-category site links. These are NOT taxonomy nodes and are merged
- * into the category-driven menu at render time.
+ * Hardcoded FALLBACK menu items. Used ONLY before the menu API has responded
+ * (dataUpdatedAt === 0). Under normal operation the DB-driven flat list from
+ * /menu_items always wins. These mirror the seed data.
  */
-export const STATIC_LINKS: StaticLink[] = [
+export const FALLBACK_MENU_ITEMS: StaticLink[] = [
   {
     label: 'Gifting',
     href: '/products?tags=gifting',
@@ -77,8 +78,8 @@ export const STATIC_LINKS: StaticLink[] = [
   },
 ];
 
-/** Static submenu for Gifting — tag/landing based, not a category. */
-export const GIFTING_SUBMENU: DropdownLink[] = [
+/** Fallback submenu for Gifting — used only before the API has responded. */
+export const FALLBACK_GIFTING_SUBMENU: DropdownLink[] = [
   { label: 'All Gifts', href: '/products?tags=gifting' },
   { label: 'Plant Gifting', href: '/products?tags=gifting' },
   { label: 'Corporate Gifting', href: '/corporate-gifting' },
@@ -122,13 +123,16 @@ export function subcategoryLinks(root: Category): DropdownLink[] | null {
 }
 
 /**
- * Desktop menu items from the category tree + static links.
- * Roots with children become mega-dropdown items; childless roots and
- * static links become plain links.
+ * Desktop nav items from the category tree + DB-driven menu items.
+ *
+ * `menuItems` is a FLAT list from /menu_items (or [] when the API hasn't
+ * responded yet). Top-level items are those with parent_id == null. Children
+ * (parent_id set) are filtered out here; they form the submenu dropdown for
+ * their parent via resolveSubcategories.
  */
 export function categoryTreeToNavItems(
   categories: Category[],
-  staticLinks: StaticLink[] = STATIC_LINKS,
+  menuItems: MenuItem[],
 ): NavItemDef[] {
   const roots = sortByMenuOrder(categories);
   const items: NavItemDef[] = roots.map((root) => {
@@ -144,23 +148,44 @@ export function categoryTreeToNavItems(
     }
     return item;
   });
-  return [
-    ...items,
-    ...staticLinks.map((link) => ({
-      label: link.label.toUpperCase(),
-      href: link.href,
-      highlight: link.highlight,
-    })),
-  ];
+
+  const dynamicItems = menuItems
+    .filter((m) => !m.parent_id)
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((m) => ({
+      label: m.label.toUpperCase(),
+      href: m.href,
+      highlight: m.highlight || undefined,
+    }));
+
+  return [...items, ...dynamicItems];
 }
 
-/** Resolve a submenu for a mobile/desktop menu label from the tree. */
+/**
+ * Resolve the submenu for a label from the DB-driven flat menu item list.
+ * Falls back to the category tree (existing behavior).
+ */
 export function resolveSubcategories(
   categories: Category[],
   label: string,
+  menuItems: MenuItem[],
 ): DropdownLink[] | null {
+  // 1. DB category tree first (existing behavior)
   const root = findRoot(categories, label);
   if (root) return subcategoryLinks(root);
-  if (label.toLowerCase().trim() === 'gifting') return GIFTING_SUBMENU;
+
+  // 2. DB-driven flat menu item list — find parent by label
+  const normalizedLabel = label.toLowerCase().trim();
+  const parent = menuItems.find(
+    (m) => !m.parent_id && m.label.toLowerCase().trim() === normalizedLabel,
+  );
+  if (parent) {
+    const children = menuItems
+      .filter((m) => m.parent_id === parent.id && m.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((m) => ({ label: m.label, href: m.href }));
+    if (children.length > 0) return children;
+  }
+
   return null;
 }
