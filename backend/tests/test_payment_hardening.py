@@ -10,16 +10,20 @@ import asyncio
 import hashlib
 import hmac
 import json
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.db.models import Order, PaymentStatus, Product, WebhookEvent
+from app.core import tasks
+from app.db.models import Address, Order, OrderItem, OrderStatus, PaymentStatus, Product, WebhookEvent
+from app.services import order_service
 from tests.conftest import (
     _register_and_make_admin,
     _seed_address,
+    _seed_category,
     _seed_product_and_category,
     test_session_factory,
 )
@@ -39,6 +43,23 @@ def _make_webhook_payload(order_id: int, payment_id: str, amount: int) -> bytes:
                 "entity": {
                     "id": payment_id,
                     "amount": amount,
+                    "notes": {"order_id": str(order_id), "source": "checkout"},
+                }
+            }
+        },
+    }
+    return json.dumps(payload).encode()
+
+
+def _make_failed_webhook_payload(order_id: int, payment_id: str = "pay_failed_001") -> bytes:
+    payload = {
+        "id": f"evt_{payment_id}",
+        "event": "payment.failed",
+        "payload": {
+            "payment": {
+                "entity": {
+                    "id": payment_id,
+                    "amount": 0,
                     "notes": {"order_id": str(order_id), "source": "checkout"},
                 }
             }
@@ -379,6 +400,345 @@ async def test_checkout_rollback_on_payment_provider_failure(client: AsyncClient
         assert len(orders_with_addr) == 0
 
 
+async def test_payment_failed_webhook_restores_reserved_stock(client: AsyncClient, monkeypatch):
+    order_id, product_id, _ = await _bootstrap_paid_order(
+        client,
+        monkeypatch,
+        stock=10,
+        quantity=3,
+    )
+
+    async with test_session_factory() as db:
+        p = await db.get(Product, product_id)
+        assert p.stock_qty == 7
+
+    body = _make_failed_webhook_payload(order_id)
+    resp = await client.post(
+        "/api/v1/payments/razorpay/webhook",
+        content=body,
+        headers=_webhook_headers(body, "evt_payment_failed_restore"),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["payment_status"] == "failed"
+
+    second_body = _make_failed_webhook_payload(order_id, "pay_failed_retry")
+    second_resp = await client.post(
+        "/api/v1/payments/razorpay/webhook",
+        content=second_body,
+        headers=_webhook_headers(second_body, "evt_payment_failed_restore_retry"),
+    )
+    assert second_resp.status_code == 200, second_resp.text
+    assert second_resp.json()["payment_status"] == "failed"
+
+    async with test_session_factory() as db:
+        p = await db.get(Product, product_id)
+        order = await db.get(Order, order_id)
+        assert p.stock_qty == 10
+        assert order.status == OrderStatus.CANCELLED
+        assert order.payment_status == PaymentStatus.FAILED
+
+
+async def test_late_capture_does_not_reopen_failed_order(client: AsyncClient, monkeypatch):
+    order_id, product_id, _ = await _bootstrap_paid_order(
+        client,
+        monkeypatch,
+        stock=10,
+        quantity=1,
+        price=100.0,
+    )
+
+    failed_body = _make_failed_webhook_payload(order_id, "pay_late_capture")
+    failed_resp = await client.post(
+        "/api/v1/payments/razorpay/webhook",
+        content=failed_body,
+        headers=_webhook_headers(failed_body, "evt_late_capture_failed"),
+    )
+    assert failed_resp.status_code == 200, failed_resp.text
+
+    captured_body = _make_webhook_payload(order_id, "pay_late_capture", 10000)
+    captured_resp = await client.post(
+        "/api/v1/payments/razorpay/webhook",
+        content=captured_body,
+        headers=_webhook_headers(captured_body, "evt_late_capture_paid"),
+    )
+    assert captured_resp.status_code == 200, captured_resp.text
+    assert captured_resp.json()["payment_status"] == "failed"
+
+    async with test_session_factory() as db:
+        p = await db.get(Product, product_id)
+        order = await db.get(Order, order_id)
+        assert p.stock_qty == 10
+        assert order.status == OrderStatus.CANCELLED
+        assert order.payment_status == PaymentStatus.FAILED
+
+
+async def test_failed_new_format_order_restores_stock_map(client: AsyncClient):
+    admin_token = await _register_and_make_admin(client)
+    category = await _seed_category(client, admin_token, "Failed Variant Restore")
+    address = await _seed_address(client, admin_token)
+    groups = [
+        {
+            "id": "vg_size",
+            "label": "Select Size",
+            "required": True,
+            "options": [
+                {"id": "opt_small", "name": "Small", "price": 0, "stock": 5},
+            ],
+        },
+        {
+            "id": "vg_colour",
+            "label": "Select Colour",
+            "required": True,
+            "options": [
+                {"id": "opt_black", "name": "Black", "price": 0, "stock": 5},
+            ],
+        },
+    ]
+    async with test_session_factory() as db:
+        db_address = await db.get(Address, address["id"])
+        product = Product(
+            name="Failed Variant Pothos",
+            slug="failed-variant-pothos",
+            description="Configurable",
+            price=200.0,
+            stock_qty=2,
+            category_id=category["id"],
+            variants={
+                "variant_groups": groups,
+                "stock_map": {"opt_small__opt_black": 0},
+            },
+            is_active=True,
+        )
+        db.add(product)
+        await db.flush()
+        order = Order(
+            user_id=db_address.user_id,
+            address_id=db_address.id,
+            status=OrderStatus.PENDING,
+            payment_status=PaymentStatus.PENDING,
+            payment_method="razorpay",
+            total_amount=400.0,
+        )
+        db.add(order)
+        await db.flush()
+        db.add(OrderItem(
+            order_id=order.id,
+            product_id=product.id,
+            quantity=2,
+            unit_price=200.0,
+            selected_options={
+                "option_ids": ["opt_small", "opt_black"],
+                "snapshot": [],
+            },
+        ))
+        await db.commit()
+        order_id = order.id
+        product_id = product.id
+
+    async with test_session_factory() as db:
+        order = await order_service.mark_failed(db, order_id)
+        await db.commit()
+        assert order is not None
+
+    async with test_session_factory() as db:
+        product = await db.get(Product, product_id)
+        order = await db.get(Order, order_id)
+        assert product.variants["stock_map"]["opt_small__opt_black"] == 2
+        assert product.stock_qty == 2
+        assert order.status == OrderStatus.CANCELLED
+        assert order.payment_status == PaymentStatus.FAILED
+
+
+async def test_failed_new_format_order_restores_multiple_variant_rows_for_same_product(client: AsyncClient):
+    admin_token = await _register_and_make_admin(client)
+    category = await _seed_category(client, admin_token, "Failed Multi Variant Restore")
+    address = await _seed_address(client, admin_token)
+    groups = [
+        {
+            "id": "vg_size",
+            "label": "Select Size",
+            "required": True,
+            "options": [
+                {"id": "opt_small", "name": "Small", "price": 0, "stock": 5},
+                {"id": "opt_medium", "name": "Medium", "price": 0, "stock": 5},
+            ],
+        },
+        {
+            "id": "vg_colour",
+            "label": "Select Colour",
+            "required": True,
+            "options": [
+                {"id": "opt_black", "name": "Black", "price": 0, "stock": 5},
+            ],
+        },
+    ]
+
+    async with test_session_factory() as db:
+        db_address = await db.get(Address, address["id"])
+        product = Product(
+            name="Failed Multi Variant Pothos",
+            slug="failed-multi-variant-pothos",
+            description="Configurable",
+            price=200.0,
+            stock_qty=0,
+            category_id=category["id"],
+            variants={
+                "variant_groups": groups,
+                "stock_map": {
+                    "opt_small__opt_black": 0,
+                    "opt_medium__opt_black": 0,
+                },
+            },
+            is_active=True,
+        )
+        db.add(product)
+        await db.flush()
+        order = Order(
+            user_id=db_address.user_id,
+            address_id=db_address.id,
+            status=OrderStatus.PENDING,
+            payment_status=PaymentStatus.PENDING,
+            payment_method="razorpay",
+            total_amount=600.0,
+        )
+        db.add(order)
+        await db.flush()
+        db.add_all([
+            OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                quantity=2,
+                unit_price=200.0,
+                selected_options={
+                    "option_ids": ["opt_small", "opt_black"],
+                    "snapshot": [],
+                },
+            ),
+            OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                quantity=1,
+                unit_price=200.0,
+                selected_options={
+                    "option_ids": ["opt_medium", "opt_black"],
+                    "snapshot": [],
+                },
+            ),
+        ])
+        await db.commit()
+        order_id = order.id
+        product_id = product.id
+
+    async with test_session_factory() as db:
+        order = await order_service.mark_failed(db, order_id)
+        await db.commit()
+        assert order is not None
+
+    async with test_session_factory() as db:
+        product = await db.get(Product, product_id)
+        assert product.variants["stock_map"]["opt_small__opt_black"] == 2
+        assert product.variants["stock_map"]["opt_medium__opt_black"] == 1
+        assert product.stock_qty == 3
+
+
+async def test_abandoned_order_cleanup_continues_after_bad_order(client: AsyncClient, monkeypatch):
+    admin_token = await _register_and_make_admin(client)
+    category = await _seed_category(client, admin_token, "Cleanup Isolation")
+    address = await _seed_address(client, admin_token)
+    old_time = datetime.now(timezone.utc) - timedelta(minutes=20)
+
+    async with test_session_factory() as db:
+        db_address = await db.get(Address, address["id"])
+        bad_product = Product(
+            name="Broken Cleanup Variant",
+            slug="broken-cleanup-variant",
+            description="Bad stock map",
+            price=100.0,
+            stock_qty=0,
+            category_id=category["id"],
+            variants={
+                "variant_groups": [
+                    {
+                        "id": "vg_size",
+                        "label": "Select Size",
+                        "required": True,
+                        "options": [{"id": "opt_small", "name": "Small", "price": 0, "stock": 1}],
+                    }
+                ],
+                "stock_map": {},
+            },
+            is_active=True,
+        )
+        good_product = Product(
+            name="Good Cleanup Product",
+            slug="good-cleanup-product",
+            description="Should restore",
+            price=100.0,
+            stock_qty=0,
+            category_id=category["id"],
+            is_active=True,
+        )
+        db.add_all([bad_product, good_product])
+        await db.flush()
+
+        bad_order = Order(
+            user_id=db_address.user_id,
+            address_id=db_address.id,
+            status=OrderStatus.PENDING,
+            payment_status=PaymentStatus.PENDING,
+            payment_method="razorpay",
+            total_amount=100.0,
+            created_at=old_time,
+        )
+        good_order = Order(
+            user_id=db_address.user_id,
+            address_id=db_address.id,
+            status=OrderStatus.PENDING,
+            payment_status=PaymentStatus.PENDING,
+            payment_method="razorpay",
+            total_amount=200.0,
+            created_at=old_time,
+        )
+        db.add_all([bad_order, good_order])
+        await db.flush()
+        db.add_all([
+            OrderItem(
+                order_id=bad_order.id,
+                product_id=bad_product.id,
+                quantity=1,
+                unit_price=100.0,
+                selected_options={"option_ids": ["opt_small"], "snapshot": []},
+            ),
+            OrderItem(
+                order_id=good_order.id,
+                product_id=good_product.id,
+                quantity=2,
+                unit_price=100.0,
+            ),
+        ])
+        await db.commit()
+        bad_order_id = bad_order.id
+        good_order_id = good_order.id
+        good_product_id = good_product.id
+
+    monkeypatch.setattr(tasks, "async_session_factory", test_session_factory)
+    monkeypatch.setattr(order_service, "invalidate_product_caches", AsyncMock())
+
+    restored_count = await tasks.cleanup_abandoned_orders_once()
+    assert restored_count == 1
+
+    async with test_session_factory() as db:
+        bad_order = await db.get(Order, bad_order_id)
+        good_order = await db.get(Order, good_order_id)
+        good_product = await db.get(Product, good_product_id)
+
+        assert bad_order.status == OrderStatus.PENDING
+        assert bad_order.payment_status == PaymentStatus.PENDING
+        assert good_order.status == OrderStatus.CANCELLED
+        assert good_order.payment_status == PaymentStatus.FAILED
+        assert good_product.stock_qty == 2
+
+
 # ─────────────────────────────────────────────────────────────────
 # Test 6: Distributed lock prevents concurrent cleanup
 # ─────────────────────────────────────────────────────────────────
@@ -511,4 +871,3 @@ async def test_refund_limit_capping(client: AsyncClient, monkeypatch):
         # First refund: 60.0, second refund: capped to 40.0
         refund_amounts = sorted([r.amount for r in refunds])
         assert refund_amounts == [40.0, 60.0]
-

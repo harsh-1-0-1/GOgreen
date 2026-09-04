@@ -128,7 +128,7 @@ async def razorpay_webhook(
 
         if refund_id:
             return {"status": "ok", "event": event, "order_id": order_id, "refund_id": refund_id}
-        if order and event == "payment.captured":
+        if order and event == "payment.captured" and order.payment_status.value == "paid":
             try:
                 await whatsapp_service.send_new_order_notification(db, order_id)
             except Exception as exc:
@@ -137,6 +137,10 @@ async def razorpay_webhook(
                 await email_service.send_order_emails(db, order_id)
             except Exception as exc:
                 logger.exception("New order email notification failed for order {}: {}", order_id, exc)
+        elif order and event == "payment.failed":
+            await order_service.invalidate_product_caches(
+                [item.product.slug for item in order.items if item.product]
+            )
 
         if order:
             return {"status": "ok", "event": event, "order_id": order_id,

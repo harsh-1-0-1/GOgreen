@@ -7,8 +7,9 @@ from sqlalchemy.orm import selectinload
 
 import uuid
 
-from app.db.models import Order, OrderItem, OrderStatus
+from app.db.models import Order, OrderItem, OrderStatus, PaymentStatus
 from app.db.session import async_session_factory
+from app.services import order_service
 from app.utils.redis import redis_client
 
 
@@ -37,6 +38,70 @@ async def _extend_lock(lock_key: str, lock_token: str, lock_expiry: int, stop_ev
             break
         except Exception as e:
             logger.warning("Error extending Redis lock: {}", e)
+
+
+async def cleanup_abandoned_orders_once() -> int:
+    affected_product_slugs: list[str] = []
+    restored_orders = 0
+    async with async_session_factory() as db:
+        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=15)
+
+        result = await db.execute(
+            select(Order.id)
+            .where(
+                Order.status == OrderStatus.PENDING,
+                Order.created_at < cutoff_time
+            )
+        )
+        abandoned_order_ids = result.scalars().all()
+        await db.rollback()
+
+        if not abandoned_order_ids:
+            return 0
+
+        logger.info(
+            "Found {} abandoned pending orders. Cancelling and restoring stock...",
+            len(abandoned_order_ids),
+        )
+
+        for order_id in abandoned_order_ids:
+            try:
+                async with db.begin():
+                    result = await db.execute(
+                        select(Order)
+                        .where(
+                            Order.id == order_id,
+                            Order.status == OrderStatus.PENDING,
+                            Order.created_at < cutoff_time,
+                        )
+                        .options(selectinload(Order.items).selectinload(OrderItem.product))
+                        .with_for_update()
+                    )
+                    order = result.scalar_one_or_none()
+                    if not order:
+                        continue
+
+                    order.status = OrderStatus.CANCELLED
+                    order.payment_status = PaymentStatus.FAILED
+                    affected_product_slugs.extend(
+                        await order_service.restore_order_stock(db, order)
+                    )
+                    restored_orders += 1
+            except Exception as e:
+                logger.exception(
+                    "Failed to cancel abandoned order {}; continuing cleanup batch: {}",
+                    order_id,
+                    e,
+                )
+                if db.in_transaction():
+                    await db.rollback()
+                continue
+
+        logger.info("Finished abandoned-order cleanup batch.")
+
+    if affected_product_slugs:
+        await order_service.invalidate_product_caches(affected_product_slugs)
+    return restored_orders
 
 
 async def cleanup_abandoned_orders():
@@ -72,62 +137,7 @@ async def cleanup_abandoned_orders():
                 )
 
             try:
-                async with async_session_factory() as db:
-                    # Use explicit transaction block to ensure all changes commit or rollback together
-                    async with db.begin():
-                        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=15)
-
-                        # Find all orders that are still pending and older than 15 minutes, lock rows
-                        result = await db.execute(
-                            select(Order)
-                            .where(
-                                Order.status == OrderStatus.PENDING,
-                                Order.created_at < cutoff_time
-                            )
-                            .options(selectinload(Order.items).selectinload(OrderItem.product))
-                            .with_for_update()
-                        )
-                        abandoned_orders = result.scalars().all()
-
-                        if not abandoned_orders:
-                            continue
-
-                        logger.info("Found {} abandoned pending orders. Cancelling and restoring stock...", len(abandoned_orders))
-
-                        for order in abandoned_orders:
-                            # Double check status to prevent race condition updates
-                            if order.status != OrderStatus.PENDING:
-                                continue
-
-                            # Mark order cancelled
-                            order.status = OrderStatus.CANCELLED
-
-                            # Restore stock for each item
-                            for item in order.items:
-                                product = item.product
-                                if not product:
-                                    continue
-
-                                # If simple product
-                                if not item.selected_options:
-                                    product.stock_qty += item.quantity
-                                # If variant product
-                                else:
-                                    details = item.selected_options
-                                    combo_key = None
-                                    if "size" in details and "color" in details and "pot" in details:
-                                        combo_key = f"{details['size']}|{details['color']}|{details['pot']}"
-
-                                    if combo_key and product.variants and "stock" in product.variants:
-                                        variants = product.variants
-                                        current_stock = int(variants["stock"].get(combo_key, 0))
-                                        variants["stock"][combo_key] = current_stock + item.quantity
-                                        product.variants = variants
-                                        product.stock_qty = sum(int(v or 0) for v in variants.get("stock", {}).values())
-                                        from sqlalchemy.orm.attributes import flag_modified
-                                        flag_modified(product, "variants")
-
-                        logger.info("Successfully cancelled {} abandoned orders.", len(abandoned_orders))
+                await cleanup_abandoned_orders_once()
             finally:
                 if extend_task:
                     stop_extend.set()

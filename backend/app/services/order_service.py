@@ -19,9 +19,9 @@ from app.db.models import (
     Refund,
 )
 from app.schemas.order import DirectCheckoutItem
-from app.services.cart_service import resolve_variant_details
+from app.services.cart_service import combination_key, resolve_variant_details
 from app.utils.redis import cache_delete, cache_delete_pattern
-from app.utils.variant_pricing import StockMapMissingError
+from app.utils.variant_pricing import StockMapMissingError, build_combo_key
 
 
 async def _create_razorpay_order(order: Order, email: str, full_name: str, phone: str) -> dict:
@@ -138,6 +138,56 @@ async def invalidate_product_caches(slugs: list[str]) -> None:
     for slug in set(slugs):
         await cache_delete(f"product:{slug}")
     await cache_delete_pattern("products:*")
+
+
+def _selected_option_ids(selected_options: dict | list | None) -> list[str]:
+    if isinstance(selected_options, list):
+        return [str(option_id) for option_id in selected_options if option_id]
+    if isinstance(selected_options, dict) and isinstance(selected_options.get("option_ids"), list):
+        return [str(option_id) for option_id in selected_options["option_ids"] if option_id]
+    return []
+
+
+def _restore_product_stock(product: Product, quantity: int, selected_options: dict | list | None) -> None:
+    variants = product.variants or {}
+
+    if "variant_groups" in variants:
+        stock_map = variants.get("stock_map")
+        combo_key = build_combo_key(variants.get("variant_groups", []), _selected_option_ids(selected_options))
+        if not isinstance(stock_map, dict) or combo_key is None or combo_key not in stock_map:
+            raise StockMapMissingError(
+                f"Stock map missing while restoring product '{product.name}' (id={product.id}, combo_key={combo_key!r})"
+            )
+        stock_map[combo_key] = int(stock_map.get(combo_key, 0) or 0) + quantity
+        variants["stock_map"] = stock_map
+        product.variants = variants
+        product.stock_qty = sum(int(v or 0) for v in stock_map.values())
+        flag_modified(product, "variants")
+        return
+
+    if selected_options and isinstance(selected_options, dict) and isinstance(variants.get("stock"), dict):
+        combo_key = combination_key(selected_options)
+        variants["stock"][combo_key] = int(variants["stock"].get(combo_key, 0) or 0) + quantity
+        product.variants = variants
+        product.stock_qty = sum(int(v or 0) for v in variants.get("stock", {}).values())
+        flag_modified(product, "variants")
+        return
+
+    product.stock_qty += quantity
+
+
+async def restore_order_stock(db: AsyncSession, order: Order) -> list[str]:
+    affected_product_slugs: list[str] = []
+    for item in sorted(order.items, key=lambda oi: oi.product_id):
+        product_result = await db.execute(
+            select(Product).where(Product.id == item.product_id).with_for_update()
+        )
+        product = product_result.scalar_one_or_none()
+        if not product:
+            continue
+        _restore_product_stock(product, item.quantity, item.selected_options)
+        affected_product_slugs.append(product.slug)
+    return affected_product_slugs
 
 
 async def checkout(
@@ -317,6 +367,13 @@ async def mark_paid(db: AsyncSession, order_id: int, payment_id: str, amount_pai
     if order.payment_status == PaymentStatus.PAID:
         logger.info("Idempotency guard: Order {} is already PAID. Ignoring.", order_id)
         return order
+    if order.status == OrderStatus.CANCELLED or order.payment_status == PaymentStatus.FAILED:
+        logger.critical(
+            "Payment capture received for cancelled/failed order {}; payment_id={}. Manual reconciliation required.",
+            order_id,
+            payment_id,
+        )
+        return order
 
     expected_paise = int(round(order.total_amount * 100))
     if amount_paid_paise != expected_paise:
@@ -335,14 +392,22 @@ async def mark_paid(db: AsyncSession, order_id: int, payment_id: str, amount_pai
 
 
 async def mark_failed(db: AsyncSession, order_id: int) -> Order | None:
-    result = await db.execute(select(Order).where(Order.id == order_id))
+    result = await db.execute(
+        select(Order)
+        .where(Order.id == order_id)
+        .options(selectinload(Order.items).selectinload(OrderItem.product))
+    )
     order = result.scalar_one_or_none()
     if not order:
         return None
 
     if order.status == OrderStatus.CANCELLED:
         return order
+    if order.payment_status == PaymentStatus.PAID:
+        logger.info("Payment failure ignored for already-paid order {}", order_id)
+        return order
 
+    await restore_order_stock(db, order)
     order.payment_status = PaymentStatus.FAILED
     order.status = OrderStatus.CANCELLED
     await db.flush()
