@@ -530,6 +530,9 @@ function BannerDrawer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  // Every crop-modal trigger must set this explicitly so local previews use
+  // client-side cropping and persisted banner images use the server crop API.
+  const [useServerCrop, setUseServerCrop] = useState(false);
 
   // react-hook-form's `watch()` is a React-Compiler-incompatible library (cannot be
   // memoized safely); the live banner preview needs its reactive values, so the
@@ -565,19 +568,31 @@ function BannerDrawer({
       setFileError('Only JPG, PNG, or WebP files accepted');
       return;
     }
-    // Open crop modal instead of directly setting preview
+    // Open crop modal for local file - always client-side
     const reader = new FileReader();
     reader.onload = (e) => {
       setCropImageSrc(e.target?.result as string);
+      setUseServerCrop(false);  // Local file, not on server yet
       setCropModalOpen(true);
     };
     reader.readAsDataURL(file);
   }
 
   function handleCropComplete(croppedFile: File, preview: string) {
+    // Client-side crop for new banners: store file for upload
     setSelectedFile(croppedFile);
     setFilePreview(preview);
     setImageCleared(false);
+  }
+
+  function handleServerCropComplete(newImageUrl: string) {
+    // Server-side crop for existing banners: already persisted, just update preview
+    setFilePreview(newImageUrl);
+    // Don't set selectedFile, manualUrl, or imageMode - no form field should re-submit the image
+    // The crop is already complete; if user clicks Save, it's for other field edits only
+    
+    // Trigger list refetch for immediate UI update
+    onSaved();
   }
 
   function handleUrlBlur() {
@@ -920,7 +935,7 @@ function BannerDrawer({
               {isEdit && banner?.image_url && !imageCleared && (
                 <div className="relative rounded-lg overflow-hidden border group">
                   <img
-                    src={banner.image_url}
+                    src={previewImageSrc || banner.image_url}
                     alt="Current banner"
                     className="w-full h-32 object-cover"
                   />
@@ -942,6 +957,7 @@ function BannerDrawer({
                       onClick={() => {
                         if (banner?.image_url) {
                           setCropImageSrc(banner.image_url);
+                          setUseServerCrop(true);  // Existing server image
                           setCropModalOpen(true);
                         }
                       }}
@@ -968,6 +984,7 @@ function BannerDrawer({
                       onClick={() => {
                         if (banner?.image_url) {
                           setCropImageSrc(banner.image_url);
+                          setUseServerCrop(true);  // Existing server image
                           setCropModalOpen(true);
                         }
                       }}
@@ -1023,6 +1040,7 @@ function BannerDrawer({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setCropImageSrc(filePreview);
+                                    setUseServerCrop(false);  // Local file preview
                                     setCropModalOpen(true);
                                   }}
                                   className="px-4 py-2 bg-primary/90 backdrop-blur-sm text-white rounded-lg hover:bg-primary transition flex items-center gap-1.5 text-xs font-semibold shadow-lg"
@@ -1037,6 +1055,7 @@ function BannerDrawer({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setCropImageSrc(filePreview);
+                                setUseServerCrop(false);  // Local file preview
                                 setCropModalOpen(true);
                               }}
                               className={`sm:hidden text-xs font-semibold flex items-center gap-1 ${
@@ -1053,6 +1072,7 @@ function BannerDrawer({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setCropImageSrc(filePreview);
+                                setUseServerCrop(false);  // Local file preview
                                 setCropModalOpen(true);
                               }}
                               className={`hidden sm:flex text-xs font-semibold items-center gap-1 ${
@@ -1213,7 +1233,10 @@ function BannerDrawer({
         isOpen={cropModalOpen}
         imageSrc={cropImageSrc || ''}
         placement={watchedPlacement}
+        useServerCrop={useServerCrop}
+        bannerId={banner?.id}
         onCropComplete={handleCropComplete}
+        onServerCropComplete={handleServerCropComplete}
         onClose={() => {
           setCropModalOpen(false);
           setCropImageSrc(null);

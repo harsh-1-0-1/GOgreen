@@ -1,19 +1,32 @@
 from datetime import datetime, timezone
+from io import BytesIO
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from loguru import logger
+from PIL import Image
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import httpx
 
 from app.core.security import require_admin
 from app.db.models import Banner
 from app.db.session import get_db
 from app.schemas.banner import BannerOut, BannerReorderRequest
-from app.utils.image_upload import delete_image_file, extract_relative_key, upload_image_file
+from app.utils.image_upload import delete_image_file, extract_relative_key, upload_image_file, resolve_image_url, generate_image_key
 from app.utils.redis import cache_delete, cache_get, cache_set
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/banners", tags=["banners"])
+
+
+class CropRequest(BaseModel):
+    x: int
+    y: int
+    width: int
+    height: int
 
 
 async def _invalidate_banner_cache(placement: str, target_path: str | None = None) -> None:
@@ -96,6 +109,173 @@ async def get_banners(
 @router.get("/config")
 async def get_banner_config(_admin=Depends(require_admin)):
     return {"cloudinary_enabled": False}
+
+
+def _crop_and_upload_sync(banner_id: int, old_key: str, x: int, y: int, width: int, height: int) -> str:
+    """
+    Synchronous function that:
+    1. Downloads image from S3
+    2. Crops it with Pillow
+    3. Uploads cropped version back to S3
+    
+    Runs in threadpool to avoid blocking async event loop.
+    """
+    from app.core.config import settings
+    import boto3
+    from pathlib import Path
+    
+    # Get S3 client
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_REGION or "us-east-1",
+    )
+    
+    is_prod = settings.ENVIRONMENT.lower() == "production"
+    bucket = settings.AWS_S3_BUCKET
+    
+    # Determine original format from key extension
+    original_ext = Path(old_key).suffix.lower()
+    if original_ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+        original_ext = ".png"  # Default fallback
+    
+    # Map extension to PIL format
+    format_map = {
+        ".jpg": "JPEG",
+        ".jpeg": "JPEG",
+        ".png": "PNG",
+        ".webp": "WEBP",
+    }
+    pil_format = format_map.get(original_ext, "PNG")
+    
+    try:
+        if is_prod and bucket:
+            # Production: Download from S3
+            response = s3.get_object(Bucket=bucket, Key=old_key)
+            image_bytes = response["Body"].read()
+        else:
+            # Local/dev: Read from static folder
+            local_path = Path("static") / old_key
+            if not local_path.exists():
+                raise FileNotFoundError(f"Image not found: {local_path}")
+            image_bytes = local_path.read_bytes()
+        
+        # Open and crop image
+        image = Image.open(BytesIO(image_bytes))
+        
+        # Validate crop bounds against actual image dimensions
+        if x < 0 or y < 0:
+            raise ValueError(f"Crop coordinates cannot be negative: x={x}, y={y}")
+        if x + width > image.width or y + height > image.height:
+            raise ValueError(
+                f"Crop box ({x}, {y}, {x+width}, {y+height}) exceeds image bounds ({image.width}x{image.height})"
+            )
+        
+        cropped = image.crop((x, y, x + width, y + height))
+        
+        # Save to bytes buffer preserving format
+        output_buffer = BytesIO()
+        cropped.save(output_buffer, format=pil_format)
+        output_buffer.seek(0)
+        cropped_bytes = output_buffer.read()
+        
+        # Generate new key for cropped image
+        new_key = generate_image_key("banners", banner_id, f"cropped{original_ext}")
+        
+        # Upload cropped image
+        if is_prod and bucket:
+            # Production: Upload to S3
+            content_type_map = {
+                "JPEG": "image/jpeg",
+                "PNG": "image/png",
+                "WEBP": "image/webp",
+            }
+            s3.put_object(
+                Bucket=bucket,
+                Key=new_key,
+                Body=cropped_bytes,
+                ContentType=content_type_map.get(pil_format, "image/png"),
+                CacheControl="public, max-age=31536000, immutable",
+            )
+        else:
+            # Local/dev: Write to static folder
+            dest = Path("static") / new_key
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(cropped_bytes)
+        
+        logger.info(f"Cropped banner image: {old_key} -> {new_key}")
+        return new_key
+        
+    except Exception as e:
+        logger.error(f"Failed to crop image {old_key}: {e}")
+        raise
+
+
+@router.post("/admin/{banner_id}/crop", response_model=BannerOut)
+async def crop_banner_image(
+    banner_id: int,
+    crop: CropRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """
+    Server-side image cropping endpoint.
+    
+    Accepts crop coordinates from the frontend, downloads the original image from S3,
+    crops it with Pillow, uploads the cropped version, and updates the banner record.
+    
+    This avoids CORS issues with client-side canvas cropping.
+    """
+    banner = await db.get(Banner, banner_id)
+    if not banner:
+        raise HTTPException(404, "Banner not found")
+    
+    old_key = banner.image_public_id or banner.image_url
+    if not old_key:
+        raise HTTPException(400, "Banner has no image to crop")
+    
+    # Validate crop coordinates
+    if crop.width <= 0 or crop.height <= 0:
+        raise HTTPException(400, "Invalid crop dimensions")
+    
+    try:
+        # Perform crop in threadpool (sync S3 + Pillow operations)
+        new_key = await run_in_threadpool(
+            _crop_and_upload_sync,
+            banner_id,
+            old_key,
+            crop.x,
+            crop.y,
+            crop.width,
+            crop.height,
+        )
+        
+        # Update banner with new cropped image
+        banner.image_url = new_key
+        banner.image_public_id = new_key
+        
+        # Delete old image to prevent S3 orphans
+        if old_key != new_key:
+            await delete_image_file(old_key)
+        
+        await db.flush()
+        await db.refresh(banner)
+        
+        # Invalidate cache
+        await _invalidate_banner_cache(banner.placement, banner.target_path)
+        
+        logger.info(f"Banner {banner_id} image cropped successfully")
+        return banner
+        
+    except ValueError as e:
+        # Client error: invalid crop coordinates
+        raise HTTPException(400, str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        logger.error(f"Crop operation failed for banner {banner_id}: {e}")
+        raise HTTPException(500, "Failed to crop image")
 
 
 # ── ADMIN ───────────────────────────────────────────────────────────────────

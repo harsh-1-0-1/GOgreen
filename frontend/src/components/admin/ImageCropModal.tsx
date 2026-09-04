@@ -103,7 +103,11 @@ interface ImageCropModalProps {
   isOpen: boolean;
   imageSrc: string;
   placement: string;
-  onCropComplete: (croppedFile: File, preview: string) => void;
+  useServerCrop: boolean;  // Explicit: is this image already on server?
+  bannerId?: number;       // Only for server-side crop API call
+  // Distinct callbacks for different crop paths - no ambiguity
+  onCropComplete: (croppedFile: File, preview: string) => void;      // New banner: client-side crop
+  onServerCropComplete: (newImageUrl: string) => void;                // Existing banner: server-side crop
   onClose: () => void;
 }
 
@@ -118,7 +122,10 @@ export default function ImageCropModal({
   isOpen,
   imageSrc,
   placement,
+  useServerCrop,
+  bannerId,
   onCropComplete,
+  onServerCropComplete,
   onClose,
 }: ImageCropModalProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -155,90 +162,85 @@ export default function ImageCropModal({
 
     setIsProcessing(true);
     try {
-      // For already-uploaded images from CDN, we need to fetch through a proxy
-      // or re-fetch through the backend to avoid CORS issues
-      let imageBlob: Blob;
-      
-      try {
-        // Fetch the image as a blob (this bypasses canvas CORS restrictions)
-        const response = await fetch(imageSrc, {
-          mode: 'cors',
-          credentials: 'omit',
+      if (useServerCrop) {
+        // Server-side crop: imageSrc is already on server, bannerId must exist
+        if (!bannerId) {
+          throw new Error('Server-side crop requires banner ID');
+        }
+        
+        const response = await fetch(`/api/v1/banners/admin/${bannerId}/crop`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            x: Math.round(croppedAreaPixels.x),
+            y: Math.round(croppedAreaPixels.y),
+            width: Math.round(croppedAreaPixels.width),
+            height: Math.round(croppedAreaPixels.height),
+          }),
         });
-        
+
         if (!response.ok) {
-          throw new Error(`Failed to fetch image: ${response.statusText}`);
-        }
-        
-        imageBlob = await response.blob();
-      } catch (fetchError) {
-        console.error('Failed to fetch image:', fetchError);
-        throw new Error('Cannot load image for cropping. The image may not be accessible.');
-      }
-
-      // Create an object URL from the blob - this is same-origin and won't trigger CORS
-      const blobUrl = URL.createObjectURL(imageBlob);
-      
-      // Load the image from the blob URL
-      const image = new window.Image();
-      
-      await new Promise((resolve, reject) => {
-        image.onload = () => {
-          if (image.naturalWidth > 0 && image.naturalHeight > 0) {
-            resolve(null);
-          } else {
-            reject(new Error('Image loaded but has invalid dimensions'));
-          }
-        };
-        image.onerror = () => reject(new Error('Failed to load image'));
-        
-        // No crossOrigin needed for blob URLs
-        image.src = blobUrl;
-      });
-
-      const canvas = document.createElement('canvas');
-      
-      // Set canvas to desired output size
-      canvas.width = croppedAreaPixels.width;
-      canvas.height = croppedAreaPixels.height;
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Failed to get canvas context');
-
-      // Draw the cropped portion
-      ctx.drawImage(
-        image,
-        croppedAreaPixels.x,
-        croppedAreaPixels.y,
-        croppedAreaPixels.width,
-        croppedAreaPixels.height,
-        0,
-        0,
-        croppedAreaPixels.width,
-        croppedAreaPixels.height
-      );
-
-      // Clean up the blob URL
-      URL.revokeObjectURL(blobUrl);
-
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          throw new Error('Canvas conversion failed');
+          const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+          throw new Error(error.detail || 'Failed to crop image');
         }
 
-        const file = new File(
-          [blob],
-          `cropped-banner-${Date.now()}.png`,
-          {
-            type: 'image/png',
-          }
-        );
-
-        const preview = canvas.toDataURL('image/png');
-        onCropComplete(file, preview);
+        const updatedBanner = await response.json();
+        onServerCropComplete(updatedBanner.image_url);  // Distinct callback for server-side crop
         toast.success('Image cropped successfully!');
         onClose();
-      }, 'image/png');
+      } else {
+        // Client-side crop: imageSrc is local blob:/data: URL from file input
+        const response = await fetch(imageSrc);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        
+        const image = new window.Image();
+        await new Promise((resolve, reject) => {
+          image.onload = resolve;
+          image.onerror = reject;
+          image.src = blobUrl;
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = croppedAreaPixels.width;
+        canvas.height = croppedAreaPixels.height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Failed to get canvas context');
+
+        ctx.drawImage(
+          image,
+          croppedAreaPixels.x,
+          croppedAreaPixels.y,
+          croppedAreaPixels.width,
+          croppedAreaPixels.height,
+          0,
+          0,
+          croppedAreaPixels.width,
+          croppedAreaPixels.height,
+        );
+
+        URL.revokeObjectURL(blobUrl);
+
+        // Await toBlob properly
+        const croppedBlob = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob(resolve, 'image/png');
+        });
+
+        if (!croppedBlob) throw new Error('Canvas conversion failed');
+
+        const file = new File([croppedBlob], `cropped-banner-${Date.now()}.png`, {
+          type: 'image/png',
+        });
+
+        const preview = canvas.toDataURL('image/png');
+        onCropComplete(file, preview);  // Distinct callback for client-side crop
+        toast.success('Image cropped successfully!');
+        onClose();
+      }
     } catch (err) {
       console.error('Crop error:', err);
       toast.error(`Failed to crop image: ${err instanceof Error ? err.message : 'Unknown error'}`);
