@@ -2,10 +2,12 @@ import json
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
+from app.db.models import Product
 from app.db.session import get_db
 from app.schemas.product import (
     FAQItem,
@@ -169,6 +171,7 @@ async def get_product_raw(
         "why_plantoga_banner_image": product.why_plantoga_banner_image,  # raw relative key
         "care_card_image": product.care_card_image,  # raw relative key
         "faqs": product.faqs,  # raw list of {question, answer}
+        "related_product_ids": product.related_product_ids or [],  # list of product IDs
         "created_at": product.created_at.isoformat() if product.created_at else None,
     }
 
@@ -196,6 +199,31 @@ async def admin_get_all_products(
         pages=pages,
         limit=limit,
     )
+
+
+@router.get("/by-ids", response_model=list[ProductResponse])
+async def get_products_by_ids(
+    ids: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch multiple products by comma-separated IDs (public endpoint).
+    
+    Used by the product detail page to render admin-curated 'You May Also Like' products.
+    Only returns active products; missing/inactive IDs are silently omitted.
+    """
+    try:
+        id_list = [int(i.strip()) for i in ids.split(",") if i.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ids must be comma-separated integers")
+    if not id_list:
+        return []
+    result = await db.execute(
+        select(Product).where(Product.id.in_(id_list), Product.is_active == True)  # noqa: E712
+    )
+    products = list(result.scalars().all())
+    # Preserve the admin-specified order
+    id_to_product = {p.id: p for p in products}
+    return [ProductResponse.model_validate(id_to_product[i]) for i in id_list if i in id_to_product]
 
 
 @router.get("/{slug}", response_model=ProductResponse)
@@ -234,6 +262,7 @@ async def create_product(
     why_plantoga_banner_image: Annotated[str | None, Form()] = None,  # relative key from prior /upload-image call
     care_card_image: Annotated[str | None, Form()] = None,  # relative key from prior /upload-image call
     faqs: Annotated[str | None, Form()] = None,  # JSON string: [{question, answer}, ...]
+    related_product_ids: Annotated[str | None, Form()] = None,  # JSON string: [id1, id2, ...]
     image_urls: Annotated[str, Form()] = "[]",
     images: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
@@ -283,6 +312,7 @@ async def create_product(
         why_plantoga_banner_image=why_plantoga_banner_image or None,
         care_card_image=care_card_image or None,
         faqs=[FAQItem(**f) for f in json.loads(faqs)] if faqs else None,
+        related_product_ids=json.loads(related_product_ids) if related_product_ids else None,
     )
 
     # Flush first to get product.id, then upload using that id as the folder namespace.

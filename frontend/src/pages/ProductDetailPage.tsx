@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Minus, Plus, ShoppingCart, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useProduct, useProducts } from '@/hooks/useProducts';
+import { useProduct, useProducts, useProductsByIds } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useProductReviews } from '@/hooks/useReviews';
 import { useCartStore } from '@/store/cartStore';
@@ -529,6 +529,7 @@ export default function ProductDetailPage() {
   const isInitialized = useRef(false);
 
   const { data: similar } = useProducts({ limit: 5 });
+  const { data: curatedRelated } = useProductsByIds(product?.related_product_ids ?? []);
   const { data: reviewPreview } = useProductReviews(product?.id, { limit: 1 });
   const { data: productDetailBanners = [] } = useBanners('product_detail');
   const { data: productSpecBanners = [] } = useBanners('product_spec');
@@ -787,7 +788,9 @@ export default function ProductDetailPage() {
     }
   }
 
-  const similarProducts = similar?.items.filter((p) => p.id !== product.id).slice(0, 4) ?? [];
+  const similarProducts = curatedRelated && curatedRelated.length > 0
+    ? curatedRelated.filter((p) => p.id !== product.id).slice(0, 4)
+    : similar?.items.filter((p) => p.id !== product.id).slice(0, 4) ?? [];
   const productDetailBanner = selectProductTypeBanner(productDetailBanners, categories, product.category_id);
   const productSpecBanner = selectProductTypeBanner(productSpecBanners, categories, product.category_id);
   const mrp = displayOriginalPrice ?? displayPrice;

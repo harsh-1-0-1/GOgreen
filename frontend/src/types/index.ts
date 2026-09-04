@@ -47,6 +47,7 @@ export interface Product {
   why_plantoga_banner_image?: string | null;
   care_card_image?: string | null;
   faqs?: FAQItem[] | null;
+  related_product_ids?: number[];
 }
 
 // New flexible variant system types

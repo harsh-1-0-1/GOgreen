@@ -73,3 +73,17 @@ export function useAdminAllProducts(limit: number = 1000) {
     staleTime: 60 * 1000, // 1 minute
   });
 }
+
+export function useProductsByIds(ids: number[]) {
+  return useQuery({
+    queryKey: ['products-by-ids', ids],
+    queryFn: async () => {
+      const { data } = await api.get<Product[]>(`/products/by-ids`, {
+        params: { ids: ids.join(',') },
+      });
+      return data;
+    },
+    enabled: ids.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+}

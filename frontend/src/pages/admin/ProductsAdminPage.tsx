@@ -17,7 +17,7 @@ import {
   Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useProduct, useProductRaw, useProducts } from '@/hooks/useProducts';
+import { useProduct, useProductRaw, useProducts, useAdminAllProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useDeleteProduct } from '@/hooks/useAdmin';
 import api from '@/lib/api';
@@ -144,6 +144,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     faqs: false,
     variants: false,
     seo: false,
+    related: false,
   });
 
   const toggleSection = (section: string) => {
@@ -214,6 +215,12 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // Per-product FAQ entries
   const [faqItems, setFaqItems] = useState<{ question: string; answer: string }[]>([]);
   const DEFAULT_FAQ = { question: '', answer: '' };
+
+  // Related products (You May Also Like)
+  const [relatedProductIds, setRelatedProductIds] = useState<number[]>([]);
+  const [relatedSearch, setRelatedSearch] = useState('');
+  const { data: allProductsData } = useAdminAllProducts();
+  const allProducts = allProductsData?.items ?? [];
 
   // Tracks whether the raw product image keys have been seeded into variant state.
   // Stored as state (not a ref) so that changing it triggers a re-render, which is
@@ -316,6 +323,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setCareCardImageUrl(p.care_card_image || '');
     setCareCardImageKey('');  // will be overwritten by rawProduct effect
     setFaqItems(p.faqs || []);
+    setRelatedProductIds(p.related_product_ids || []);
   };
   // Seed default_image from the raw admin endpoint (relative key, not resolved URL).
   // Must wait for formInitialized so that variantGroups is already populated before
@@ -399,6 +407,12 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       const rawFaqs = rawProduct.faqs;
       if (Array.isArray(rawFaqs) && rawFaqs.length > 0) {
         setFaqItems(rawFaqs.map((f: FAQItem) => ({ question: f.question || '', answer: f.answer || '' })));
+      }
+
+      // Seed related product IDs from raw product
+      const rawRelatedIds = rawProduct.related_product_ids;
+      if (Array.isArray(rawRelatedIds)) {
+        setRelatedProductIds(rawRelatedIds);
       }
     }
   }
@@ -583,6 +597,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           why_plantoga_banner_image: whyPlantogaBannerKey || null,
           care_card_image: careCardImageKey || null,
           faqs: faqItems.filter(f => f.question.trim() && f.answer.trim()),
+          related_product_ids: relatedProductIds.length > 0 ? relatedProductIds : null,
         };
         const { data: updatedProduct } = await api.put<Product>(`/products/${editProduct.id}`, updatePayload);
         toast.success('Product updated successfully!');
@@ -624,6 +639,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         if (careCardImageKey) fd.append('care_card_image', careCardImageKey);
         const cleanFaqs = faqItems.filter(f => f.question.trim() && f.answer.trim());
         if (cleanFaqs.length) fd.append('faqs', JSON.stringify(cleanFaqs));
+        if (relatedProductIds.length) fd.append('related_product_ids', JSON.stringify(relatedProductIds));
         fd.append('image_urls', JSON.stringify(productImages));
 
         // Add file uploads
@@ -1703,6 +1719,98 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     )}
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 8: Related Products (You May Also Like) */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleSection('related')}
+              className="w-full flex items-center justify-between px-5 py-4 font-semibold text-sm text-gray-800 hover:bg-gray-50 text-left"
+            >
+              <span className="flex items-center gap-2">💡 <span>Related Products (You May Also Like)</span></span>
+              {openSections.related ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {openSections.related && (
+              <div className="p-5 border-t border-gray-100 space-y-4 bg-white">
+                <p className="text-[11px] text-gray-400">Select products to show in the "You May Also Like" section on this product's detail page. If none are selected, the latest products are shown instead.</p>
+                {/* Selected products */}
+                {relatedProductIds.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {relatedProductIds.map((id) => {
+                      const p = allProducts.find((ap) => ap.id === id);
+                      return (
+                        <div key={id} className="flex items-center gap-1.5 border rounded-lg bg-primary/5 border-primary/20 px-2.5 py-1.5">
+                          <span className="text-xs font-medium text-gray-700 truncate max-w-[160px]">{p?.name ?? `#${id}`}</span>
+                          <button
+                            type="button"
+                            onClick={() => setRelatedProductIds((prev) => prev.filter((rid) => rid !== id))}
+                            className="text-red-400 hover:text-red-600"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Search input */}
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={relatedSearch}
+                    onChange={(e) => setRelatedSearch(e.target.value)}
+                    placeholder="Search products by name..."
+                    className={`${inputClass} pl-8`}
+                  />
+                </div>
+                {/* Search results dropdown */}
+                {relatedSearch.trim() && (
+                  <div className="border rounded-lg max-h-48 overflow-y-auto bg-white">
+                    {allProducts
+                      .filter((p) =>
+                        p.name.toLowerCase().includes(relatedSearch.toLowerCase()) &&
+                        p.id !== editProduct?.id &&
+                        !relatedProductIds.includes(p.id)
+                      )
+                      .slice(0, 20)
+                      .map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setRelatedProductIds((prev) => [...prev, p.id]);
+                            setRelatedSearch('');
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 border-b border-gray-50 last:border-0"
+                        >
+                          <div className="h-8 w-8 rounded border overflow-hidden bg-gray-100 shrink-0">
+                            {p.images?.[0] ? (
+                              <img src={p.images[0]} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="h-full w-full flex items-center justify-center text-gray-300">
+                                <ImageIcon size={14} />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-700 truncate">{p.name}</p>
+                            <p className="text-[11px] text-gray-400">₹{p.price}</p>
+                          </div>
+                        </button>
+                      ))}
+                    {allProducts.filter((p) =>
+                      p.name.toLowerCase().includes(relatedSearch.toLowerCase()) &&
+                      p.id !== editProduct?.id &&
+                      !relatedProductIds.includes(p.id)
+                    ).length === 0 && (
+                      <p className="px-3 py-2 text-xs text-gray-400 italic">No matching products found.</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

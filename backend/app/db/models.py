@@ -87,6 +87,7 @@ class Product(Base):
     care_card_image: Mapped[str | None] = mapped_column(String(512), nullable=True)
     faqs: Mapped[list | None] = mapped_column(JSON, nullable=True)
     display_section: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    related_product_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     category: Mapped["Category"] = relationship(back_populates="products")
     reviews: Mapped[list["ProductReview"]] = relationship(back_populates="product", cascade="all, delete-orphan")

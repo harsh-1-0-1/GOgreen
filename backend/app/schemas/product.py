@@ -98,6 +98,7 @@ class ProductCreate(BaseModel):
     why_plantoga_banner_image: str | None = None  # relative storage key
     care_card_image: str | None = None  # relative storage key
     faqs: Optional[List[FAQItem]] = None
+    related_product_ids: Optional[List[int]] = None
 
     @field_validator("variants")
     @classmethod
@@ -129,6 +130,7 @@ class ProductUpdate(BaseModel):
     why_plantoga_banner_image: str | None = None  # relative key; null clears, omit to preserve
     care_card_image: str | None = None  # relative key; null clears, omit to preserve
     faqs: Optional[List[FAQItem]] = None
+    related_product_ids: Optional[List[int]] = None
 
     @field_validator("variants")
     @classmethod
@@ -160,6 +162,7 @@ class ProductResponse(BaseModel):
     why_plantoga_banner_image: str | None = None
     care_card_image: str | None = None
     faqs: Optional[List[dict]] = None
+    related_product_ids: Optional[List[int]] = None
     # ⚠️ NOTE on variants field image storage:
     # Despite field names like "image_url", variants store RELATIVE KEYS in the database
     # (e.g. "plantoga/product-variants/42/abc.webp"), NOT full URLs.
