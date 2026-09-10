@@ -290,6 +290,44 @@ export interface DamageClaimListResponse {
   pages: number;
 }
 
+export type CorporateInquiryStatus =
+  | 'new'
+  | 'review'
+  | 'quoted'
+  | 'approved'
+  | 'cancelled';
+
+export interface CorporateInquiry {
+  id: number;
+  ticket_id: string;
+  full_name: string;
+  phone: string;
+  email: string;
+  company_name: string;
+  customization_notes: string | null;
+  qty_requested: number | null;
+  is_duplicate: boolean;
+  status: CorporateInquiryStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CorporateInquiryListResponse {
+  items: CorporateInquiry[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+export interface CorporateInquiryPayload {
+  full_name: string;
+  phone: string;
+  email: string;
+  company_name: string;
+  customization_notes?: string;
+  qty_requested: number;
+}
+
 export interface TokenResponse {
   access_token: string;
   refresh_token: string;

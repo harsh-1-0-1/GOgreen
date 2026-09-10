@@ -15,10 +15,26 @@ const inquirySchema = z.object({
     .regex(/^(\+91[\s-]?)?[6-9]\d{9}$/, 'Please enter a valid Indian WhatsApp number.'),
   email: z.string().trim().email('Please enter a valid email address.'),
   companyName: z.string().trim().min(2, 'Please enter your company name.'),
+  qtyRequested: z.preprocess(
+    (val) => (val === '' || val === undefined ? NaN : val),
+    z.coerce
+      .number()
+      .int('Please enter a whole number.')
+      .min(10, 'Please enter the quantity you need (min. 10).')
+      .max(100000, 'For quantities above 1,00,000 please contact us directly.'),
+  ),
   customisation: z.string().trim().optional(),
 });
 
-type InquiryFormValues = z.infer<typeof inquirySchema>;
+// Explicit type for form values to work around Zod preprocess inference issue
+type InquiryFormValues = {
+  fullName: string;
+  phone: string;
+  email: string;
+  companyName: string;
+  qtyRequested: number;
+  customisation?: string;
+};
 
 const FIELDS: Array<{
   name: keyof InquiryFormValues;
@@ -30,6 +46,7 @@ const FIELDS: Array<{
   { name: 'phone', label: 'Phone (WhatsApp No.)', type: 'tel', autoComplete: 'tel' },
   { name: 'email', label: 'Email', type: 'email', autoComplete: 'email' },
   { name: 'companyName', label: 'Company Name', autoComplete: 'organization' },
+  { name: 'qtyRequested', label: 'Quantity Needed (min. 10)', type: 'number' },
 ];
 
 export default function CorporateGiftInquiryForm() {
@@ -40,12 +57,13 @@ export default function CorporateGiftInquiryForm() {
     reset,
     formState: { errors, isSubmitting },
   } = useForm<InquiryFormValues>({
-    resolver: zodResolver(inquirySchema),
+    resolver: zodResolver(inquirySchema) as any,
     defaultValues: {
       fullName: '',
       phone: '',
       email: '',
       companyName: '',
+      qtyRequested: undefined,
       customisation: '',
     },
   });
@@ -54,11 +72,12 @@ export default function CorporateGiftInquiryForm() {
     setFormError('');
     try {
       await submitCorporateGiftInquiry({
-        fullName: values.fullName,
+        full_name: values.fullName,
         phone: values.phone,
         email: values.email,
-        companyName: values.companyName,
-        customisation: values.customisation || undefined,
+        company_name: values.companyName,
+        qty_requested: values.qtyRequested,
+        customization_notes: values.customisation || undefined,
       });
       toast.success('Thank you! Our team will get in touch with you shortly.');
       reset();

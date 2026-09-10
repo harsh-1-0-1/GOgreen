@@ -14,6 +14,7 @@ from app.db.models import (
     OrderStatus,
 )
 from app.utils.image_upload import resolve_image_url, upload_image_file
+from app.utils.ticket_ids import make_ticket_id
 
 # Maximum photos per claim and per-upload size enforced at the route layer,
 # but constants are defined here for easy tuning.
@@ -25,7 +26,7 @@ VALID_STATUSES = {s.value for s in DamageClaimStatus}
 
 def _generate_ticket_id(claim_id: int) -> str:
     """Generate a deterministic, human-readable ticket ID from the DB primary key."""
-    return f"PLG-DR-{claim_id:06d}"
+    return make_ticket_id("DR", claim_id)
 
 
 def _resolve_photo_urls(photo_keys: list) -> list[str]:

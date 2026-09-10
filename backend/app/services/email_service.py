@@ -259,6 +259,154 @@ async def send_order_emails(db: AsyncSession, order_id: int) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Corporate Inquiry Emails
+# ---------------------------------------------------------------------------
+
+async def send_corporate_inquiry_emails(
+    db: AsyncSession, inquiry_id: int
+) -> None:
+    """Send emails to customer and admin when a corporate/bulk inquiry is submitted."""
+    if not _smtp_configured():
+        logger.info("Corporate inquiry email skipped: SMTP settings are not configured.")
+        return
+
+    from app.db.models import CorporateInquiry
+
+    result = await db.execute(
+        select(CorporateInquiry).where(CorporateInquiry.id == inquiry_id)
+    )
+    inquiry = result.scalar_one_or_none()
+    if not inquiry:
+        logger.warning("Corporate inquiry email skipped: inquiry {} not found.", inquiry_id)
+        return
+
+    qty_line = str(inquiry.qty_requested) if inquiry.qty_requested else "Not specified"
+
+    # Customer confirmation email
+    customer_text = f"""Corporate Inquiry Received — {inquiry.ticket_id}
+
+Hi {inquiry.full_name}, thank you for your interest in corporate gifting with Plantoga.
+
+Inquiry Reference: {inquiry.ticket_id}
+Company: {inquiry.company_name}
+Quantity requested: {qty_line}
+{customization_notes_text(inquiry)}
+
+Our team will review your requirements and get back to you shortly.
+
+For any questions, reply to this email with your inquiry reference {inquiry.ticket_id}.
+"""
+
+    customer_html = f"""<!doctype html>
+<html>
+<body style="margin:0;background:#f6f7f4;font-family:Arial,sans-serif;color:#111827;">
+  <div style="max-width:680px;margin:0 auto;padding:24px;">
+    <div style="background:#1B4332;color:#ffffff;padding:22px;border-radius:10px 10px 0 0;">
+      <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#d8f3dc;">Plantoga Corporate Desk</div>
+      <h1 style="margin:8px 0 0;font-size:24px;">Inquiry Received</h1>
+    </div>
+    <div style="background:#ffffff;padding:24px;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 10px 10px;">
+      <p style="font-size:16px;line-height:1.5;margin:0 0 18px;">Hi {html.escape(inquiry.full_name)}, thank you for your interest in corporate gifting with Plantoga.</p>
+
+      <table style="width:100%;border-collapse:collapse;margin:0 0 20px;background:#f9fafb;border-radius:8px;overflow:hidden;">
+        <tr><td style="padding:10px;color:#6b7280;">Inquiry Reference</td><td style="padding:10px;text-align:right;font-weight:700;">{html.escape(inquiry.ticket_id)}</td></tr>
+        <tr><td style="padding:10px;color:#6b7280;">Company</td><td style="padding:10px;text-align:right;">{html.escape(inquiry.company_name)}</td></tr>
+        <tr><td style="padding:10px;color:#6b7280;">Quantity requested</td><td style="padding:10px;text-align:right;">{html.escape(qty_line)}</td></tr>
+      </table>
+
+      <div style="margin-top:22px;padding:14px;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;color:#065f46;">
+        Our team will review your requirements and get back to you shortly.
+      </div>
+
+      <p style="margin-top:22px;color:#6b7280;font-size:13px;">For any questions, reply to this email with your inquiry reference {html.escape(inquiry.ticket_id)}.</p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+    # Admin notification email
+    admin_text = f"""📩 New Corporate Inquiry Received
+
+Inquiry Reference: {inquiry.ticket_id}
+Customer: {inquiry.full_name} ({inquiry.email})
+Phone: {inquiry.phone}
+Company: {inquiry.company_name}
+Quantity requested: {qty_line}
+{customization_notes_text(inquiry)}
+
+Review and respond in the admin panel.
+"""
+
+    admin_html = f"""<!doctype html>
+<html>
+<body style="margin:0;background:#f0fdf4;font-family:Arial,sans-serif;color:#111827;">
+  <div style="max-width:680px;margin:0 auto;padding:24px;">
+    <div style="background:#15945b;color:#ffffff;padding:22px;border-radius:10px 10px 0 0;">
+      <h1 style="margin:0;font-size:24px;">📩 New Corporate Inquiry</h1>
+    </div>
+    <div style="background:#ffffff;padding:24px;border:1px solid #bbf7d0;border-top:0;border-radius:0 0 10px 10px;">
+      <table style="width:100%;border-collapse:collapse;margin:0 0 20px;">
+        <tr><td style="padding:8px 0;color:#6b7280;font-weight:600;">Inquiry Reference</td><td style="padding:8px 0;text-align:right;font-weight:700;color:#15945b;">{html.escape(inquiry.ticket_id)}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;font-weight:600;">Customer</td><td style="padding:8px 0;text-align:right;">{html.escape(inquiry.full_name)}<br><span style="color:#9ca3af;font-size:13px;">{html.escape(inquiry.email)}</span></td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;font-weight:600;">Phone</td><td style="padding:8px 0;text-align:right;">{html.escape(inquiry.phone)}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;font-weight:600;">Company</td><td style="padding:8px 0;text-align:right;">{html.escape(inquiry.company_name)}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;font-weight:600;">Quantity</td><td style="padding:8px 0;text-align:right;">{html.escape(qty_line)}</td></tr>
+      </table>
+
+      {admin_html_customization(inquiry)}
+
+      <p style="margin-top:22px;color:#6b7280;font-size:13px;">Review and respond in the admin panel.</p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+    # Send customer email
+    try:
+        await asyncio.to_thread(
+            _send_email_sync,
+            inquiry.email,
+            f"Corporate Inquiry {inquiry.ticket_id} — Received",
+            customer_text,
+            customer_html,
+        )
+        logger.info("Corporate inquiry customer email sent for {}.", inquiry.ticket_id)
+    except Exception as exc:
+        logger.error("Corporate inquiry customer email failed for {}: {}", inquiry.ticket_id, exc)
+
+    # Send admin email
+    if settings.ADMIN_ORDER_EMAIL.strip():
+        try:
+            await asyncio.to_thread(
+                _send_email_sync,
+                settings.ADMIN_ORDER_EMAIL,
+                f"📩 New Corporate Inquiry — {inquiry.ticket_id}",
+                admin_text,
+                admin_html,
+            )
+            logger.info("Corporate inquiry admin email sent for {}.", inquiry.ticket_id)
+        except Exception as exc:
+            logger.error("Corporate inquiry admin email failed for {}: {}", inquiry.ticket_id, exc)
+
+
+def customization_notes_text(inquiry) -> str:
+    if not inquiry.customization_notes:
+        return ""
+    return f"Customisation notes: {inquiry.customization_notes}"
+
+
+def admin_html_customization(inquiry) -> str:
+    if not inquiry.customization_notes:
+        return ""
+    return (
+        '<div style="background:#f9fafb;padding:14px;border-radius:8px;">'
+        '<div style="font-weight:600;color:#6b7280;margin-bottom:6px;">Customisation notes:</div>'
+        f'<div style="line-height:1.6;">{html.escape(inquiry.customization_notes)}</div>'
+        "</div>"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Damage Claim Emails
 # ---------------------------------------------------------------------------
 

@@ -354,6 +354,40 @@ class DamageClaim(Base):
     order_item: Mapped["OrderItem | None"] = relationship("OrderItem")
 
 
+class CorporateInquiryStatus(str, enum.Enum):
+    """Status lifecycle for corporate/bulk inquiries."""
+    NEW = "new"
+    REVIEW = "review"
+    QUOTED = "quoted"
+    APPROVED = "approved"
+    CANCELLED = "cancelled"
+
+
+class CorporateInquiry(Base):
+    """Corporate/bulk order inquiry model with status tracking and duplicate detection."""
+    __tablename__ = "corporate_inquiries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    # Human-readable ticket ID generated after insert: PLG-INQ-000001
+    ticket_id: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    customization_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Nullable: required in the form (min 10) but optional at storage for API callers
+    qty_requested: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Duplicate/submission guard — signal, not a verdict (see plan 1.6)
+    is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[CorporateInquiryStatus] = mapped_column(
+        Enum(CorporateInquiryStatus, values_callable=lambda e: [m.value for m in e]),
+        default=CorporateInquiryStatus.NEW,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+
 class StoreSettings(Base):
     """Single-row table that holds all mutable store configuration.
 

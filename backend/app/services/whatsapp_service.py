@@ -189,3 +189,76 @@ async def send_damage_claim_notification(db: AsyncSession, claim_id: int) -> Non
         return
 
     logger.info("WhatsApp damage claim notification sent for claim {}.", claim.ticket_id)
+
+
+async def send_corporate_inquiry_notification(db: AsyncSession, inquiry_id: int) -> None:
+    """Send WhatsApp notification to admin when a new corporate inquiry is submitted."""
+    if not _notifications_configured():
+        logger.info("WhatsApp corporate inquiry notification skipped: WhatsApp settings are not configured.")
+        return
+
+    from app.db.models import CorporateInquiry
+
+    result = await db.execute(
+        select(CorporateInquiry).where(CorporateInquiry.id == inquiry_id)
+    )
+    inquiry = result.scalar_one_or_none()
+    if not inquiry:
+        logger.warning("WhatsApp corporate inquiry notification skipped: inquiry {} not found.", inquiry_id)
+        return
+
+    recipient = _normalize_phone_number(settings.WHATSAPP_ADMIN_RECIPIENT)
+    if not recipient:
+        logger.warning("WhatsApp corporate inquiry notification skipped: admin recipient number is invalid.")
+        return
+
+    # Reuse the order template with adapted parameter values (same approach as damage claims).
+    # Template body params: [order_id, amount, customer_name, customer_phone, item_summary]
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": recipient,
+        "type": "template",
+        "template": {
+            "name": settings.WHATSAPP_ORDER_TEMPLATE_NAME,
+            "language": {"code": settings.WHATSAPP_ORDER_TEMPLATE_LANGUAGE},
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": inquiry.ticket_id},
+                        {"type": "text", "text": "Corporate Inquiry"},
+                        {"type": "text", "text": inquiry.full_name},
+                        {"type": "text", "text": inquiry.phone},
+                        {"type": "text", "text": f"{inquiry.company_name} | Qty: {inquiry.qty_requested or 'n/a'}"},
+                    ],
+                }
+            ],
+        },
+    }
+
+    url = (
+        f"https://graph.facebook.com/{settings.WHATSAPP_API_VERSION}/"
+        f"{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                url,
+                headers={"Authorization": f"Bearer {settings.WHATSAPP_ACCESS_TOKEN}"},
+                json=payload,
+            )
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        logger.error(
+            "WhatsApp corporate inquiry notification failed for {}: status={} body={}",
+            inquiry.ticket_id,
+            exc.response.status_code,
+            exc.response.text[:500],
+        )
+        return
+    except httpx.HTTPError as exc:
+        logger.error("WhatsApp corporate inquiry notification failed for {}: {}", inquiry.ticket_id, exc)
+        return
+
+    logger.info("WhatsApp corporate inquiry notification sent for inquiry {}.", inquiry.ticket_id)
