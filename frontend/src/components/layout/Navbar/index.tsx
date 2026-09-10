@@ -422,8 +422,9 @@ export default function Navbar() {
       {/* ROW 2 â€” Category navigation (desktop only, Ugaoo-style)          */}
       {/* ================================================================ */}
       <nav className="hidden lg:block border-t border-gray-100">
-        <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16">
-          <ul className="flex items-center justify-center text-[14px] font-semibold tracking-[0.03em] gap-0">
+        <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <style>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
+          <ul className="flex items-center justify-center text-[14px] font-semibold tracking-[0.03em] gap-0 min-w-max">
             {navItems.map((item) => {
               const hasDropdown = item.groups && item.groups.length > 0;
               const isOpen = activeDropdown === item.label;

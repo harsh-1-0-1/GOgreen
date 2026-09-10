@@ -14,17 +14,17 @@ export default function MobileCategoryNav() {
   ].slice(0, MAX_CHIPS);
 
   return (
-    <section className="md:hidden bg-white w-full border-b border-gray-100 py-3 sm:py-4">
-      <div className="overflow-x-auto scrollbar-hide px-4 sm:px-6">
+    <section className="bg-white w-full border-b border-gray-100 py-3 sm:py-4">
+      <div className="overflow-x-auto scrollbar-hide px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         <style>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
-        <div className="flex gap-4 sm:gap-6 w-max" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="flex gap-4 sm:gap-6 lg:gap-8">
           {chips.map((cat) => (
             <Link
               key={cat.slug}
               to={categoryLink(cat)}
-              className="flex flex-col items-center gap-1.5 sm:gap-2 group w-[68px] sm:w-[76px]"
+              className="flex flex-col items-center gap-1.5 sm:gap-2 group flex-shrink-0 w-[68px] sm:w-[76px] lg:w-[84px]"
             >
-              <div className="w-[60px] h-[60px] sm:w-[68px] sm:h-[68px] rounded-full overflow-hidden bg-gray-50 border-2 border-transparent group-hover:border-[#16A34A] transition-colors p-0.5">
+              <div className="w-[60px] h-[60px] sm:w-[68px] sm:h-[68px] lg:w-[76px] lg:h-[76px] rounded-full overflow-hidden bg-gray-50 border-2 border-transparent group-hover:border-[#16A34A] transition-colors p-0.5">
                 <img
                   src={cat.image_url || 'https://images.unsplash.com/photo-1545241047-6083a3684587?auto=format&fit=crop&w=150&h=150'}
                   alt={cat.name}
@@ -32,7 +32,7 @@ export default function MobileCategoryNav() {
                   loading="lazy"
                 />
               </div>
-              <span className="text-[10px] sm:text-xs font-medium text-center text-gray-700 leading-tight">
+              <span className="text-[10px] sm:text-xs lg:text-sm font-medium text-center text-gray-700 leading-tight">
                 {cat.name}
               </span>
             </Link>
