@@ -117,7 +117,7 @@ export default function Navbar() {
     ...categories.map((root) => ({
       label: root.name,
       href: categoryLink(root),
-      img: root.image_url || '',
+      img: root.mobile_image_url || root.image_url || '',
     })),
     ...(useFallback ? fallbackMobileItems : dbMobileItems),
   ];

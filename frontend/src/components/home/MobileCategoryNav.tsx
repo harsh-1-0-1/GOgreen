@@ -26,7 +26,7 @@ export default function MobileCategoryNav() {
             >
               <div className="w-[60px] h-[60px] sm:w-[68px] sm:h-[68px] lg:w-[76px] lg:h-[76px] rounded-full overflow-hidden bg-gray-50 border-2 border-transparent group-hover:border-[#16A34A] transition-colors p-0.5">
                 <img
-                  src={cat.image_url || 'https://images.unsplash.com/photo-1545241047-6083a3684587?auto=format&fit=crop&w=150&h=150'}
+                  src={cat.mobile_image_url || cat.image_url || 'https://images.unsplash.com/photo-1545241047-6083a3684587?auto=format&fit=crop&w=150&h=150'}
                   alt={cat.name}
                   className="w-full h-full object-cover rounded-full"
                   loading="lazy"

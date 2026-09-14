@@ -16,6 +16,7 @@ import {
   Upload,
   X,
   CheckCircle,
+  Smartphone,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCategoriesAdmin } from '@/hooks/useCategories';
@@ -32,9 +33,10 @@ interface CategoryNodeProps {
   onToggleActive: (id: number, isActive: boolean) => Promise<void>;
   onMove: (id: number, direction: -1 | 1) => Promise<void>;
   onUpdateImage: (id: number, imageUrl: string | null) => Promise<void>;
+  onUpdateMobileImage: (id: number, imageUrl: string | null) => Promise<void>;
 }
 
-function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onUpdateImage }: CategoryNodeProps) {
+function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onUpdateImage, onUpdateMobileImage }: CategoryNodeProps) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(cat.name);
@@ -44,6 +46,12 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onUpdat
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [manualUrl, setManualUrl] = useState(cat.image_url || '');
   const [urlValid, setUrlValid] = useState<boolean | null>(null);
+  const [editingMobileImage, setEditingMobileImage] = useState(false);
+  const [mobileImageMode, setMobileImageMode] = useState<'none' | 'upload' | 'url'>('url');
+  const [mobileSelectedFile, setMobileSelectedFile] = useState<File | null>(null);
+  const [mobileFilePreview, setMobileFilePreview] = useState<string | null>(null);
+  const [mobileManualUrl, setMobileManualUrl] = useState(cat.mobile_image_url || '');
+  const [mobileUrlValid, setMobileUrlValid] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const hasChildren = cat.children && cat.children.length > 0;
 
@@ -52,6 +60,14 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onUpdat
     if (file) {
       setSelectedFile(file);
       setFilePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleMobileFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setMobileSelectedFile(file);
+      setMobileFilePreview(URL.createObjectURL(file));
     }
   };
 
@@ -64,6 +80,17 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onUpdat
     img.onload = () => setUrlValid(true);
     img.onerror = () => setUrlValid(false);
     img.src = manualUrl;
+  };
+
+  const handleMobileUrlBlur = () => {
+    if (!mobileManualUrl) {
+      setMobileUrlValid(null);
+      return;
+    }
+    const img = new window.Image();
+    img.onload = () => setMobileUrlValid(true);
+    img.onerror = () => setMobileUrlValid(false);
+    img.src = mobileManualUrl;
   };
 
   async function saveRename() {
@@ -106,6 +133,32 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onUpdat
       setUrlValid(null);
     } catch (err) {
       toast.error(getApiErrorDetail(err, 'Failed to update image'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveMobileImage() {
+    setBusy(true);
+    try {
+      if (mobileImageMode === 'upload' && mobileSelectedFile) {
+        const fd = new FormData();
+        fd.append('image', mobileSelectedFile);
+        await api.post(`/categories/${cat.id}/mobile-image`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else if (mobileImageMode === 'url' && mobileManualUrl) {
+        await onUpdateMobileImage(cat.id, mobileManualUrl.trim());
+      } else if (mobileImageMode === 'none') {
+        await onUpdateMobileImage(cat.id, null);
+      }
+      toast.success('Home circle image updated');
+      setEditingMobileImage(false);
+      setMobileSelectedFile(null);
+      setMobileFilePreview(null);
+      setMobileUrlValid(null);
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to update home circle image'));
     } finally {
       setBusy(false);
     }
@@ -188,6 +241,17 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onUpdat
             title="Edit image"
           >
             <Image size={13} />
+          </button>
+          <button
+            onClick={() => {
+              setEditingMobileImage(!editingMobileImage);
+              setMobileImageMode(cat.mobile_image_url ? 'url' : 'none');
+              setMobileManualUrl(cat.mobile_image_url || '');
+            }}
+            className={`p-1.5 transition ${cat.mobile_image_url ? 'text-purple-600' : 'text-gray-400 hover:text-purple-600'}`}
+            title="Edit home circle image"
+          >
+            <Smartphone size={13} />
           </button>
           <button
             onClick={() => handleMove(-1)}
@@ -309,6 +373,103 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onUpdat
         </div>
       )}
 
+      {/* Home circle image editing section */}
+      {editingMobileImage && (
+        <div className="px-3 py-3 bg-purple-50 border-l-2 border-purple-200 ml-3 rounded mb-2 space-y-2.5">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+              <Smartphone size={13} className="text-purple-500" /> Edit Home Circle Image
+            </label>
+            <button
+              onClick={() => setEditingMobileImage(false)}
+              className="p-1 text-gray-400 hover:text-gray-600"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-500 leading-relaxed">
+            Used for the circular category preview on the homepage (web + mobile). Falls back to the main category image when not set.
+          </p>
+
+          <div className="flex gap-3 text-[10px] font-bold text-gray-600">
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" checked={mobileImageMode === 'none'} onChange={() => setMobileImageMode('none')} />
+              No Image
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" checked={mobileImageMode === 'upload'} onChange={() => setMobileImageMode('upload')} />
+              Upload
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" checked={mobileImageMode === 'url'} onChange={() => setMobileImageMode('url')} />
+              URL
+            </label>
+          </div>
+
+          {mobileImageMode === 'upload' && (
+            <div className="border-2 border-dashed border-gray-200 hover:border-purple-400 rounded-lg p-3 text-center cursor-pointer relative transition-colors">
+              <input type="file" accept="image/*" onChange={handleMobileFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
+              {mobileFilePreview ? (
+                <img src={mobileFilePreview} alt="Preview" className="max-h-16 mx-auto object-cover rounded" />
+              ) : (
+                <div className="text-gray-400 text-[10px]">
+                  <Upload size={16} className="mx-auto mb-0.5" />
+                  <span className="font-semibold block">Click to upload image</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {mobileImageMode === 'url' && (
+            <div className="space-y-1.5">
+              <input
+                type="url"
+                value={mobileManualUrl}
+                onChange={(e) => {
+                  setMobileManualUrl(e.target.value);
+                  setMobileUrlValid(null);
+                }}
+                onBlur={handleMobileUrlBlur}
+                placeholder="https://..."
+                className="w-full px-2.5 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-400"
+              />
+              {mobileUrlValid === true && (
+                <p className="text-[10px] text-green-600 flex items-center gap-1 font-semibold">
+                  <CheckCircle size={11} /> Image loaded
+                </p>
+              )}
+              {mobileManualUrl && (
+                <div className="h-12 w-12 border rounded overflow-hidden bg-gray-50">
+                  <img src={mobileManualUrl} alt="" className="h-full w-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {mobileImageMode !== 'none' && (!mobileManualUrl && mobileImageMode === 'url') && (
+            <p className="text-[10px] text-gray-400">
+              {cat.image_url ? 'Currently showing the main category image as fallback.' : 'No image set. The default placeholder will be shown.'}
+            </p>
+          )}
+
+          <div className="flex items-center gap-2 justify-end pt-1">
+            <button
+              onClick={saveMobileImage}
+              disabled={busy}
+              className="px-2 py-1 text-xs bg-purple-600 text-white rounded font-semibold hover:bg-purple-700 disabled:opacity-60 transition"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setEditingMobileImage(false)}
+              className="px-2 py-1 text-xs border rounded font-semibold hover:bg-gray-100 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {expanded && hasChildren && (
         <div className="ml-4 sm:ml-6 border-l pl-2 space-y-0.5">
           {cat.children!.map((child) => (
@@ -320,6 +481,7 @@ function CategoryNode({ cat, onDelete, onRename, onToggleActive, onMove, onUpdat
               onToggleActive={onToggleActive}
               onMove={onMove}
               onUpdateImage={onUpdateImage}
+              onUpdateMobileImage={onUpdateMobileImage}
             />
           ))}
         </div>
@@ -359,6 +521,13 @@ export default function CategoriesAdminPage() {
   const [manualUrl, setManualUrl] = useState('');
   const [urlValid, setUrlValid] = useState<boolean | null>(null);
 
+  // Mobile home circle image selection states
+  const [mobileImageMode, setMobileImageMode] = useState<'none' | 'upload' | 'url'>('none');
+  const [mobileSelectedFile, setMobileSelectedFile] = useState<File | null>(null);
+  const [mobileFilePreview, setMobileFilePreview] = useState<string | null>(null);
+  const [mobileManualUrl, setMobileManualUrl] = useState('');
+  const [mobileUrlValid, setMobileUrlValid] = useState<boolean | null>(null);
+
   const allCats = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
   const roots = categories?.filter((c) => !c.parent_id) ?? [];
 
@@ -367,6 +536,14 @@ export default function CategoriesAdminPage() {
     if (file) {
       setSelectedFile(file);
       setFilePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleMobileFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setMobileSelectedFile(file);
+      setMobileFilePreview(URL.createObjectURL(file));
     }
   };
 
@@ -379,6 +556,17 @@ export default function CategoriesAdminPage() {
     img.onload = () => setUrlValid(true);
     img.onerror = () => setUrlValid(false);
     img.src = manualUrl;
+  };
+
+  const handleMobileUrlBlur = () => {
+    if (!mobileManualUrl) {
+      setMobileUrlValid(null);
+      return;
+    }
+    const img = new window.Image();
+    img.onload = () => setMobileUrlValid(true);
+    img.onerror = () => setMobileUrlValid(false);
+    img.src = mobileManualUrl;
   };
 
   function invalidate() {
@@ -397,6 +585,7 @@ export default function CategoriesAdminPage() {
         name: newName.trim(),
         parent_id: parentId ? Number(parentId) : null,
         ...(imageMode === 'url' && manualUrl ? { image_url: manualUrl } : {}),
+        ...(mobileImageMode === 'url' && mobileManualUrl ? { mobile_image_url: mobileManualUrl } : {}),
       });
 
       // 2. Upload image if chosen (file upload requires a follow-up request)
@@ -404,6 +593,15 @@ export default function CategoriesAdminPage() {
         const fd = new FormData();
         fd.append('image', selectedFile);
         await api.post(`/categories/${newCat.id}/image`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
+
+      // 3. Upload mobile home circle image if chosen
+      if (mobileImageMode === 'upload' && mobileSelectedFile) {
+        const fd = new FormData();
+        fd.append('image', mobileSelectedFile);
+        await api.post(`/categories/${newCat.id}/mobile-image`, fd, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
       }
@@ -418,6 +616,11 @@ export default function CategoriesAdminPage() {
       setFilePreview(null);
       setManualUrl('');
       setUrlValid(null);
+      setMobileImageMode('none');
+      setMobileSelectedFile(null);
+      setMobileFilePreview(null);
+      setMobileManualUrl('');
+      setMobileUrlValid(null);
 
       invalidate();
     } catch (err) {
@@ -463,6 +666,12 @@ export default function CategoriesAdminPage() {
 
   async function handleUpdateImage(id: number, imageUrl: string | null) {
     await updateMutation.mutateAsync({ id, body: { image_url: imageUrl } });
+    invalidate();
+  }
+
+  async function handleUpdateMobileImage(id: number, mobileImageUrl: string | null) {
+    await updateMutation.mutateAsync({ id, body: { mobile_image_url: mobileImageUrl } });
+    toast.success(mobileImageUrl ? 'Home circle image set' : 'Home circle image removed');
     invalidate();
   }
 
@@ -584,6 +793,65 @@ export default function CategoriesAdminPage() {
               )}
             </div>
 
+            {/* Mobile Home Circle Image Options */}
+            <div className="pt-2 border-t space-y-2">
+              <label className="text-xs font-semibold text-gray-700 block">Home Circle Image (Optional)</label>
+              <p className="text-[9px] text-gray-400">Used for the circular preview on the homepage (web + mobile). Falls back to the category image if not set.</p>
+              <div className="flex gap-3 text-[10px] font-bold text-gray-500 mb-2">
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input type="radio" checked={mobileImageMode === 'none'} onChange={() => setMobileImageMode('none')} />
+                  No Image
+                </label>
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input type="radio" checked={mobileImageMode === 'upload'} onChange={() => setMobileImageMode('upload')} />
+                  Upload Image
+                </label>
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input type="radio" checked={mobileImageMode === 'url'} onChange={() => setMobileImageMode('url')} />
+                  Paste URL
+                </label>
+              </div>
+
+              {mobileImageMode === 'upload' && (
+                <div className="space-y-2">
+                  <div className="border-2 border-dashed border-gray-100 hover:border-purple-400/40 rounded-lg p-4 text-center cursor-pointer relative transition-colors">
+                    <input type="file" accept="image/*" onChange={handleMobileFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
+                    {mobileFilePreview ? (
+                      <img src={mobileFilePreview} alt="Preview" className="max-h-20 mx-auto object-cover rounded" />
+                    ) : (
+                      <div className="text-gray-400">
+                        <Upload size={20} className="mx-auto mb-1" />
+                        <span className="text-[10px] font-semibold block text-gray-700">Choose image file</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {mobileImageMode === 'url' && (
+                <div className="space-y-1.5">
+                  <input
+                    type="url"
+                    value={mobileManualUrl}
+                    onChange={(e) => { setMobileManualUrl(e.target.value); setMobileUrlValid(null); }}
+                    onBlur={handleMobileUrlBlur}
+                    placeholder="https://..."
+                    className="w-full px-2.5 py-1.5 text-xs border rounded-lg focus:outline-none"
+                  />
+                  {mobileUrlValid === true && (
+                    <p className="text-[10px] text-green-600 flex items-center gap-1 font-semibold">
+                      <CheckCircle size={11} /> Image loaded
+                    </p>
+                  )}
+                  {mobileManualUrl && (
+                    <div className="h-12 w-12 border rounded overflow-hidden mt-1.5 bg-gray-50">
+                      <img src={mobileManualUrl} alt="" className="h-full w-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <button
               type="submit"
               disabled={createMutation.isPending || !newName.trim()}
@@ -612,12 +880,13 @@ export default function CategoriesAdminPage() {
                   onToggleActive={handleToggleActive}
                   onMove={handleMove}
                   onUpdateImage={handleUpdateImage}
+                  onUpdateMobileImage={handleUpdateMobileImage}
                 />
               ))}
             </div>
           )}
           <p className="text-[10px] text-gray-400 mt-3 border-t pt-2">
-            Tip: hover a category to see rename (pencil), reorder (arrows), hide/show (eye), and delete actions.
+            Tip: hover a category to edit its images (blue = category image, purple = home circle image), reorder, hide/show, and delete.
           </p>
         </div>
 

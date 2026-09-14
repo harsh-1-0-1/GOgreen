@@ -96,6 +96,7 @@ export function useCreateCategory() {
       name: string;
       parent_id?: number | null;
       image_url?: string | null;
+      mobile_image_url?: string | null;
     }) => {
       const { data } = await api.post('/categories', body);
       return data;
@@ -119,6 +120,7 @@ export function useUpdateCategory() {
         name?: string;
         parent_id?: number | null;
         image_url?: string | null;
+        mobile_image_url?: string | null;
         is_active?: boolean;
         sort_order?: number;
       };

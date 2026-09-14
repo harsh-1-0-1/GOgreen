@@ -75,6 +75,10 @@ async def create_category(
             body = body.model_copy(
                 update={"image_url": extract_relative_key(body.image_url)}
             )
+        if body.mobile_image_url is not None:
+            body = body.model_copy(
+                update={"mobile_image_url": extract_relative_key(body.mobile_image_url)}
+            )
         cat = await category_service.create_category(db, body)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -104,6 +108,28 @@ async def upload_category_image(
     return cat
 
 
+@router.post("/{category_id}/mobile-image", response_model=CategoryResponse)
+async def upload_category_mobile_image(
+    category_id: int,
+    image: UploadFile,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    cat = await category_service.get_category_by_id(db, category_id)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    old_key = cat.mobile_image_url
+    key = await upload_image_file(image, folder="categories", entity_id=category_id)
+    cat.mobile_image_url = key
+    await db.flush()
+    await db.refresh(cat)
+    if old_key and old_key != key:
+        await delete_image_file(old_key)
+    await cache_delete(CATS_ALL_KEY)
+    return cat
+
+
 @router.put("/{category_id}", response_model=CategoryResponse)
 async def update_category(
     category_id: int,
@@ -117,6 +143,10 @@ async def update_category(
     if body.image_url is not None:
         body = body.model_copy(
             update={"image_url": extract_relative_key(body.image_url)}
+        )
+    if body.mobile_image_url is not None:
+        body = body.model_copy(
+            update={"mobile_image_url": extract_relative_key(body.mobile_image_url)}
         )
     cat = await category_service.update_category(db, cat, body)
     await cache_delete(CATS_ALL_KEY)

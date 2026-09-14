@@ -44,6 +44,7 @@ def build_tree(categories: list[Category]) -> list[CategoryTree]:
             slug=cat.slug,
             parent_id=cat.parent_id,
             image_url=cat.image_url,
+            mobile_image_url=cat.mobile_image_url,
             is_active=cat.is_active,
             sort_order=cat.sort_order,
             children=[],
@@ -81,6 +82,7 @@ async def create_category(
         slug=slug,
         parent_id=payload.parent_id,
         image_url=payload.image_url,
+        mobile_image_url=payload.mobile_image_url,
         is_active=payload.is_active,
         sort_order=payload.sort_order,
     )

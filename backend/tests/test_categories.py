@@ -73,3 +73,65 @@ async def test_list_uses_cache_on_second_call(client: AsyncClient, admin_token: 
     r1 = await client.get(CAT_URL)
     r2 = await client.get(CAT_URL)
     assert r1.json() == r2.json()
+
+
+@pytest.mark.asyncio
+async def test_create_category_with_mobile_image_url(client: AsyncClient, admin_token: str):
+    resp = await client.post(
+        CAT_URL,
+        json={"name": "Gifts", "mobile_image_url": "plantoga/categories/1/gift.png"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["mobile_image_url"] is not None
+    assert "plantoga/categories/1/gift.png" in resp.json()["mobile_image_url"]
+
+
+@pytest.mark.asyncio
+async def test_update_category_mobile_image_url(client: AsyncClient, admin_token: str):
+    cat = await _seed_category(client, admin_token, "Decor")
+    resp = await client.put(
+        f"{CAT_URL}/{cat['id']}",
+        json={"mobile_image_url": "https://example.com/circle.png"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["mobile_image_url"] == "https://example.com/circle.png"
+
+    # clear it
+    resp = await client.put(
+        f"{CAT_URL}/{cat['id']}",
+        json={"mobile_image_url": None},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["mobile_image_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_tree_exposes_mobile_image_url(client: AsyncClient, admin_token: str):
+    cat = await _seed_category(client, admin_token, "Bonsai")
+    await client.put(
+        f"{CAT_URL}/{cat['id']}",
+        json={"mobile_image_url": "plantoga/categories/2/bonsai.png"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    resp = await client.get(CAT_URL)
+    tree = resp.json()
+    node = tree[0]
+    assert node["mobile_image_url"] is not None
+    assert "bonsai" in node["mobile_image_url"]
+
+
+@pytest.mark.asyncio
+async def test_upload_category_mobile_image_requires_admin(client: AsyncClient, admin_token: str):
+    cat = await _seed_category(client, admin_token, "Garden")
+    # Without auth - should be rejected
+    resp = await client.post(f"{CAT_URL}/{cat['id']}/mobile-image")
+    assert resp.status_code == 401
+    # With auth but no file - FastAPI returns 422
+    resp = await client.post(
+        f"{CAT_URL}/{cat['id']}/mobile-image",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 422
