@@ -66,8 +66,8 @@ export function StoryViewer({ stories, startIndex, onClose }: StoryViewerProps) 
 
   const handleMoreInfo = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!story.linked_product) return;
-    
+    if (!story.linked_product?.slug) return;
+
     onClose();
     navigate(`/products/${story.linked_product.slug}`);
   };

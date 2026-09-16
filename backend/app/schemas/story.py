@@ -25,6 +25,7 @@ class StoryUpdate(BaseModel):
 class StoryProductInfo(BaseModel):
     id: int
     name: str
+    slug: str
     price: float
     original_price: Optional[float] = None
     thumbnail: Optional[str] = None
