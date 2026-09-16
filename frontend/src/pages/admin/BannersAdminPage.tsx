@@ -64,8 +64,8 @@ const PLACEMENTS = [
   {
     key: 'strip',
     label: '🏷️ Promotional Strip Tile',
-    description: 'A thin horizontal banner strip embedded between sections on the homepage.',
-    helpText: 'Recommended size: 1200x120px. Ideal for coupon announcements.',
+    description: 'Square promotional/product tiles shown in the horizontal strip on the homepage.',
+    helpText: 'Required size: 600x600px (1:1 square format). The tile label is shown in a bar below the image, so the image is never covered. Use the crop tool to adjust your upload to a square.',
   },
   {
     key: 'highlight',
@@ -693,6 +693,16 @@ function BannerDrawer({
             </div>
           </div>
 
+          {watchedPlacement === 'highlight' && (
+            <HighlightCardPreview
+              title={watchedTitle || ''}
+              subtitle={watchedSubtitle || ''}
+              bgColor={watchedBgColor}
+              textColor={watchedTextColor}
+              imageSrc={previewImageSrc}
+            />
+          )}
+
           {watchedPlacement === 'page' && (
             <div>
               <label className="text-xs font-semibold text-gray-700 mb-1 block">
@@ -932,6 +942,23 @@ function BannerDrawer({
                       </p>
                       <p className="text-[11px] text-blue-700">
                         Upload any image, then use the <strong>Crop</strong> button to adjust it to 600×600px. The preview below shows exactly how it will appear.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Special notice for promo strip tiles */}
+              {watchedPlacement === 'strip' && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-xs text-purple-800 space-y-1">
+                  <div className="flex items-start gap-2">
+                    <Info size={14} className="shrink-0 mt-0.5 text-purple-600" />
+                    <div>
+                      <p className="font-semibold text-purple-900 mb-1">
+                        Promo strip tiles use square images (1:1 ratio)
+                      </p>
+                      <p className="text-[11px] text-purple-700">
+                        Use the <strong>Crop</strong> button and pick the <strong>Promo Strip Tile (1:1)</strong> preset. The tile label shows in a bar below the image, so nothing overlaps the picture.
                       </p>
                     </div>
                   </div>
@@ -1212,6 +1239,50 @@ function BannerDrawer({
                     </span>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {watchedPlacement === 'strip' && (
+            <div className="mt-4 p-4 border rounded-xl bg-gray-50">
+              <p className="text-[11px] font-semibold text-gray-400 mb-2 uppercase tracking-wider">Promo Strip Tile Preview</p>
+              <div className="flex gap-3">
+                <div className="w-[130px] shrink-0 aspect-square rounded-xl overflow-hidden relative border border-gray-200 shadow-sm flex flex-col bg-gray-100">
+                  <img
+                    src={previewImageSrc || ''}
+                    alt=""
+                    aria-hidden
+                    className="absolute inset-0 w-full h-full object-cover blur-lg scale-125"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                  <div className="relative flex-1 min-h-0">
+                    {previewImageSrc ? (
+                      <img
+                        src={previewImageSrc}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-contain p-2"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center px-2 text-center">
+                        <span className="text-[10px] font-bold text-gray-500">Image preview</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative bg-white/90 backdrop-blur-md px-2 py-1.5 border-t border-white/20">
+                    <span className="text-[11px] font-bold text-gray-800 leading-tight block text-center truncate">
+                      {watchedTitle || 'Tile Label'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex-1 text-[10px] text-gray-500 leading-relaxed">
+                  <p className="font-semibold text-gray-700 mb-1">Square tile = 1:1 ratio</p>
+                  <p>
+                    The label bar is separate and sits below the image, so it never covers
+                    the picture. Crop your upload with the{' '}
+                    <strong>Promo Strip Tile (1:1)</strong> preset.
+                  </p>
+                </div>
               </div>
             </div>
           )}

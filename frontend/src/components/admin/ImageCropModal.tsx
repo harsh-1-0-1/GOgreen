@@ -50,11 +50,11 @@ const CROP_PRESETS: Record<string, CropPreset> = {
     hint: '800×480px — Themed collection banner',
   },
   strip: {
-    label: '🏷️ Promo Strip (10:1)',
-    aspect: 10 / 1,
-    width: 1200,
-    height: 120,
-    hint: '1200×120px — Thin promotional strip',
+    label: '🏷️ Promo Strip Tile (1:1)',
+    aspect: 1,
+    width: 600,
+    height: 600,
+    hint: '600×600px — Square tile on the homepage promo strip. Keep the subject in the centre; the label bar sits below the image.',
   },
   mobile_promo: {
     label: '📱 Mobile Drawer (1:1)',
