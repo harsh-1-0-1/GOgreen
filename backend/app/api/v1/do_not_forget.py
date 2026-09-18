@@ -15,6 +15,7 @@ from app.schemas.do_not_forget import (
     DoNotForgetProductWithDetails,
     DoNotForgetListResponse,
 )
+from app.utils.image_upload import resolve_image_url
 
 router = APIRouter(prefix="/do-not-forget", tags=["do-not-forget"])
 
@@ -48,7 +49,7 @@ async def get_do_not_forget_products(db: AsyncSession = Depends(get_db)):
                 "slug": item.product.slug,
                 "price": item.product.price,
                 "original_price": item.product.original_price,
-                "images": item.product.images or [],
+                "images": [resolve_image_url(img) for img in (item.product.images or [])],
                 "stock_qty": item.product.stock_qty,
                 "is_active": item.product.is_active,
             }
@@ -101,7 +102,7 @@ async def admin_list_do_not_forget(
                 "slug": item.product.slug,
                 "price": item.product.price,
                 "original_price": item.product.original_price,
-                "images": item.product.images or [],
+                "images": [resolve_image_url(img) for img in (item.product.images or [])],
                 "stock_qty": item.product.stock_qty,
                 "is_active": item.product.is_active,
             }

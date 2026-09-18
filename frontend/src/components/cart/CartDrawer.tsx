@@ -3,7 +3,6 @@ import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import RecommendationBar from './RecommendationBar';
 import DoNotForgetBar from './DoNotForgetBar';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
 import { getApiErrorDetail } from '@/lib/apiError';
@@ -15,7 +14,7 @@ function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][n
 }
 
 export default function CartDrawer() {
-  const { isDrawerOpen, closeDrawer, items, total, itemCount, updateItem, removeItem, lastAddedProduct } =
+  const { isDrawerOpen, closeDrawer, items, total, itemCount, updateItem, removeItem } =
     useCartStore();
   const suggestionTiles = useSuggestionTiles(4);
 
@@ -163,11 +162,6 @@ export default function CartDrawer() {
                 </div>
               ))}
               
-              {/* Smart recommendations — show when cart has items */}
-              {lastAddedProduct && (
-                <RecommendationBar lastAddedProduct={lastAddedProduct} cartItems={items} />
-              )}
-
               {/* Don't forget to buy section */}
               <DoNotForgetBar cartItems={items} />
             </>

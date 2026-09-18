@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
-import RecommendationBar from '@/components/cart/RecommendationBar';
 import DoNotForgetBar from '@/components/cart/DoNotForgetBar';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
 import { getApiErrorDetail } from '@/lib/apiError';
@@ -14,7 +13,7 @@ function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][n
 }
 
 export default function CartPage() {
-  const { items, total, itemCount, updateItem, removeItem, lastAddedProduct } = useCartStore();
+  const { items, total, itemCount, updateItem, removeItem } = useCartStore();
   const suggestionTiles = useSuggestionTiles(6);
 
   async function handleUpdate(itemId: number, qty: number) {
@@ -155,13 +154,6 @@ export default function CartPage() {
             </div>
           ))}
         </div>
-
-        {/* Smart cross-sell recommendations */}
-        {lastAddedProduct && (
-          <div className="lg:col-span-2">
-            <RecommendationBar lastAddedProduct={lastAddedProduct} cartItems={items} />
-          </div>
-        )}
 
         {/* Do Not Forget to Buy section */}
         <div className="lg:col-span-2">
