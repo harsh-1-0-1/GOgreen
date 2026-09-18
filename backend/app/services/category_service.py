@@ -1,6 +1,6 @@
 import re
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Category, Product
@@ -106,12 +106,17 @@ async def update_category(
 
 
 async def delete_category(db: AsyncSession, category: Category) -> None:
-    product_count = (
-        await db.execute(
-            select(Product.id).where(Product.category_id == category.id).limit(1)
+    result = await db.execute(
+        select(Product.id, Product.is_active).where(
+            Product.category_id == category.id
         )
-    ).first()
-    if product_count:
-        raise ValueError("Cannot delete category with products attached")
+    )
+    products = result.all()
+    active = [product_id for product_id, is_active in products if is_active]
+    if active:
+        raise ValueError("Cannot delete category with active products attached")
+    if products:
+        await db.execute(delete(Product).where(Product.category_id == category.id))
+        await db.flush()
     await db.delete(category)
     await db.flush()
