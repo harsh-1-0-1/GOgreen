@@ -1,7 +1,7 @@
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import _seed_category
+from tests.conftest import _seed_category, _seed_product_via_db, test_session_factory
 
 CAT_URL = "/api/v1/categories"
 
@@ -65,6 +65,53 @@ async def test_delete_category(client: AsyncClient, admin_token: str):
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_category_with_active_product_rejected(client: AsyncClient, admin_token: str):
+    cat = await _seed_category(client, admin_token, "HasActive")
+    async with test_session_factory() as db:
+        await _seed_product_via_db(
+            db, name="Active Plant", slug="active-plant", description="x",
+            price=100.0, original_price=120.0, stock_qty=5, category_id=cat["id"],
+            images=["https://placehold.co/300"], tags=["x"], is_active=True,
+        )
+        await db.commit()
+    resp = await client.delete(
+        f"{CAT_URL}/{cat['id']}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 409
+    assert "active products" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_delete_category_clears_soft_deleted_products(client: AsyncClient, admin_token: str):
+    cat = await _seed_category(client, admin_token, "HasSoftDeleted")
+    async with test_session_factory() as db:
+        await _seed_product_via_db(
+            db, name="Gone Plant", slug="gone-plant", description="x",
+            price=100.0, original_price=120.0, stock_qty=5, category_id=cat["id"],
+            images=["https://placehold.co/300"], tags=["x"], is_active=False,
+        )
+        await db.commit()
+    resp = await client.delete(
+        f"{CAT_URL}/{cat['id']}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_parent_category_with_children_rejected(client: AsyncClient, admin_token: str):
+    parent = await _seed_category(client, admin_token, "ParentCat")
+    await _seed_category(client, admin_token, "ChildCat", parent_id=parent["id"])
+    resp = await client.delete(
+        f"{CAT_URL}/{parent['id']}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 409
+    assert "subcategories" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio

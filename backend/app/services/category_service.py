@@ -106,6 +106,14 @@ async def update_category(
 
 
 async def delete_category(db: AsyncSession, category: Category) -> None:
+    has_children = (
+        await db.execute(
+            select(Category.id).where(Category.parent_id == category.id).limit(1)
+        )
+    ).first()
+    if has_children:
+        raise ValueError("Cannot delete category with subcategories. Delete or move its subcategories first")
+
     result = await db.execute(
         select(Product.id, Product.is_active).where(
             Product.category_id == category.id
