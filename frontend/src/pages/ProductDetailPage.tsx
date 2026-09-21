@@ -544,9 +544,7 @@ export default function ProductDetailPage() {
   // The row's combo_key dictates each group's selection, so groups are always consistent
   // with a purchasable combination. Run during render (guarded by product id) instead of an
   // effect to avoid the set-state-in-effect hook violation.
-  const [lastAutoSelectedProductId, setLastAutoSelectedProductId] = useState<number | null>(
-    product?.id ?? null,
-  );
+  const [lastAutoSelectedProductId, setLastAutoSelectedProductId] = useState<number | null>(null);
   if (product && lastAutoSelectedProductId !== product.id) {
     const groups = product.variants?.variant_groups;
     if (!Array.isArray(groups) || groups.length === 0) {
@@ -868,6 +866,8 @@ export default function ProductDetailPage() {
               <p className="text-sm text-amber-600 font-medium">
                 This product isn&apos;t configured correctly (missing stock information).
               </p>
+            ) : hasGroups && !allGroupsSelected ? (
+              <p className="text-sm text-gray-400 font-medium">—</p>
             ) : effectiveStock > 0 ? (
               <p className="text-sm text-green-600 font-medium">
                 In Stock {effectiveStock <= 5 && `(Only ${effectiveStock} left)`}
