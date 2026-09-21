@@ -104,6 +104,7 @@ async def _bootstrap_paid_order(
     if price != 299.0:
         async with test_session_factory() as db:
             from sqlalchemy import update
+
             from app.db.models import Product
             await db.execute(update(Product).where(Product.id == product["id"]).values(price=price))
             await db.commit()
@@ -639,6 +640,40 @@ async def test_failed_new_format_order_restores_multiple_variant_rows_for_same_p
         assert product.variants["stock_map"]["opt_small__opt_black"] == 2
         assert product.variants["stock_map"]["opt_medium__opt_black"] == 1
         assert product.stock_qty == 3
+
+
+async def test_failed_order_ignores_deleted_product_order_item(client: AsyncClient):
+    admin_token = await _register_and_make_admin(client)
+    address = await _seed_address(client, admin_token)
+
+    async with test_session_factory() as db:
+        db_address = await db.get(Address, address["id"])
+        order = Order(
+            user_id=db_address.user_id,
+            address_id=db_address.id,
+            status=OrderStatus.PENDING,
+            payment_status=PaymentStatus.PENDING,
+            payment_method="razorpay",
+            total_amount=100.0,
+        )
+        db.add(order)
+        await db.flush()
+        db.add(OrderItem(
+            order_id=order.id,
+            product_id=None,
+            product_name_snapshot="Deleted Product",
+            quantity=1,
+            unit_price=100.0,
+        ))
+        await db.commit()
+        order_id = order.id
+
+    async with test_session_factory() as db:
+        order = await order_service.mark_failed(db, order_id)
+        await db.commit()
+        assert order is not None
+        assert order.status == OrderStatus.CANCELLED
+        assert order.payment_status == PaymentStatus.FAILED
 
 
 async def test_abandoned_order_cleanup_continues_after_bad_order(client: AsyncClient, monkeypatch):

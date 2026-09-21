@@ -94,6 +94,33 @@ async def test_delete_category_with_active_product_rejected(client: AsyncClient,
 
 
 @pytest.mark.asyncio
+async def test_force_delete_category_with_active_product_still_rejected(client: AsyncClient, admin_token: str):
+    cat = await _seed_category(client, admin_token, "ForceHasActive")
+    async with test_session_factory() as db:
+        await _seed_product_via_db(
+            db,
+            name="Active Force Plant",
+            slug="active-force-plant",
+            description="x",
+            price=100.0,
+            original_price=120.0,
+            stock_qty=5,
+            category_id=cat["id"],
+            images=["https://placehold.co/300"],
+            tags=["x"],
+            is_active=True,
+        )
+        await db.commit()
+
+    resp = await client.delete(
+        f"{CAT_URL}/{cat['id']}?force=true",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 409
+    assert "active products" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_delete_category_clears_soft_deleted_products(client: AsyncClient, admin_token: str):
     cat = await _seed_category(client, admin_token, "HasSoftDeleted")
     async with test_session_factory() as db:
@@ -202,7 +229,7 @@ async def test_upload_category_mobile_image_requires_admin(client: AsyncClient, 
 
 @pytest.mark.asyncio
 async def test_delete_category_blocked_when_product_has_order_history(client: AsyncClient, admin_token: str):
-    from app.db.models import Order, OrderItem, User, Address
+    from app.db.models import Address, Order, OrderItem, User
 
     cat = await _seed_category(client, admin_token, "OrderCat")
     async with test_session_factory() as db:
@@ -245,8 +272,122 @@ async def test_delete_category_blocked_when_product_has_order_history(client: As
 
 
 @pytest.mark.asyncio
+async def test_force_delete_category_unlinks_order_items_and_keeps_product_name(client: AsyncClient, admin_token: str):
+    from sqlalchemy import select
+
+    from app.db.models import Address, Order, OrderItem, Product, User
+
+    cat = await _seed_category(client, admin_token, "ForceOrderCat")
+    async with test_session_factory() as db:
+        product = await _seed_product_via_db(
+            db,
+            name="Archived Order Plant",
+            slug="archived-order-plant",
+            description="x",
+            price=100.0,
+            original_price=120.0,
+            stock_qty=5,
+            category_id=cat["id"],
+            images=["https://placehold.co/300"],
+            tags=["x"],
+            is_active=False,
+        )
+        user = User(email="force-order@test.com", full_name="Force Order")
+        db.add(user)
+        await db.flush()
+
+        address = Address(user_id=user.id, full_name="x", phone="x", line1="x", city="x", state="x", pincode="x")
+        db.add(address)
+        await db.flush()
+
+        order = Order(user_id=user.id, total_amount=100, address_id=address.id)
+        db.add(order)
+        await db.flush()
+
+        order_item = OrderItem(order_id=order.id, product_id=product.id, quantity=1, unit_price=100)
+        db.add(order_item)
+        await db.commit()
+        order_item_id = order_item.id
+        product_id = product.id
+
+    resp = await client.delete(
+        f"{CAT_URL}/{cat['id']}?force=true",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 204
+
+    async with test_session_factory() as db:
+        item = await db.get(OrderItem, order_item_id)
+        assert item.product_id is None
+        assert item.product_name_snapshot == "Archived Order Plant"
+
+        product_result = await db.execute(select(Product).where(Product.id == product_id))
+        assert product_result.scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_force_delete_category_preserves_existing_order_item_name_snapshot(client: AsyncClient, admin_token: str):
+    from app.db.models import Address, Order, OrderItem, User
+
+    cat = await _seed_category(client, admin_token, "ForceSnapshotCat")
+    async with test_session_factory() as db:
+        product = await _seed_product_via_db(
+            db,
+            name="Current Product Name",
+            slug="current-product-name",
+            description="x",
+            price=100.0,
+            original_price=120.0,
+            stock_qty=5,
+            category_id=cat["id"],
+            images=["https://placehold.co/300"],
+            tags=["x"],
+            is_active=False,
+        )
+        user = User(email="force-snapshot@test.com", full_name="Force Snapshot")
+        db.add(user)
+        await db.flush()
+
+        address = Address(user_id=user.id, full_name="x", phone="x", line1="x", city="x", state="x", pincode="x")
+        db.add(address)
+        await db.flush()
+
+        order = Order(user_id=user.id, total_amount=100, address_id=address.id)
+        db.add(order)
+        await db.flush()
+
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=product.id,
+            product_name_snapshot="Name At Purchase",
+            quantity=1,
+            unit_price=100,
+        )
+        db.add(order_item)
+        await db.commit()
+        order_item_id = order_item.id
+
+    resp = await client.delete(
+        f"{CAT_URL}/{cat['id']}?force=true",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 204
+
+    async with test_session_factory() as db:
+        item = await db.get(OrderItem, order_item_id)
+        assert item.product_id is None
+        assert item.product_name_snapshot == "Name At Purchase"
+
+
+@pytest.mark.asyncio
+async def test_force_delete_category_requires_admin(client: AsyncClient):
+    resp = await client.delete(f"{CAT_URL}/1?force=true")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_delete_category_clears_cart_items_and_reviews(client: AsyncClient, admin_token: str):
-    from app.db.models import Cart, CartItem, ProductReview, ReviewStatus, User, Story, DoNotForgetProduct, Product
+    from app.db.models import Cart, CartItem, DoNotForgetProduct, Product, ProductReview, ReviewStatus, Story, User
 
     cat = await _seed_category(client, admin_token, "ClearCat")
     async with test_session_factory() as db:

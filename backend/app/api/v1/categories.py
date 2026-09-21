@@ -156,6 +156,7 @@ async def update_category(
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_category(
     category_id: int,
+    force: bool = False,
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
@@ -163,7 +164,7 @@ async def delete_category(
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
     try:
-        await category_service.delete_category(db, cat)
+        await category_service.delete_category(db, cat, force=force)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await cache_delete(CATS_ALL_KEY)

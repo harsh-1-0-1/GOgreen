@@ -1,6 +1,5 @@
 from datetime import datetime
-from typing import Any
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, computed_field, field_serializer
 
@@ -37,12 +36,13 @@ class RazorpayOrderData(BaseModel):
 
 class OrderItemResponse(BaseModel):
     id: int
-    product_id: int
+    product_id: int | None = None
     quantity: int
     unit_price: float
     # Old format: dict of slugs. New format: {"option_ids": [...], "snapshot": [...]}.
     selected_options: dict[str, Any] | None = None
     resolved_image_url: str | None = None
+    product_name_snapshot: str | None = None
     product: Any = Field(default=None, exclude=True)
 
     model_config = {"from_attributes": True}
@@ -50,7 +50,9 @@ class OrderItemResponse(BaseModel):
     @computed_field
     @property
     def product_name(self) -> str | None:
-        return self.product.name if getattr(self, "product", None) else None
+        if getattr(self, "product", None):
+            return self.product.name
+        return getattr(self, "product_name_snapshot", None)
 
     @field_serializer("resolved_image_url")
     def serialize_resolved_image_url(self, val: str | None) -> str | None:

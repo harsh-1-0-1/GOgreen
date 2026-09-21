@@ -202,14 +202,15 @@ class OrderItem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     order_id: Mapped[int] = mapped_column(Integer, ForeignKey("orders.id"), nullable=False)
-    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
+    product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
+    product_name_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price: Mapped[float] = mapped_column(Float, nullable=False)
     selected_options: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     resolved_image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     order: Mapped["Order"] = relationship(back_populates="items")
-    product: Mapped["Product"] = relationship()
+    product: Mapped["Product | None"] = relationship()
 
 
 class Refund(Base):

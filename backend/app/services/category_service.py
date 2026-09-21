@@ -1,9 +1,9 @@
 import re
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Category, CartItem, DoNotForgetProduct, OrderItem, Product, ProductReview, Story
+from app.db.models import CartItem, Category, DoNotForgetProduct, OrderItem, Product, ProductReview, Story
 from app.schemas.category import CategoryCreate, CategoryTree, CategoryUpdate
 
 
@@ -108,27 +108,35 @@ async def update_category(
     return category
 
 
-async def delete_category(db: AsyncSession, category: Category) -> None:
+async def delete_category(db: AsyncSession, category: Category, force: bool = False) -> None:
     has_children = (await db.execute(select(Category.id).where(Category.parent_id == category.id).limit(1))).first()
     if has_children:
         raise ValueError("Cannot delete category with subcategories. Delete or move its subcategories first")
 
-    result = await db.execute(select(Product.id, Product.is_active).where(Product.category_id == category.id))
+    result = await db.execute(select(Product.id, Product.name, Product.is_active).where(Product.category_id == category.id))
     products = result.all()
 
-    product_ids = [product_id for product_id, _ in products]
-    active = [product_id for product_id, is_active in products if is_active]
+    product_ids = [product_id for product_id, _, _ in products]
+    active = [product_id for product_id, _, is_active in products if is_active]
 
     if active:
         raise ValueError("Cannot delete category with active products attached")
 
     if product_ids:
-        # Order items - block deletion if product is in any past orders
+        # force=True only bypasses the order-history block. Active products are
+        # always blocked above so live catalog items must be deactivated first.
         order_items_result = await db.execute(
             select(OrderItem.id).where(OrderItem.product_id.in_(product_ids)).limit(1)
         )
         if order_items_result.first():
-            raise ValueError("Cannot delete category: products are linked to past orders")
+            if not force:
+                raise ValueError("Cannot delete category: products are linked to past orders")
+            for p_id, p_name, _ in products:
+                await db.execute(
+                    update(OrderItem)
+                    .where(OrderItem.product_id == p_id)
+                    .values(product_id=None, product_name_snapshot=func.coalesce(OrderItem.product_name_snapshot, p_name))
+                )
 
         # Stories - unlink product
         await db.execute(update(Story).where(Story.linked_product_id.in_(product_ids)).values(linked_product_id=None))

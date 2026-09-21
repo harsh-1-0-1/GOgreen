@@ -75,7 +75,7 @@ async def _reserve_product_for_order(
     )
     combo_key = details.get("combo_key")
     variant_snapshot = details.get("variant_snapshot", [])
-    
+
     if "variant_groups" in (product.variants or {}):
         # New format: Decrement the exact stock_map combo row under the row lock.
         # No per-option decrement, no fallback — a missing row/key is a loud bug,
@@ -127,6 +127,7 @@ async def _reserve_product_for_order(
     return {
         "product_id": product.id,
         "product_slug": product.slug,
+        "product_name_snapshot": product.name,
         "quantity": quantity,
         "unit_price": details["unit_price"],
         "selected_options": order_selected_options,
@@ -178,7 +179,9 @@ def _restore_product_stock(product: Product, quantity: int, selected_options: di
 
 async def restore_order_stock(db: AsyncSession, order: Order) -> list[str]:
     affected_product_slugs: list[str] = []
-    for item in sorted(order.items, key=lambda oi: oi.product_id):
+    for item in sorted(order.items, key=lambda oi: oi.product_id or 0):
+        if not item.product_id:
+            continue
         product_result = await db.execute(
             select(Product).where(Product.id == item.product_id).with_for_update()
         )

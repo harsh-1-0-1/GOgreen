@@ -194,6 +194,20 @@ async def test_order_list_and_detail(client: AsyncClient):
     assert len(detail_resp.json()["items"]) == 1
 
 
+async def test_order_item_response_uses_snapshot_when_product_is_missing():
+    from app.schemas.order import OrderItemResponse
+
+    item = OrderItemResponse(
+        id=1,
+        product_id=None,
+        product_name_snapshot="Deleted Product Name",
+        quantity=2,
+        unit_price=100.0,
+    )
+
+    assert item.product_name == "Deleted Product Name"
+
+
 async def test_checkout_requires_auth(client: AsyncClient):
     resp = await client.post("/api/v1/orders/checkout", json={"address_id": 1, "cart_id": 1})
     assert resp.status_code == 401
@@ -436,5 +450,4 @@ async def test_new_format_cart_payload_available_stock_reflects_stock_map(client
     # Reads stock_map row (3), not option-min (5) — would fail if per-option stock leaked.
     assert item["available_stock"] == 3
     assert item["stock_warning"] is False
-
 
