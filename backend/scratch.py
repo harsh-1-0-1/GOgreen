@@ -1,16 +1,27 @@
 import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import select
-from app.db.session import async_session_maker
-from app.db.models import Category, Product
+from app.db.models import Category
+from app.services.category_service import delete_category
 
 async def main():
-    async with async_session_maker() as db:
-        res = await db.execute(select(Category.slug))
-        cats = res.scalars().all()
-        print("Categories:", cats)
+    engine = create_async_engine("sqlite+aiosqlite:///plantoga.db")
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+    
+    async with async_session() as session:
+        result = await session.execute(select(Category).where(Category.id == 91))
+        category = result.scalar_one_or_none()
         
-        res2 = await db.execute(select(Product.tags))
-        tags = res2.scalars().all()
-        print("Tags:", tags)
+        if category:
+            print(f"Deleting category 91: {category.name}")
+            try:
+                await delete_category(session, category)
+                await session.commit()
+                print("Successfully deleted!")
+            except Exception as e:
+                print(f"Error: {e}")
+        else:
+            print("Category 91 not found.")
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

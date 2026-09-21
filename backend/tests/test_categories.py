@@ -72,9 +72,17 @@ async def test_delete_category_with_active_product_rejected(client: AsyncClient,
     cat = await _seed_category(client, admin_token, "HasActive")
     async with test_session_factory() as db:
         await _seed_product_via_db(
-            db, name="Active Plant", slug="active-plant", description="x",
-            price=100.0, original_price=120.0, stock_qty=5, category_id=cat["id"],
-            images=["https://placehold.co/300"], tags=["x"], is_active=True,
+            db,
+            name="Active Plant",
+            slug="active-plant",
+            description="x",
+            price=100.0,
+            original_price=120.0,
+            stock_qty=5,
+            category_id=cat["id"],
+            images=["https://placehold.co/300"],
+            tags=["x"],
+            is_active=True,
         )
         await db.commit()
     resp = await client.delete(
@@ -90,9 +98,17 @@ async def test_delete_category_clears_soft_deleted_products(client: AsyncClient,
     cat = await _seed_category(client, admin_token, "HasSoftDeleted")
     async with test_session_factory() as db:
         await _seed_product_via_db(
-            db, name="Gone Plant", slug="gone-plant", description="x",
-            price=100.0, original_price=120.0, stock_qty=5, category_id=cat["id"],
-            images=["https://placehold.co/300"], tags=["x"], is_active=False,
+            db,
+            name="Gone Plant",
+            slug="gone-plant",
+            description="x",
+            price=100.0,
+            original_price=120.0,
+            stock_qty=5,
+            category_id=cat["id"],
+            images=["https://placehold.co/300"],
+            tags=["x"],
+            is_active=False,
         )
         await db.commit()
     resp = await client.delete(
@@ -182,3 +198,122 @@ async def test_upload_category_mobile_image_requires_admin(client: AsyncClient, 
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_delete_category_blocked_when_product_has_order_history(client: AsyncClient, admin_token: str):
+    from app.db.models import Order, OrderItem, User, Address
+
+    cat = await _seed_category(client, admin_token, "OrderCat")
+    async with test_session_factory() as db:
+        product = await _seed_product_via_db(
+            db,
+            name="Order Plant",
+            slug="order-plant",
+            description="x",
+            price=100.0,
+            original_price=120.0,
+            stock_qty=5,
+            category_id=cat["id"],
+            images=["https://placehold.co/300"],
+            tags=["x"],
+            is_active=False,
+        )
+        # Create user, address, order, order item
+        user = User(email="t1@test.com", full_name="T1")
+        db.add(user)
+        await db.flush()
+
+        address = Address(user_id=user.id, full_name="x", phone="x", line1="x", city="x", state="x", pincode="x")
+        db.add(address)
+        await db.flush()
+
+        order = Order(user_id=user.id, total_amount=100, address_id=address.id)
+        db.add(order)
+        await db.flush()
+
+        order_item = OrderItem(order_id=order.id, product_id=product.id, quantity=1, unit_price=100)
+        db.add(order_item)
+        await db.commit()
+
+    resp = await client.delete(
+        f"{CAT_URL}/{cat['id']}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 409
+    assert "past orders" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_delete_category_clears_cart_items_and_reviews(client: AsyncClient, admin_token: str):
+    from app.db.models import Cart, CartItem, ProductReview, ReviewStatus, User, Story, DoNotForgetProduct, Product
+
+    cat = await _seed_category(client, admin_token, "ClearCat")
+    async with test_session_factory() as db:
+        product = await _seed_product_via_db(
+            db,
+            name="Clear Plant",
+            slug="clear-plant",
+            description="x",
+            price=100.0,
+            original_price=120.0,
+            stock_qty=5,
+            category_id=cat["id"],
+            images=["https://placehold.co/300"],
+            tags=["x"],
+            is_active=False,
+        )
+
+        user = User(email="t2@test.com", full_name="T2")
+        db.add(user)
+        await db.flush()
+
+        cart = Cart(user_id=user.id)
+        db.add(cart)
+        await db.flush()
+
+        cart_item = CartItem(cart_id=cart.id, product_id=product.id, quantity=1)
+        db.add(cart_item)
+
+        review = ProductReview(product_id=product.id, user_id=user.id, rating=5, status=ReviewStatus.PUBLISHED)
+        db.add(review)
+
+        story = Story(video="v.mp4", linked_product_id=product.id)
+        db.add(story)
+
+        dnf = DoNotForgetProduct(product_id=product.id)
+        db.add(dnf)
+
+        await db.commit()
+
+        story_id = story.id
+
+    resp = await client.delete(
+        f"{CAT_URL}/{cat['id']}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 204
+
+    # Verify records are gone or updated
+    async with test_session_factory() as db:
+        from sqlalchemy import select
+
+        # product should be gone
+        prod = await db.execute(select(Product).where(Product.id == product.id))
+        assert prod.scalar_one_or_none() is None
+
+        # cart item should be gone
+        ci = await db.execute(select(CartItem).where(CartItem.product_id == product.id))
+        assert ci.scalar_one_or_none() is None
+
+        # review should be gone
+        pr = await db.execute(select(ProductReview).where(ProductReview.product_id == product.id))
+        assert pr.scalar_one_or_none() is None
+
+        # DNF should be gone
+        dnf_chk = await db.execute(select(DoNotForgetProduct).where(DoNotForgetProduct.product_id == product.id))
+        assert dnf_chk.scalar_one_or_none() is None
+
+        # story should have linked_product_id = None
+        s = await db.execute(select(Story).where(Story.id == story_id))
+        assert s.scalar_one().linked_product_id is None

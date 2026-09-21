@@ -1,9 +1,9 @@
 import re
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Category, Product
+from app.db.models import Category, CartItem, DoNotForgetProduct, OrderItem, Product, ProductReview, Story
 from app.schemas.category import CategoryCreate, CategoryTree, CategoryUpdate
 
 
@@ -70,7 +70,8 @@ async def get_category_by_id(db: AsyncSession, category_id: int) -> Category | N
 
 
 async def create_category(
-    db: AsyncSession, payload: CategoryCreate,
+    db: AsyncSession,
+    payload: CategoryCreate,
 ) -> Category:
     slug = _slugify(payload.name)
     existing = await db.execute(select(Category).where(Category.slug == slug))
@@ -93,7 +94,9 @@ async def create_category(
 
 
 async def update_category(
-    db: AsyncSession, category: Category, payload: CategoryUpdate,
+    db: AsyncSession,
+    category: Category,
+    payload: CategoryUpdate,
 ) -> Category:
     data = payload.model_dump(exclude_unset=True)
     if "name" in data:
@@ -106,25 +109,42 @@ async def update_category(
 
 
 async def delete_category(db: AsyncSession, category: Category) -> None:
-    has_children = (
-        await db.execute(
-            select(Category.id).where(Category.parent_id == category.id).limit(1)
-        )
-    ).first()
+    has_children = (await db.execute(select(Category.id).where(Category.parent_id == category.id).limit(1))).first()
     if has_children:
         raise ValueError("Cannot delete category with subcategories. Delete or move its subcategories first")
 
-    result = await db.execute(
-        select(Product.id, Product.is_active).where(
-            Product.category_id == category.id
-        )
-    )
+    result = await db.execute(select(Product.id, Product.is_active).where(Product.category_id == category.id))
     products = result.all()
+
+    product_ids = [product_id for product_id, _ in products]
     active = [product_id for product_id, is_active in products if is_active]
+
     if active:
         raise ValueError("Cannot delete category with active products attached")
-    if products:
+
+    if product_ids:
+        # Order items - block deletion if product is in any past orders
+        order_items_result = await db.execute(
+            select(OrderItem.id).where(OrderItem.product_id.in_(product_ids)).limit(1)
+        )
+        if order_items_result.first():
+            raise ValueError("Cannot delete category: products are linked to past orders")
+
+        # Stories - unlink product
+        await db.execute(update(Story).where(Story.linked_product_id.in_(product_ids)).values(linked_product_id=None))
+
+        # Cart items - delete rows
+        await db.execute(delete(CartItem).where(CartItem.product_id.in_(product_ids)))
+
+        # Do not forget products - delete rows
+        await db.execute(delete(DoNotForgetProduct).where(DoNotForgetProduct.product_id.in_(product_ids)))
+
+        # Product reviews - delete rows
+        await db.execute(delete(ProductReview).where(ProductReview.product_id.in_(product_ids)))
+
+        # Finally delete products
         await db.execute(delete(Product).where(Product.category_id == category.id))
         await db.flush()
+
     await db.delete(category)
     await db.flush()
