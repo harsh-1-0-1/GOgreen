@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight, Phone } from 'lucide-react';
-import { useForm } from 'react-hook-form';
+import { useForm, type Resolver } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { z } from 'zod';
 import { submitCorporateGiftInquiry } from '@/lib/corporateGifting';
@@ -57,7 +57,7 @@ export default function CorporateGiftInquiryForm() {
     reset,
     formState: { errors, isSubmitting },
   } = useForm<InquiryFormValues>({
-    resolver: zodResolver(inquirySchema) as any,
+    resolver: zodResolver(inquirySchema) as Resolver<InquiryFormValues>,
     defaultValues: {
       fullName: '',
       phone: '',

@@ -157,7 +157,7 @@ export default function CartPage() {
 
         {/* Do Not Forget to Buy section */}
         <div className="lg:col-span-2">
-          <DoNotForgetBar cartItems={items} />
+          <DoNotForgetBar />
         </div>
 
         {/* Order summary — desktop: sticky sidebar, mobile: stacked below */}

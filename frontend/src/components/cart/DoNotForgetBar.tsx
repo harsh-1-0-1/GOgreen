@@ -1,19 +1,13 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Plus, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import { useDoNotForgetProducts } from '@/hooks/useDoNotForget';
 import { getApiErrorDetail } from '@/lib/apiError';
-import type { CartItem } from '@/types';
 
-interface DoNotForgetBarProps {
-  cartItems: CartItem[];
-}
-
-export default function DoNotForgetBar({ cartItems }: DoNotForgetBarProps) {
+export default function DoNotForgetBar() {
   const addItem = useCartStore((s) => s.addItem);
-  const navigate = useNavigate();
   const [addingId, setAddingId] = useState<number | null>(null);
 
   const { data: doNotForgetData } = useDoNotForgetProducts();

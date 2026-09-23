@@ -171,28 +171,6 @@ function TrendingPromoBanner({
   );
 }
 
-// ─── Page Banner (category-scoped or global) ─────────────────────────────────
-function PageBanner({ banner }: { banner: Banner }) {
-  if (!banner.image_url) return null;
-
-  const href = banner.cta_link || '/products';
-  return (
-    <Link
-      to={href}
-      className="relative block -mx-3 mb-6 overflow-hidden bg-gray-100 sm:mx-0 sm:mb-8 sm:rounded-2xl"
-      aria-label={banner.title}
-    >
-      <img
-        src={banner.image_url}
-        alt={banner.title}
-        className="w-full object-cover"
-        loading="eager"
-      />
-    </Link>
-  );
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
 function FiltersSidebar({
   selectedCategory,
   onCategoryChange,

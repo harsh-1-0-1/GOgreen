@@ -20,9 +20,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useQueryClient } from '@tanstack/react-query';
 
-import { useProducts } from '@/hooks/useProducts';
 import { useAdminAllProducts } from '@/hooks/useProducts';
 import {
   useAdminDoNotForgetList,
@@ -248,8 +246,9 @@ export default function DoNotForgetAdminPage() {
       toast.success('Product added');
       setShowAddModal(false);
       refetch();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Failed to add product');
+    } catch (error: unknown) {
+      const message = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(message || 'Failed to add product');
     }
   }
 

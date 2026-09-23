@@ -233,6 +233,10 @@ function MenuDrawer({
   const [submitting, setSubmitting] = useState(false);
   const { data: categories } = useCategories();
 
+  // react-hook-form's `watch()` is a React-Compiler-incompatible library (cannot be
+  // memoized safely); the live preview needs its reactive values, so the
+  // compiler is intentionally allowed to skip memoizing this drawer.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const watchedHighlight = watch('highlight');
   const watchedActive = watch('is_active');
   const watchedAccent = watch('accent_color');

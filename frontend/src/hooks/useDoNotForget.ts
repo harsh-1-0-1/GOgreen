@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { DoNotForgetProduct, DoNotForgetListResponse } from '@/types';
+import type { DoNotForgetListResponse } from '@/types';
 
 // Public hook to fetch Do Not Forget products
 export const useDoNotForgetProducts = () =>
@@ -72,7 +72,7 @@ export const useReorderDoNotForgetProducts = () => {
       queryClient.invalidateQueries({ queryKey: ['admin-do-not-forget-list'] });
       queryClient.invalidateQueries({ queryKey: ['do-not-forget-products'] });
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       console.error('Reorder failed:', error);
     },
   });

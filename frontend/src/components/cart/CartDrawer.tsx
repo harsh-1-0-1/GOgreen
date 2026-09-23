@@ -163,7 +163,7 @@ export default function CartDrawer() {
               ))}
               
               {/* Don't forget to buy section */}
-              <DoNotForgetBar cartItems={items} />
+              <DoNotForgetBar />
             </>
           )}
         </div>
