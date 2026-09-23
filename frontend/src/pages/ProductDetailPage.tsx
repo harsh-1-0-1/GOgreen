@@ -1145,7 +1145,7 @@ export default function ProductDetailPage() {
               <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">You May Also Like</h2>
               <div className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-hide snap-x-mandatory pb-4 -mx-3 sm:-mx-4 px-3 sm:px-4 md:grid md:grid-cols-4 md:overflow-visible md:mx-0 md:px-0">
                 {similarProducts.map((p) => (
-                  <div key={p.id} className="shrink-0 w-[70vw] sm:w-56 md:w-auto snap-start">
+                  <div key={p.id} className="shrink-0 w-[47vw] min-w-[150px] sm:w-56 md:w-auto snap-start">
                     <ProductCard product={p} />
                   </div>
                 ))}
