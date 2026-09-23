@@ -76,7 +76,7 @@ function PromoTile({ tile }: { tile: Tile }) {
   return (
     <Link
       to={tile.link}
-      className="shrink-0 lg:shrink lg:flex-1 w-[140px] sm:w-[160px] lg:w-auto aspect-square rounded-2xl flex items-center justify-center p-4 transition-all hover:scale-[1.02] shadow-sm hover:shadow-md"
+      className="shrink-0 lg:shrink lg:flex-1 w-[140px] sm:w-[160px] lg:w-auto aspect-[3/4] rounded-2xl flex items-center justify-center p-4 transition-all hover:scale-[1.02] shadow-sm hover:shadow-md"
       style={{ backgroundColor: tile.bg }}
     >
       <span
@@ -93,24 +93,17 @@ function CategoryTile({ tile }: { tile: Tile }) {
   return (
     <Link
       to={tile.link}
-      className="group shrink-0 lg:shrink lg:flex-1 w-[140px] sm:w-[160px] lg:w-auto aspect-square rounded-2xl overflow-hidden relative flex flex-col shadow-sm hover:shadow-md transition-all hover:scale-[1.02]"
+      className="group shrink-0 lg:shrink lg:flex-1 w-[140px] sm:w-[160px] lg:w-auto aspect-[3/4] rounded-2xl overflow-hidden relative flex flex-col shadow-sm hover:shadow-md transition-all hover:scale-[1.02]"
     >
-      <img
-        src={tile.image}
-        alt=""
-        aria-hidden
-        loading="lazy"
-        className="absolute inset-0 w-full h-full object-cover blur-lg scale-125"
-      />
       <div className="relative flex-1 min-h-0">
         <img
           src={tile.image}
           alt={tile.label}
           loading="lazy"
-          className="absolute inset-0 w-full h-full object-contain p-1.5 drop-shadow-sm"
+          className="absolute inset-0 w-full h-full object-cover"
         />
       </div>
-      <div className="relative bg-white/90 backdrop-blur-md px-3 py-1 sm:py-1.5 border-t border-white/20">
+      <div className="relative bg-white px-3 py-1 sm:py-1.5 border-t">
         <span className="text-[11px] sm:text-sm font-bold text-gray-800 leading-tight block text-center truncate">
           {tile.label}
         </span>

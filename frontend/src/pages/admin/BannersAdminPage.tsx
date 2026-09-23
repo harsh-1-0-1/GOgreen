@@ -28,6 +28,7 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useCategories } from '@/hooks/useCategories';
 import { getApiErrorDetail } from '@/lib/apiError';
 import ImageCropModal from '@/components/admin/ImageCropModal';
+import CategoryLinkPicker from '@/components/admin/CategoryLinkPicker';
 import type { Banner, Category } from '@/types';
 
 const PLACEMENTS = [
@@ -64,8 +65,8 @@ const PLACEMENTS = [
   {
     key: 'strip',
     label: '🏷️ Promotional Strip Tile',
-    description: 'Square promotional/product tiles shown in the horizontal strip on the homepage.',
-    helpText: 'Required size: 600x600px (1:1 square format). The tile label is shown in a bar below the image, so the image is never covered. Use the crop tool to adjust your upload to a square.',
+    description: '3:4 promo/product tiles shown in the horizontal strip on the homepage.',
+    helpText: 'Required size: 450x600px (3:4 ratio). The image fills the tile edge-to-edge and the label shows in a bar below the image. Use the crop tool to adjust your upload to a 3:4 ratio.',
   },
   {
     key: 'highlight',
@@ -139,6 +140,24 @@ type BannerFormData = z.infer<typeof bannerSchema>;
 
 function topLevelCategories(categories: Category[] | undefined): Category[] {
   return categories?.filter((category) => category.is_active) ?? [];
+}
+
+interface CategoryOption {
+  value: string;
+  label: string;
+}
+
+function flattenCategoryOptions(categories: Category[] | undefined): CategoryOption[] {
+  const options: CategoryOption[] = [];
+  const walk = (cat: Category, depth: number) => {
+    options.push({
+      value: cat.slug,
+      label: `${'— '.repeat(depth)}${cat.name} (/${cat.slug})`,
+    });
+    (cat.children ?? []).forEach((child) => walk(child, depth + 1));
+  };
+  (categories ?? []).forEach((cat) => walk(cat, 0));
+  return options;
 }
 
 const EMPTY_BANNERS: Banner[] = [];
@@ -524,6 +543,7 @@ function BannerDrawer({
   useBodyScrollLock(true);
   const { data: categories } = useCategories();
   const productTypeOptions = topLevelCategories(categories);
+  const categoryOptions = flattenCategoryOptions(categories);
 
   const [submitting, setSubmitting] = useState(false);
   const [imageMode, setImageMode] = useState<'upload' | 'url'>('upload');
@@ -550,6 +570,12 @@ function BannerDrawer({
   const watchedTextColor = watch('text_color');
   const watchedCtaText = watch('cta_text');
   const watchedPlacement = watch('placement');
+  const watchedTargetPath = watch('target_path');
+
+  const hasCustomTargetPath =
+    watchedTargetPath &&
+    watchedTargetPath !== '*' &&
+    !categoryOptions.some((opt) => opt.value === watchedTargetPath);
 
   const activePlacementDetails = useMemo(() => {
     return PLACEMENTS.find((p) => p.key === watchedPlacement) || PLACEMENTS[0];
@@ -708,13 +734,21 @@ function BannerDrawer({
               <label className="text-xs font-semibold text-gray-700 mb-1 block">
                 Category Slug <span className="font-normal text-gray-400">(Target Path)</span>
               </label>
-              <input
-                {...register('target_path')}
-                className={inputClass}
-                placeholder="e.g. plants, xl-plants, herb-seeds — leave blank for global fallback"
-              />
+              <select {...register('target_path')} className={inputClass}>
+                <option value="">All categories (global fallback)</option>
+                {hasCustomTargetPath && (
+                  <option value={watchedTargetPath}>
+                    {watchedTargetPath} (custom — not a current slug)
+                  </option>
+                )}
+                {categoryOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
               <p className="text-[10px] text-gray-400 mt-0.5">
-                Enter just the category slug (e.g. <strong>xl-plants</strong>). Leave blank to show this banner on all category pages as a fallback.
+                Pick the actual category slug (e.g. <strong>indoor-plants</strong>) so the banner shows on the correct shop listing page. Leave blank to show this banner on all category pages as a fallback.
               </p>
               {errors.target_path && (
                 <p className="text-xs text-red-500 mt-1">
@@ -805,6 +839,10 @@ function BannerDrawer({
                 {...register('cta_link')}
                 placeholder="e.g. /products?category=ferns"
                 className={inputClass}
+              />
+              <CategoryLinkPicker
+                categories={categories}
+                onPick={(link) => setValue('cta_link', link)}
               />
             </div>
           </div>
@@ -954,10 +992,10 @@ function BannerDrawer({
                     <Info size={14} className="shrink-0 mt-0.5 text-purple-600" />
                     <div>
                       <p className="font-semibold text-purple-900 mb-1">
-                        Promo strip tiles use square images (1:1 ratio)
+                        Promo strip tiles use a fixed 3:4 ratio image
                       </p>
                       <p className="text-[11px] text-purple-700">
-                        Use the <strong>Crop</strong> button and pick the <strong>Promo Strip Tile (1:1)</strong> preset. The tile label shows in a bar below the image, so nothing overlaps the picture.
+                        Use the <strong>Crop</strong> button and pick the <strong>Promotional Strip (3:4)</strong> preset. The image fills the tile edge-to-edge and the tile label shows in a bar below it, so nothing overlaps the picture.
                       </p>
                     </div>
                   </div>
@@ -1246,20 +1284,13 @@ function BannerDrawer({
             <div className="mt-4 p-4 border rounded-xl bg-gray-50">
               <p className="text-[11px] font-semibold text-gray-400 mb-2 uppercase tracking-wider">Promo Strip Tile Preview</p>
               <div className="flex gap-3">
-                <div className="w-[130px] shrink-0 aspect-square rounded-xl overflow-hidden relative border border-gray-200 shadow-sm flex flex-col bg-gray-100">
-                  <img
-                    src={previewImageSrc || ''}
-                    alt=""
-                    aria-hidden
-                    className="absolute inset-0 w-full h-full object-cover blur-lg scale-125"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
+                <div className="w-[130px] shrink-0 aspect-[3/4] rounded-xl overflow-hidden relative border border-gray-200 shadow-sm flex flex-col bg-gray-100">
                   <div className="relative flex-1 min-h-0">
                     {previewImageSrc ? (
                       <img
                         src={previewImageSrc}
                         alt=""
-                        className="absolute inset-0 w-full h-full object-contain p-2"
+                        className="absolute inset-0 w-full h-full object-cover"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                       />
                     ) : (
@@ -1268,18 +1299,18 @@ function BannerDrawer({
                       </div>
                     )}
                   </div>
-                  <div className="relative bg-white/90 backdrop-blur-md px-2 py-1.5 border-t border-white/20">
+                  <div className="relative bg-white px-2 py-1.5 border-t">
                     <span className="text-[11px] font-bold text-gray-800 leading-tight block text-center truncate">
                       {watchedTitle || 'Tile Label'}
                     </span>
                   </div>
                 </div>
                 <div className="flex-1 text-[10px] text-gray-500 leading-relaxed">
-                  <p className="font-semibold text-gray-700 mb-1">Square tile = 1:1 ratio</p>
+                  <p className="font-semibold text-gray-700 mb-1">Fixed tile = 3:4 ratio</p>
                   <p>
-                    The label bar is separate and sits below the image, so it never covers
-                    the picture. Crop your upload with the{' '}
-                    <strong>Promo Strip Tile (1:1)</strong> preset.
+                    The image fills the tile edge-to-edge and the label bar sits below it,
+                    so nothing overlaps the picture. Crop your upload with the{' '}
+                    <strong>Promotional Strip (3:4)</strong> preset.
                   </p>
                 </div>
               </div>

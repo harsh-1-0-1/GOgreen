@@ -31,7 +31,9 @@ import toast from 'react-hot-toast';
 
 import api from '@/lib/api';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useCategories } from '@/hooks/useCategories';
 import { getApiErrorDetail } from '@/lib/apiError';
+import CategoryLinkPicker from '@/components/admin/CategoryLinkPicker';
 import type { MenuItem } from '@/types';
 
 const menuSchema = z.object({
@@ -229,6 +231,7 @@ function MenuDrawer({
 
   useBodyScrollLock(true);
   const [submitting, setSubmitting] = useState(false);
+  const { data: categories } = useCategories();
 
   const watchedHighlight = watch('highlight');
   const watchedActive = watch('is_active');
@@ -298,6 +301,10 @@ function MenuDrawer({
               {...register('href')}
               className={inputClass}
               placeholder="/products?tags=... or https://..."
+            />
+            <CategoryLinkPicker
+              categories={categories}
+              onPick={(link) => setValue('href', link)}
             />
             <p className="text-[10px] text-gray-400 mt-0.5">
               Must start with <strong>/</strong> (but not //) or <strong>https://</strong>.

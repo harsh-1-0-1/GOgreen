@@ -3,10 +3,12 @@ import { Link, useLocation } from 'react-router-dom';
 import { Home, LayoutGrid, TrendingUp, UserCircle } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
+const TRENDING_HREF = `/products?display_section=trending&collection_title=${encodeURIComponent('Trending Now')}`;
+
 const NAV_ITEMS = [
   { to: '/', icon: Home, label: 'Home' },
   { to: '/products', icon: LayoutGrid, label: 'Collections' },
-  { to: '/products', icon: TrendingUp, label: 'Trending' },
+  { to: TRENDING_HREF, icon: TrendingUp, label: 'Trending' },
   { to: '/account', icon: UserCircle, label: 'Account' },
 ];
 
@@ -52,6 +54,9 @@ export default function BottomNav() {
   function isActive(to: string) {
     if (to === '/') return pathname === '/';
     if (to.includes('?')) return fullPath === to;
+    if (to === '/products') {
+      return pathname === '/products' && !fullPath.includes('display_section=trending');
+    }
     return pathname.startsWith(to);
   }
 
