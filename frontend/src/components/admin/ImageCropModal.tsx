@@ -57,11 +57,11 @@ const CROP_PRESETS: Record<string, CropPreset> = {
     hint: '600×600px — Square tile on the homepage promo strip. Keep the subject in the centre; the label bar sits below the image.',
   },
   mobile_promo: {
-    label: '📱 Mobile Drawer (1:1)',
-    aspect: 1,
-    width: 400,
-    height: 400,
-    hint: '400×400px — Mobile menu drawer promo card',
+    label: '📱 Mobile Drawer (16:5)',
+    aspect: 16 / 5,
+    width: 640,
+    height: 200,
+    hint: '640×200px — Thin full-bleed strip in the mobile menu drawer. No text is overlaid, so bake any words into the image.',
   },
   corporate_gifting: {
     label: '💼 Corporate (10:3)',

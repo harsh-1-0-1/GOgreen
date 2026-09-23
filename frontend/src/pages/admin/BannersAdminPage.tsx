@@ -76,8 +76,8 @@ const PLACEMENTS = [
   {
     key: 'mobile_promo',
     label: '📱 Mobile Drawer Promo',
-    description: 'Compact promotional card shown at the top of the mobile menu drawer.',
-    helpText: 'Recommended size: 400x400px. The first active banner is used for the drawer promo card.',
+    description: 'Full-bleed rectangular banner shown at the top of the mobile menu drawer.',
+    helpText: 'Recommended size: 640×200px (16:5). A thin strip that fills the whole card edge-to-edge — no text is overlaid, so bake any text into the image itself.',
   },
   {
     key: 'corporate_gifting',

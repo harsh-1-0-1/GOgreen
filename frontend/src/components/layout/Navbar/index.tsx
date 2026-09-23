@@ -635,9 +635,11 @@ export default function Navbar() {
               </div>
 
               {/* Promotional Banner Card — rendered only when an active
-                  mobile_promo banner is configured (admin-managed), so no
-                  hardcoded/seasonal content ever leaks in. */}
-              {mobilePromoBanner && (
+                  mobile_promo banner with an image is configured
+                  (admin-managed), so no hardcoded/seasonal content ever leaks
+                  in. The image fills the rectangular card edge-to-edge with no
+                  text overlay — bake any text into the image itself. */}
+              {mobilePromoBanner?.image_url && (
                 <div className="px-5 pb-3 shrink-0">
                   <Link
                     to={
@@ -648,45 +650,19 @@ export default function Navbar() {
                       '/products'
                     }
                     onClick={closeDrawer}
-                    className="relative flex items-center gap-3.5 p-3.5 rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-50/90 to-teal-50/30 border border-emerald-100/50 shadow-[0_4px_12px_rgba(45,106,79,0.04)] group transition active:scale-[0.98]"
+                    className="group relative block overflow-hidden rounded-2xl border border-emerald-100/50 shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
                     style={
                       mobilePromoBanner.bg_color
-                        ? { background: mobilePromoBanner.bg_color }
+                        ? { backgroundColor: mobilePromoBanner.bg_color }
                         : undefined
                     }
                   >
-                    <div className="absolute -right-6 -bottom-6 w-16 h-16 rounded-full bg-emerald-100/30 blur-md pointer-events-none" />
-                    {mobilePromoBanner.image_url && (
-                      <img
-                        src={mobilePromoBanner.image_url}
-                        className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm shrink-0 group-hover:scale-105 transition-transform duration-300"
-                        alt=""
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      {mobilePromoBanner.badge_text && (
-                        <span className="inline-block px-1.5 py-0.5 rounded-md bg-emerald-600/10 text-[9px] font-bold text-emerald-800 uppercase tracking-wider leading-none">
-                          {mobilePromoBanner.badge_text}
-                        </span>
-                      )}
-                      <p
-                        className="text-xs font-bold text-emerald-950 truncate mt-1 leading-snug"
-                        style={{ color: mobilePromoBanner.text_color }}
-                      >
-                        {mobilePromoBanner.title}
-                      </p>
-                      {(mobilePromoBanner.subtitle || mobilePromoBanner.cta_text) && (
-                        <p
-                          className="text-[11px] font-semibold text-emerald-700 mt-0.5"
-                          style={{ color: mobilePromoBanner.text_color }}
-                        >
-                          {mobilePromoBanner.subtitle || mobilePromoBanner.cta_text}
-                        </p>
-                      )}
-                    </div>
-                    <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0 group-hover:bg-primary group-hover:text-white transition-colors duration-300">
-                      <ChevronRight size={14} className="text-emerald-800 group-hover:text-inherit transition-colors" />
-                    </div>
+                    <img
+                      src={mobilePromoBanner.image_url}
+                      alt={mobilePromoBanner.title}
+                      className="w-full aspect-[16/5] object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                      loading="eager"
+                    />
                   </Link>
                 </div>
               )}
