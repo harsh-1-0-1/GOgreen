@@ -759,6 +759,7 @@ export default function Navbar() {
                   <div className="grid grid-cols-1 gap-2.5">
                     {[
                       { label: 'About Us', href: '/#about-us' },
+                      { label: 'Corporate Bulk Order', href: '/corporate-gifting' },
                       { label: 'Track Your Order', href: '/orders' },
                       { label: 'Support', href: `https://wa.me/${WHATSAPP_NUMBER}` },
                       { label: 'Damage Replacement Form', href: '/damage-replacement' },
