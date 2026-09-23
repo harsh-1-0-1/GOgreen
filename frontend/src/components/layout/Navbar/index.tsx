@@ -634,6 +634,11 @@ export default function Navbar() {
                 </button>
               </div>
 
+              {/* Scrollable Area: banner, account card, menu items & bottom section */}
+              <div
+                className="flex-1 min-h-0 overflow-y-auto scrollbar-none flex flex-col"
+                style={{ WebkitOverflowScrolling: 'touch' }}
+              >
               {/* Promotional Banner Card — rendered only when an active
                   mobile_promo banner with an image is configured
                   (admin-managed), so no hardcoded/seasonal content ever leaks
@@ -707,9 +712,7 @@ export default function Navbar() {
                 )}
               </div>
 
-              {/* Scrollable Area: Menu Items & Bottom Section */}
-              <div className="flex-1 overflow-y-auto scrollbar-none scroll-smooth flex flex-col justify-between" style={{ WebkitOverflowScrolling: 'touch' }}>
-                {/* Strictly ordered 10 Menu Items with Circular Previews */}
+              {/* Strictly ordered 10 Menu Items with Circular Previews */}
                 <div className="px-3 py-3 space-y-1">
                   {mobileMenuItems.map((item) => {
                     const subcategories = getSubcategories(item.label);
@@ -831,7 +834,7 @@ export default function Navbar() {
               </div>
 
               {/* Submenu category list body */}
-              <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+              <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none p-4 space-y-1" style={{ WebkitOverflowScrolling: 'touch' }}>
                 {activeSubmenu && getSubcategories(activeSubmenu)?.map((sub) => (
                   <Link
                     key={sub.label}
