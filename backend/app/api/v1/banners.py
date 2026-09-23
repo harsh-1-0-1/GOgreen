@@ -16,7 +16,7 @@ from app.db.models import Banner
 from app.db.session import get_db
 from app.schemas.banner import BannerOut, BannerReorderRequest
 from app.utils.image_upload import delete_image_file, extract_relative_key, upload_image_file, resolve_image_url, generate_image_key
-from app.utils.redis import cache_delete, cache_get, cache_set
+from app.utils.redis import cache_delete, cache_delete_pattern, cache_get, cache_set
 from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/banners", tags=["banners"])
@@ -33,8 +33,9 @@ async def _invalidate_banner_cache(placement: str, target_path: str | None = Non
     await cache_delete(f"banners:{placement}:")         # global (no slug)
     await cache_delete(f"banners:{placement}")          # legacy key guard
     await cache_delete("banners:all")
-    if target_path:
-        await cache_delete(f"banners:{placement}:{target_path}")
+    # Banner edits affect every slug-scoped key for this placement (the banner
+    # may have just moved to a new target_path), so clear them all.
+    await cache_delete_pattern(f"banners:{placement}:*")
 
 
 # ── PUBLIC ──────────────────────────────────────────────────────────────────
@@ -81,21 +82,30 @@ async def get_banners(
         result = await db.execute(stmt)
         banners = result.scalars().all()
 
-        # Fall back to the global banner (target_path IS NULL) when no
-        # category-specific one exists yet.
+        # Fall back to a global / all-types banner (target_path IS NULL or "*")
+        # when no category-specific one exists yet.
         if not banners:
             stmt = (
                 select(Banner)
-                .where(*base_filter, Banner.target_path == None)  # noqa: E711
+                .where(
+                    *base_filter,
+                    (Banner.target_path == None)  # noqa: E711
+                    | (Banner.target_path == "*"),
+                )
                 .order_by(Banner.position.asc())
             )
             result = await db.execute(stmt)
             banners = result.scalars().all()
     else:
-        # No slug provided — return global banners only (target_path IS NULL).
+        # No slug provided — return global/all-types banners only
+        # (target_path IS NULL or "*").
         stmt = (
             select(Banner)
-            .where(*base_filter, Banner.target_path == None)  # noqa: E711
+            .where(
+                *base_filter,
+                (Banner.target_path == None)  # noqa: E711
+                | (Banner.target_path == "*"),
+            )
             .order_by(Banner.position.asc())
         )
         result = await db.execute(stmt)

@@ -890,7 +890,6 @@ function BannerDrawer({
                 type="datetime-local"
                 {...register('valid_until')}
                 className={inputClass}
-                {...register('valid_until')}
               />
               {errors.valid_until && (
                 <p className="text-xs text-red-500 mt-1">
@@ -1470,7 +1469,7 @@ export default function BannersAdminPage() {
   function handleDrawerSaved() {
     refetch();
     queryClient.invalidateQueries({
-      queryKey: ['banners', activePlacement],
+      queryKey: ['banners'],
     });
   }
 

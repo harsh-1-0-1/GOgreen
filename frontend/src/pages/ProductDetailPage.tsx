@@ -531,9 +531,14 @@ export default function ProductDetailPage() {
   const { data: similar } = useProducts({ limit: 5 });
   const { data: curatedRelated } = useProductsByIds(product?.related_product_ids ?? []);
   const { data: reviewPreview } = useProductReviews(product?.id, { limit: 1 });
-  const { data: productDetailBanners = [] } = useBanners('product_detail');
-  const { data: productSpecBanners = [] } = useBanners('product_spec');
-  const { data: productStripBanners = [] } = useBanners('product_strip');
+  const productCategorySlug = (() => {
+    if (!product || !categories) return undefined;
+    const trail = findCategoryTrail(categories, product.category_id);
+    return trail[0]?.slug || trail.at(-1)?.slug;
+  })();
+  const { data: productDetailBanners = [] } = useBanners('product_detail', productCategorySlug);
+  const { data: productSpecBanners = [] } = useBanners('product_spec', productCategorySlug);
+  const { data: productStripBanners = [] } = useBanners('product_strip', productCategorySlug);
   const { data: stories = [] } = useStories();
 
   useEffect(() => {
