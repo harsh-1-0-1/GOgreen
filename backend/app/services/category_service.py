@@ -18,7 +18,7 @@ async def get_all_categories(db: AsyncSession) -> list[Category]:
     result = await db.execute(
         select(Category)
         .where(Category.is_active == True)  # noqa: E712
-        .order_by(Category.sort_order.asc(), Category.name.asc(), Category.id.asc())
+        .order_by(Category.sort_order.asc(), Category.id.asc())
     )
     return list(result.scalars().all())
 
@@ -28,7 +28,6 @@ async def get_all_categories_include_inactive(db: AsyncSession) -> list[Category
         select(Category).order_by(
             Category.parent_id.nulls_first(),
             Category.sort_order.asc(),
-            Category.name.asc(),
             Category.id.asc(),
         )
     )

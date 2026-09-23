@@ -86,13 +86,13 @@ export const FALLBACK_GIFTING_SUBMENU: DropdownLink[] = [
   { label: 'Vastu Gifting', href: '/products?tags=vastu-friendly' },
 ];
 
-export function sortByMenuOrder<T extends { sort_order?: number; name?: string; id?: number }>(
+export function sortByMenuOrder<T extends { sort_order?: number; id?: number }>(
   items: T[],
 ): T[] {
   return [...items].sort((a, b) => {
     const orderDiff = (a.sort_order ?? 0) - (b.sort_order ?? 0);
     if (orderDiff !== 0) return orderDiff;
-    return ((a.name ?? '') as string).localeCompare(b.name ?? '');
+    return (a.id ?? 0) - (b.id ?? 0);
   });
 }
 
