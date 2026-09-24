@@ -9,13 +9,6 @@ const CATEGORY_STYLES: Record<string, { bg: string; color: string }> = {
   GROW: { bg: '#DCFCE7', color: '#166534' },
 };
 
-const FALLBACK_COVERS: Record<string, string> = {
-  TIPS: 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=800&h=600&fit=crop&crop=center',
-  DIY: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&h=600&fit=crop&crop=center',
-  CARE: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=800&h=600&fit=crop&crop=center',
-  GROW: 'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=800&h=600&fit=crop&crop=center',
-};
-
 function BlogCard({
   post,
 }: {
@@ -29,10 +22,6 @@ function BlogCard({
 }) {
   const style =
     CATEGORY_STYLES[post.category] ?? { bg: '#F3F4F6', color: '#374151' };
-  const cover =
-    post.cover_image_url ||
-    FALLBACK_COVERS[post.category] ||
-    FALLBACK_COVERS.GROW;
 
   return (
     <Link
@@ -41,13 +30,17 @@ function BlogCard({
     >
       {/* Image — tall 4:3 like Ugaoo, no border-radius */}
       <div className="overflow-hidden">
-        <img
-          src={cover}
-          alt={post.title}
-          className="w-full block object-cover object-center group-hover:scale-[1.03] transition-transform duration-500"
-          style={{ aspectRatio: '4/3' }}
-          loading="lazy"
-        />
+        {post.cover_image_url ? (
+          <img
+            src={post.cover_image_url}
+            alt={post.title}
+            className="w-full block object-cover object-center group-hover:scale-[1.03] transition-transform duration-500"
+            style={{ aspectRatio: '4/3' }}
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full bg-gray-100" style={{ aspectRatio: '4/3' }} />
+        )}
       </div>
 
       {/* Body */}

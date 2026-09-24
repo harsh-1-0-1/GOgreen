@@ -55,12 +55,16 @@ export default function ProductCard({ product }: { product: Product }) {
         Desktop → aspect-square  (already square on sm+)
       */}
       <div className="relative aspect-square overflow-hidden bg-gray-50">
-        <img
-          src={product.images?.[0] || 'https://placehold.co/400x400?text=Plant'}
-          alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          loading="lazy"
-        />
+        {product.images?.[0] ? (
+          <img
+            src={product.images?.[0]}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-100" />
+        )}
 
         {/* Discount badge — identical to ProductTile */}
         {discount !== null && discount > 0 && (

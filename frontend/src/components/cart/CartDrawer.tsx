@@ -116,12 +116,16 @@ export default function CartDrawer() {
             <>
               {items.map((item) => (
                 <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
-                  <img
-                    src={item.resolved_image_url || item.product.images?.[0] || 'https://placehold.co/80x80?text=Plant'}
-                    alt={item.product.name}
-                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover shrink-0"
-                    loading="lazy"
-                  />
+                  {item.resolved_image_url || item.product.images?.[0] ? (
+                    <img
+                      src={item.resolved_image_url || item.product.images?.[0]}
+                      alt={item.product.name}
+                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover shrink-0"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg bg-gray-100 shrink-0" />
+                  )}
                   <div className="flex-1 min-w-0">
                     <Link
                       to={`/products/${item.product.slug}`}

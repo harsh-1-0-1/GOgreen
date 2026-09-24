@@ -40,45 +40,8 @@ export const SUPPORT_PHONE_DISPLAY: string = (() => {
 })();
 
 /**
- * Hardcoded FALLBACK menu items. Used ONLY before the menu API has responded
- * (dataUpdatedAt === 0). Under normal operation the DB-driven flat list from
- * /menu_items always wins. These mirror the seed data.
+ * Fallback submenu for Gifting — used only before the API has responded.
  */
-export const FALLBACK_MENU_ITEMS: StaticLink[] = [
-  {
-    label: 'Gifting',
-    href: '/products?tags=gifting',
-    image: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=280&q=80',
-    accent: '#f9c8d4',
-  },
-  {
-    label: 'Corporate Gifts',
-    href: '/corporate-gifting',
-    image: 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=280&q=80',
-    accent: '#cdebd7',
-  },
-  {
-    label: 'Garden Services',
-    href: '/products?tags=garden-services',
-    image: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=280&q=80',
-    accent: '#d6e6f5',
-  },
-  {
-    label: 'Blog',
-    href: '/blog',
-    image: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=280&q=80',
-    accent: '#f9c8d4',
-  },
-  {
-    label: 'Offers',
-    href: '/products?tags=offers',
-    highlight: true,
-    image: 'https://images.unsplash.com/photo-1560693225-b8507d6f3aa9?w=280&q=80',
-    accent: '#f9e4a0',
-  },
-];
-
-/** Fallback submenu for Gifting — used only before the API has responded. */
 export const FALLBACK_GIFTING_SUBMENU: DropdownLink[] = [
   { label: 'All Gifts', href: '/products?tags=gifting' },
   { label: 'Plant Gifting', href: '/products?tags=gifting' },

@@ -79,12 +79,16 @@ export default function DoNotForgetBar() {
           >
             {/* Image */}
             <div className="relative w-full aspect-square overflow-hidden bg-gray-50">
-              <img
-                src={item.product.images?.[0] || 'https://placehold.co/120x120?text=Plant'}
-                alt={item.product.name}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                loading="lazy"
-              />
+              {item.product.images?.[0] ? (
+                <img
+                  src={item.product.images?.[0]}
+                  alt={item.product.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-full h-full bg-gray-100" />
+              )}
               {item.product.original_price && item.product.original_price > item.product.price && (
                 <span className="absolute top-1 left-1 text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full leading-none">
                   {Math.round(

@@ -2010,11 +2010,15 @@ export default function ProductsAdminPage() {
                 <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
-                      <img
-                        src={p.images?.[0] || 'https://placehold.co/60x60?text=P'}
-                        alt={p.name}
-                        className="w-10 h-10 rounded-lg object-cover bg-gray-100 shrink-0 border"
-                      />
+                      {p.images?.[0] ? (
+                        <img
+                          src={p.images?.[0]}
+                          alt={p.name}
+                          className="w-10 h-10 rounded-lg object-cover bg-gray-100 shrink-0 border"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 shrink-0 border" />
+                      )}
                       <div>
                         <span className="font-semibold text-gray-900 block">{p.name}</span>
                         {p.badge && (
@@ -2073,12 +2077,16 @@ export default function ProductsAdminPage() {
         ) : (
           displayedItems.map((p) => (
             <div key={p.id} className="bg-white rounded-xl border p-3 flex gap-3 shadow-sm">
-              <img
-                src={p.images?.[0] || 'https://placehold.co/60x60?text=P'}
-                alt={p.name}
-                className="w-12 h-12 rounded-lg object-cover shrink-0 border bg-gray-50"
-                loading="lazy"
-              />
+              {p.images?.[0] ? (
+                <img
+                  src={p.images?.[0]}
+                  alt={p.name}
+                  className="w-12 h-12 rounded-lg object-cover shrink-0 border bg-gray-50"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 border" />
+              )}
               <div className="flex-1 min-w-0">
                 <span className="font-semibold text-sm block truncate text-gray-900">{p.name}</span>
                 <p className="text-xs font-semibold text-primary mt-0.5">₹{p.price}</p>

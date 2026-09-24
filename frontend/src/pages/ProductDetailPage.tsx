@@ -209,7 +209,7 @@ function MobileGallery({
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const list = images.length ? images : ['https://placehold.co/600x600?text=Plant'];
+  const list = images;
 
   const EASING = 'transform 380ms cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 
@@ -364,7 +364,12 @@ function MobileGallery({
           transition: EASING,
         }}
       >
-        {list.map((img, i) => (
+        {list.length === 0 ? (
+          <div className="w-full shrink-0">
+            <div className="w-full aspect-square bg-gray-100" />
+          </div>
+        ) : (
+          list.map((img, i) => (
           <div
             key={i}
             role="group"
@@ -381,7 +386,8 @@ function MobileGallery({
               draggable={false}
             />
           </div>
-        ))}
+          ))
+        )}
       </div>
       
       {list.length > 1 && (
@@ -420,12 +426,16 @@ function DesktopGallery({
   activeIndex: number;
   onActiveChange: (i: number) => void;
 }) {
-  const list = images.length ? images : ['https://placehold.co/600x600?text=Plant'];
+  const list = images;
 
   return (
     <div className="space-y-3">
       <div className="aspect-square rounded-2xl overflow-hidden bg-gray-50">
-        <img src={list[activeIndex]} alt="Product" className="w-full h-full object-cover" loading="lazy" />
+        {list[activeIndex] ? (
+          <img src={list[activeIndex]} alt="Product" className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full bg-gray-100" />
+        )}
       </div>
       {list.length > 1 && (
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
@@ -813,10 +823,9 @@ export default function ProductDetailPage() {
     { label: 'Manufactured by', value: STORE_LEGAL.manufacturedBy },
   ];
 
-  function renderInlineBannerItem(banner: Banner | null, fallbackImg: string) {
-    if (!banner) return null;
-    const img = banner.image_url || fallbackImg;
-    return <InlineBanner banner={banner} fallbackImg={img} naturalSize />;
+  function renderInlineBannerItem(banner: Banner | null) {
+    if (!banner || !banner.image_url) return null;
+    return <InlineBanner banner={banner} fallbackImg={banner.image_url} naturalSize />;
   }
 
   return (
@@ -1134,7 +1143,7 @@ export default function ProductDetailPage() {
 
         <HowToGuide product={product} />
 
-        {renderInlineBannerItem(productSpecBanner, 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&q=80')}
+        {renderInlineBannerItem(productSpecBanner)}
 
         <ProductSpecification specs={productSpecs} />
 
@@ -1163,7 +1172,7 @@ export default function ProductDetailPage() {
         <ProductReviews productId={product.id} />
 
         {/* Product detail page ad banner — admin controlled via Banners › Product Detail Page Banner */}
-        {renderInlineBannerItem(productDetailBanner, 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&q=80')}
+        {renderInlineBannerItem(productDetailBanner)}
 
         <ProductFaq faqs={product.faqs} />
       </div>

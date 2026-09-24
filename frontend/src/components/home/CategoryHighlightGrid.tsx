@@ -1,62 +1,6 @@
 import { Link } from 'react-router-dom';
 
 import { useBanners } from '@/hooks/useBanners';
-import type { Banner } from '@/types';
-
-const FALLBACK_CARDS: Banner[] = [
-  {
-    id: -1,
-    title: 'Combos',
-    subtitle: 'Get 4 at ₹699',
-    cta_link: '/products?tags=combo',
-    image_url:
-      'https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=800&q=80',
-    bg_color: '#F5F0E8',
-    text_color: '#16A34A',
-    placement: 'highlight',
-    position: 0,
-    is_active: true,
-  },
-  {
-    id: -2,
-    title: 'Plant Care',
-    subtitle: 'upto 65% off',
-    cta_link: '/products?category=plant-care',
-    image_url:
-      'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&q=80',
-    bg_color: '#F5F0E8',
-    text_color: '#16A34A',
-    placement: 'highlight',
-    position: 1,
-    is_active: true,
-  },
-  {
-    id: -3,
-    title: 'Ceramics',
-    subtitle: 'upto 40% off',
-    cta_link: '/products?category=ceramic-pots',
-    image_url:
-      'https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=800&q=80',
-    bg_color: '#F5F0E8',
-    text_color: '#16A34A',
-    placement: 'highlight',
-    position: 2,
-    is_active: true,
-  },
-  {
-    id: -4,
-    title: 'Seeds',
-    subtitle: 'Starting at ₹99',
-    cta_link: '/products?category=seeds',
-    image_url:
-      'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&q=80',
-    bg_color: '#F5F0E8',
-    text_color: '#16A34A',
-    placement: 'highlight',
-    position: 3,
-    is_active: true,
-  },
-];
 
 function HighlightCardSkeleton() {
   return (
@@ -69,7 +13,9 @@ function HighlightCardSkeleton() {
 
 export default function CategoryHighlightGrid() {
   const { data: banners = [], isLoading } = useBanners('highlight');
-  const cards = banners.length > 0 ? banners : FALLBACK_CARDS;
+  const cards = banners;
+
+  if (!isLoading && cards.length === 0) return null;
 
   return (
     <section className="w-full py-7 sm:py-9 bg-white">

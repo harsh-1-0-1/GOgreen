@@ -4,23 +4,6 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 
 import { useBanners } from '@/hooks/useBanners';
-import type { Banner } from '@/types';
-
-const FALLBACK_SLIDE: Banner = {
-  id: 0,
-  title: "India's favourite plant store",
-  subtitle: 'Plants, seeds & pots delivered to your door',
-  cta_text: 'Shop Now',
-  cta_link: '/products',
-  bg_color: '#2D6A4F',
-  text_color: '#FFFFFF',
-  image_url:
-    'https://images.unsplash.com/photo-1545241047-6083a3684587?w=1400&h=600&fit=crop',
-  placement: 'hero',
-  position: 0,
-  is_active: true,
-};
-
 
 function SlidesSkeleton() {
   return (
@@ -40,7 +23,7 @@ function SlidesSkeleton() {
 
 export default function HeroBanner() {
   const { data: banners = [], isLoading } = useBanners('hero');
-  const slides = banners.length > 0 ? banners : [FALLBACK_SLIDE];
+  const slides = banners;
 
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -94,6 +77,8 @@ export default function HeroBanner() {
   }
 
   if (isLoading) return <SlidesSkeleton />;
+
+  if (slides.length === 0) return null;
 
   return (
 <section

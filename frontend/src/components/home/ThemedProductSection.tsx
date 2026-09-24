@@ -17,21 +17,6 @@ export interface ThemedProductSectionProps {
 
 const SERIF = "'Playfair Display', Georgia, serif";
 
-const PRODUCT_IMAGES = [
-  'https://images.unsplash.com/photo-1637967886160-fd78dc3ce3f5?w=600&h=600&fit=crop&crop=center',
-  'https://images.unsplash.com/photo-1632207691143-643e2a9a9361?w=600&h=600&fit=crop&crop=center',
-  'https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=600&h=600&fit=crop&crop=center',
-  'https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=600&h=600&fit=crop&crop=center',
-  'https://images.unsplash.com/photo-1593482892290-f54927ae2b7a?w=600&h=600&fit=crop&crop=center',
-  'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=600&h=600&fit=crop&crop=center',
-];
-
-function getCardImage(product: Product, index: number): string {
-  const src = product.images?.[0];
-  if (src && !src.includes('placehold') && !src.includes('placeholder')) return src;
-  return PRODUCT_IMAGES[index % PRODUCT_IMAGES.length];
-}
-
 function getDiscount(product: Product): number {
   if (product.original_price && product.original_price > product.price) {
     return Math.round(((product.original_price - product.price) / product.original_price) * 100);
@@ -39,8 +24,7 @@ function getDiscount(product: Product): number {
   return [20, 25, 30, 15, 22, 18][Math.abs(product.id) % 6];
 }
 
-function ProductCard({ product, index }: { product: Product; index: number }) {
-  const imgSrc = getCardImage(product, index);
+function ProductCard({ product }: { product: Product }) {
   const discount = getDiscount(product);
 
   return (
@@ -52,12 +36,16 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
       }}
     >
       <div className="relative overflow-hidden rounded-xl bg-[#f5f1ec] shrink-0 aspect-[4/3] sm:aspect-square flex items-center justify-center p-3 sm:p-4">
-        <img
-          src={imgSrc}
-          alt={product.name}
-          className="w-full h-full object-contain object-center group-hover:scale-105 transition-transform duration-500"
-          loading="lazy"
-        />
+        {product.images?.[0] ? (
+          <img
+            src={product.images?.[0]}
+            alt={product.name}
+            className="w-full h-full object-contain object-center group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-100" />
+        )}
       </div>
 
       <div className="pt-3 sm:pt-4 flex flex-col gap-1.5 sm:gap-2 flex-1">
@@ -170,12 +158,12 @@ function FullScreenCarouselLayout({
               className="flex gap-5 overflow-x-auto snap-x snap-mandatory pt-2 pb-6 hide-scrollbar"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
-              {products.map((product, i) => (
+              {products.map((product) => (
                 <div
                   key={product.id}
                   className="shrink-0 snap-start w-[82%] sm:w-[44%] lg:w-[28%]"
                 >
-                  <ProductCard product={product} index={i} />
+                  <ProductCard product={product} />
                 </div>
               ))}
             </div>

@@ -64,11 +64,15 @@ export default function SearchableProductSelect({
                   onClick={() => handleSelect(product.id)}
                   className="w-full px-4 py-3 text-left hover:bg-gray-50 transition flex items-center gap-3"
                 >
-                  <img
-                    src={product.images?.[0] || 'https://placehold.co/40x40?text=P'}
-                    alt={product.name}
-                    className="w-8 h-8 rounded object-cover bg-gray-100 shrink-0"
-                  />
+                  {product.images?.[0] ? (
+                    <img
+                      src={product.images?.[0]}
+                      alt={product.name}
+                      className="w-8 h-8 rounded object-cover bg-gray-100 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded bg-gray-100 shrink-0" />
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
                     <p className="text-xs text-gray-500">₹{product.price}</p>

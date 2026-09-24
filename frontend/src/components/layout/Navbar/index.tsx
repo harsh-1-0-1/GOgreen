@@ -30,7 +30,6 @@ import type { ProductListResponse } from '@/types';
 
 import {
   FALLBACK_GIFTING_SUBMENU,
-  FALLBACK_MENU_ITEMS,
   WHATSAPP_NUMBER,
   categoryLink,
   categoryTreeToNavItems,
@@ -89,21 +88,9 @@ export default function Navbar() {
   const effectiveMenuItems = useFallback ? [] : (menuItems ?? []);
 
   const navItems: NavItemDef[] = useFallback
-    ? [
-        ...categoryTreeToNavItems(categories, []),
-        ...FALLBACK_MENU_ITEMS.map((link) => ({
-          label: link.label.toUpperCase(),
-          href: link.href,
-          highlight: link.highlight,
-        })),
-      ]
+    ? categoryTreeToNavItems(categories, [])
     : categoryTreeToNavItems(categories, effectiveMenuItems);
 
-  const fallbackMobileItems = FALLBACK_MENU_ITEMS.map((link) => ({
-    label: link.label,
-    href: link.href,
-    img: link.image || '',
-  }));
   const dbMobileItems = effectiveMenuItems
     .filter((m) => !m.parent_id)
     .sort((a, b) => a.sort_order - b.sort_order)
@@ -119,7 +106,7 @@ export default function Navbar() {
       href: categoryLink(root),
       img: root.mobile_image_url || root.image_url || '',
     })),
-    ...(useFallback ? fallbackMobileItems : dbMobileItems),
+    ...(useFallback ? [] : dbMobileItems),
   ];
 
   useBodyScrollLock(drawerOpen);
@@ -558,11 +545,15 @@ export default function Navbar() {
                   }}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
                 >
-                  <img
-                    src={product.images?.[0] || 'https://placehold.co/40x40?text=🌱'}
-                    alt=""
-                    className="w-10 h-10 rounded-xl object-cover shrink-0 bg-gray-100"
-                  />
+                  {product.images?.[0] ? (
+                    <img
+                      src={product.images?.[0]}
+                      alt=""
+                      className="w-10 h-10 rounded-xl object-cover shrink-0 bg-gray-100"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-xl bg-gray-100 shrink-0" />
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
                     <p className="text-xs text-primary font-semibold mt-0.5">₹{product.price}</p>
@@ -650,7 +641,7 @@ export default function Navbar() {
                     to={
                       mobilePromoBanner.cta_link ||
                       (useFallback
-                        ? FALLBACK_MENU_ITEMS[0]?.href
+                        ? ''
                         : effectiveMenuItems.find((m) => !m.parent_id)?.href) ||
                       '/products'
                     }
@@ -712,8 +703,18 @@ export default function Navbar() {
                 )}
               </div>
 
-              {/* Strictly ordered 10 Menu Items with Circular Previews */}
+              {/* Menu Items with Circular Previews */}
                 <div className="px-3 py-3 space-y-1">
+                  {useFallback && (
+                    <>
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3.5 px-3.5 py-2.5">
+                          <div className="w-9 h-9 rounded-full bg-gray-100 animate-pulse" />
+                          <div className="h-4 w-32 bg-gray-100 rounded animate-pulse" />
+                        </div>
+                      ))}
+                    </>
+                  )}
                   {mobileMenuItems.map((item) => {
                     const subcategories = getSubcategories(item.label);
                     const hasSubmenu = subcategories !== null;
@@ -733,12 +734,16 @@ export default function Navbar() {
                         className="flex items-center justify-between px-3.5 py-2.5 rounded-xl hover:bg-emerald-50/40 active:bg-emerald-50/60 transition-all duration-200 group"
                       >
                         <div className="flex items-center gap-3.5">
-                          <img
-                            src={item.img || 'https://images.unsplash.com/photo-1545241047-6083a3684587?w=80&h=80&fit=crop&q=80'}
-                            alt={item.label}
-                            className="w-9 h-9 rounded-full object-cover border border-gray-100/60 shadow-xs group-hover:scale-105 transition-transform duration-300"
-                            loading="lazy"
-                          />
+                          {item.img ? (
+                            <img
+                              src={item.img}
+                              alt={item.label}
+                              className="w-9 h-9 rounded-full object-cover border border-gray-100/60 shadow-xs group-hover:scale-105 transition-transform duration-300"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-gray-100 border border-gray-100/60" />
+                          )}
                           <span className="text-[13.5px] font-semibold text-gray-800 group-hover:text-primary transition-colors duration-200">
                             {item.label}
                           </span>

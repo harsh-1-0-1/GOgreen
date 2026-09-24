@@ -48,12 +48,16 @@ export default function MobileCategoryNav() {
               className="flex flex-col items-center gap-1.5 sm:gap-2 group flex-shrink-0 w-[68px] sm:w-[76px] lg:w-[84px]"
             >
               <div className="w-[60px] h-[60px] sm:w-[68px] sm:h-[68px] lg:w-[76px] lg:h-[76px] rounded-full overflow-hidden bg-gray-50 border-2 border-transparent group-hover:border-[#16A34A] transition-colors p-0.5">
-                <img
-                  src={cat.mobile_image_url || cat.image_url || 'https://images.unsplash.com/photo-1545241047-6083a3684587?auto=format&fit=crop&w=150&h=150'}
-                  alt={cat.name}
-                  className="w-full h-full object-cover rounded-full"
-                  loading="lazy"
-                />
+                {cat.mobile_image_url || cat.image_url ? (
+                  <img
+                    src={cat.mobile_image_url || cat.image_url || undefined}
+                    alt={cat.name}
+                    className="w-full h-full object-cover rounded-full"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gray-100 rounded-full" />
+                )}
               </div>
               <span className="text-[10px] sm:text-xs lg:text-sm font-medium text-center text-gray-700 leading-tight">
                 {cat.name}

@@ -105,11 +105,15 @@ function SortableDoNotForgetRow({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-3">
-          <img
-            src={item.product.images?.[0] || 'https://placehold.co/60x60?text=P'}
-            alt={item.product.name}
-            className="w-10 h-10 rounded-lg object-cover bg-gray-100 shrink-0 border"
-          />
+          {item.product.images?.[0] ? (
+            <img
+              src={item.product.images?.[0]}
+              alt={item.product.name}
+              className="w-10 h-10 rounded-lg object-cover bg-gray-100 shrink-0 border"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-lg bg-gray-100 shrink-0 border" />
+          )}
           <div className="min-w-0">
             <h3 className="font-semibold text-gray-900 truncate">{item.product.name}</h3>
             <p className="text-xs text-gray-500">₹{item.product.price}</p>

@@ -60,11 +60,15 @@ export default function BlogDetailPage() {
   return (
     <article>
       <div className="w-full h-64 sm:h-[400px] relative">
-        <img
-          src={post.cover_image_url || 'https://placehold.co/1400x400?text=Blog'}
-          alt={post.title}
-          className="w-full h-full object-cover"
-        />
+        {post.cover_image_url ? (
+          <img
+            src={post.cover_image_url}
+            alt={post.title}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-100" />
+        )}
       </div>
 
       <div className="max-w-3xl mx-auto px-3 sm:px-4 -mt-16 relative z-10">
@@ -104,12 +108,16 @@ export default function BlogDetailPage() {
                   className="group block bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
                 >
                   <div className="overflow-hidden aspect-video">
-                    <img
-                      src={rp.cover_image_url || 'https://placehold.co/600x340?text=Blog'}
-                      alt={rp.title}
-                      className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                      loading="lazy"
-                    />
+                    {rp.cover_image_url ? (
+                      <img
+                        src={rp.cover_image_url}
+                        alt={rp.title}
+                        className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gray-100" />
+                    )}
                   </div>
                   <div className="p-4">
                     <span className={`inline-block px-2.5 py-0.5 text-[11px] font-semibold rounded-full ${rpColor}`}>

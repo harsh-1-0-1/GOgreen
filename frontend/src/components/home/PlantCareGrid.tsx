@@ -45,15 +45,16 @@ function ProductTile({ product }: { product: Product }) {
       className="group flex flex-col h-full bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"
     >
       <div className="relative aspect-square overflow-hidden bg-gray-50">
-        <img
-          src={
-            product.images?.[0] ||
-            'https://placehold.co/400x400?text=Plant'
-          }
-          alt={product.name}
-          loading="lazy"
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-        />
+        {product.images?.[0] ? (
+          <img
+            src={product.images?.[0]}
+            alt={product.name}
+            loading="lazy"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-100" />
+        )}
         {discount !== null && discount > 0 && (
           <span className="absolute top-0 left-0 bg-[#1B4332] text-white text-[9px] sm:text-[10px] font-bold px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-br-xl shadow-sm whitespace-nowrap leading-none flex items-center justify-center z-10">
             {discount}% OFF

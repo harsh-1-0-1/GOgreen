@@ -108,12 +108,16 @@ export default function CartPage() {
           {items.map((item) => (
             <div key={item.id} className="flex gap-3 sm:gap-4 p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-100">
               <Link to={`/products/${item.product.slug}`} className="shrink-0">
-                <img
-                  src={item.resolved_image_url || item.product.images?.[0] || 'https://placehold.co/120x120?text=Plant'}
-                  alt={item.product.name}
-                  className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-lg sm:rounded-xl object-cover"
-                  loading="lazy"
-                />
+                {item.resolved_image_url || item.product.images?.[0] ? (
+                  <img
+                    src={item.resolved_image_url || item.product.images?.[0]}
+                    alt={item.product.name}
+                    className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-lg sm:rounded-xl object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-lg sm:rounded-xl bg-gray-100" />
+                )}
               </Link>
               <div className="flex-1 min-w-0">
                 <Link to={`/products/${item.product.slug}`} className="text-sm sm:text-base font-medium hover:text-primary transition line-clamp-1">
