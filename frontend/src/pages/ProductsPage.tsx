@@ -115,13 +115,8 @@ function TrendingPromoBanner({
             .filter((src) => src && src !== slide.image_url)
             .slice(0, 3);
 
-          return (
-            <Link
-              key={slide.id || slideIndex}
-              to={slide.cta_link || '/products'}
-              className="relative h-full w-full shrink-0 overflow-hidden block"
-              style={{ backgroundColor: slide.bg_color || '#e9dfc9' }}
-            >
+          const slideContent = (
+            <>
               <img
                 src={slide.image_url || images[0] || undefined}
                 alt=""
@@ -149,7 +144,32 @@ function TrendingPromoBanner({
                 <div className="absolute right-7 top-10 grid h-24 w-24 rotate-[-10deg] place-items-center rounded-full bg-[#ffeb3b] text-center text-primary shadow-lg [clip-path:polygon(50%_0%,59%_12%,73%_6%,78%_21%,94%_22%,88%_38%,100%_50%,88%_62%,94%_78%,78%_79%,73%_94%,59%_88%,50%_100%,41%_88%,27%_94%,22%_79%,6%_78%,12%_62%,0%_50%,12%_38%,6%_22%,22%_21%,27%_6%,41%_12%)] sm:right-12 sm:top-12 sm:h-32 sm:w-32">
                 </div>
               )}
+            </>
+          );
+
+          const slideClass =
+            'relative h-full w-full shrink-0 overflow-hidden block';
+          const slideStyle = {
+            backgroundColor: slide.bg_color || '#e9dfc9',
+          };
+
+          return slide.cta_link ? (
+            <Link
+              key={slide.id || slideIndex}
+              to={slide.cta_link}
+              className={slideClass}
+              style={slideStyle}
+            >
+              {slideContent}
             </Link>
+          ) : (
+            <div
+              key={slide.id || slideIndex}
+              className={slideClass}
+              style={slideStyle}
+            >
+              {slideContent}
+            </div>
           );
         })}
       </div>

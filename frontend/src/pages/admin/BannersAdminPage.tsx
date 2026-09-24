@@ -569,6 +569,7 @@ function BannerDrawer({
   const watchedBgColor = watch('bg_color');
   const watchedTextColor = watch('text_color');
   const watchedCtaText = watch('cta_text');
+  const watchedCtaLink = watch('cta_link');
   const watchedPlacement = watch('placement');
   const watchedTargetPath = watch('target_path');
 
@@ -842,6 +843,7 @@ function BannerDrawer({
               />
               <CategoryLinkPicker
                 categories={categories}
+                value={watchedCtaLink}
                 onPick={(link) => setValue('cta_link', link)}
               />
             </div>

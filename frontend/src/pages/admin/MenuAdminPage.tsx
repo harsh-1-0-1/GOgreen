@@ -240,6 +240,7 @@ function MenuDrawer({
   const watchedHighlight = watch('highlight');
   const watchedActive = watch('is_active');
   const watchedAccent = watch('accent_color');
+  const watchedHref = watch('href');
 
   async function onSubmit(data: MenuFormData) {
     setSubmitting(true);
@@ -308,6 +309,7 @@ function MenuDrawer({
             />
             <CategoryLinkPicker
               categories={categories}
+              value={watchedHref}
               onPick={(link) => setValue('href', link)}
             />
             <p className="text-[10px] text-gray-400 mt-0.5">

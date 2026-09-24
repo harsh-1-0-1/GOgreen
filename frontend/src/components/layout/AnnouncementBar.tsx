@@ -7,7 +7,7 @@ const COOKIE_NAME = 'bar_dismissed';
 const COOKIE_MAX_AGE = 86400;
 
 const FALLBACK_MESSAGES = [
-  { title: 'Free Delivery Above ₹499 | Shop Now', cta_link: '/products' },
+  { title: 'Free Delivery Above ₹499 — Shop Now', cta_link: '' },
 ];
 
 function getCookie(name: string): string | undefined {
@@ -46,12 +46,16 @@ export default function AnnouncementBar() {
   const messageStrip = messages.map((msg, i) => (
     <span key={i} className="inline-flex items-center whitespace-nowrap">
       {i > 0 && <Separator />}
-      <Link
-        to={msg.cta_link || '/products'}
-        className="hover:underline underline-offset-2 transition-colors"
-      >
-        {msg.title}
-      </Link>
+      {msg.cta_link ? (
+        <Link
+          to={msg.cta_link}
+          className="hover:underline underline-offset-2 transition-colors"
+        >
+          {msg.title}
+        </Link>
+      ) : (
+        <span>{msg.title}</span>
+      )}
     </span>
   ));
 

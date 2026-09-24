@@ -26,13 +26,8 @@ export default function CategoryHighlightGrid() {
                 <HighlightCardSkeleton key={i} />
               ))
             : cards.map((card) => {
-                const link = card.cta_link || '/products';
-                return (
-                  <Link
-                    key={card.id}
-                    to={link}
-                    className="group flex flex-col gap-2.5 sm:gap-3"
-                  >
+                const content = (
+                  <div className="group flex flex-col gap-2.5 sm:gap-3">
                     <div
                       className="relative aspect-[3/4] overflow-hidden rounded-xl shadow-sm transition-all group-hover:shadow-md"
                       style={{ backgroundColor: card.bg_color || '#F5F0E8' }}
@@ -64,7 +59,15 @@ export default function CategoryHighlightGrid() {
                         {card.subtitle}
                       </span>
                     )}
+                  </div>
+                );
+
+                return card.cta_link ? (
+                  <Link key={card.id} to={card.cta_link}>
+                    {content}
                   </Link>
+                ) : (
+                  <div key={card.id}>{content}</div>
                 );
               })}
         </div>

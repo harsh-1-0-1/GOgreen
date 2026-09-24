@@ -637,29 +637,41 @@ export default function Navbar() {
                   text overlay — bake any text into the image itself. */}
               {mobilePromoBanner?.image_url && (
                 <div className="px-5 pb-3 shrink-0">
-                  <Link
-                    to={
-                      mobilePromoBanner.cta_link ||
-                      (useFallback
-                        ? ''
-                        : effectiveMenuItems.find((m) => !m.parent_id)?.href) ||
-                      '/products'
-                    }
-                    onClick={closeDrawer}
-                    className="group relative block overflow-hidden rounded-2xl border border-emerald-100/50 shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
-                    style={
-                      mobilePromoBanner.bg_color
-                        ? { backgroundColor: mobilePromoBanner.bg_color }
-                        : undefined
-                    }
-                  >
-                    <img
-                      src={mobilePromoBanner.image_url}
-                      alt={mobilePromoBanner.title}
-                      className="w-full aspect-[16/5] object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                      loading="eager"
-                    />
-                  </Link>
+                  {mobilePromoBanner.cta_link ? (
+                    <Link
+                      to={mobilePromoBanner.cta_link}
+                      onClick={closeDrawer}
+                      className="group relative block overflow-hidden rounded-2xl border border-emerald-100/50 shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
+                      style={
+                        mobilePromoBanner.bg_color
+                          ? { backgroundColor: mobilePromoBanner.bg_color }
+                          : undefined
+                      }
+                    >
+                      <img
+                        src={mobilePromoBanner.image_url}
+                        alt={mobilePromoBanner.title}
+                        className="w-full aspect-[16/5] object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                        loading="eager"
+                      />
+                    </Link>
+                  ) : (
+                    <div
+                      className="group relative block overflow-hidden rounded-2xl border border-emerald-100/50 shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
+                      style={
+                        mobilePromoBanner.bg_color
+                          ? { backgroundColor: mobilePromoBanner.bg_color }
+                          : undefined
+                      }
+                    >
+                      <img
+                        src={mobilePromoBanner.image_url}
+                        alt={mobilePromoBanner.title}
+                        className="w-full aspect-[16/5] object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                        loading="eager"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 

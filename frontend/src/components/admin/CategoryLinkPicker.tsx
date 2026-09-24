@@ -1,5 +1,3 @@
-import { useState } from 'react';
-
 import type { Category } from '@/types';
 
 interface CategoryOption {
@@ -24,14 +22,15 @@ interface CategoryLinkPickerProps {
   categories: Category[] | undefined;
   onPick: (link: string) => void;
   label?: string;
+  value?: string;
 }
 
 export default function CategoryLinkPicker({
   categories,
   onPick,
   label = 'Or pick a category link:',
+  value = '',
 }: CategoryLinkPickerProps) {
-  const [value, setValue] = useState('');
   const options = flattenCategoryOptions(categories);
 
   return (
@@ -42,12 +41,13 @@ export default function CategoryLinkPicker({
         onChange={(e) => {
           if (e.target.value) {
             onPick(`/products?category=${e.target.value}`);
-            setValue('');
+          } else {
+            onPick('');
           }
         }}
         className="flex-1 min-w-0 px-2 py-1.5 border rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary/50"
       >
-        <option value="">— pick a category —</option>
+        <option value="">— toggle category link —</option>
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
             {opt.label}
