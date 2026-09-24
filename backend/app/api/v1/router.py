@@ -19,6 +19,7 @@ from app.api.v1 import (
     reviews,
     settings,
     stories,
+    tags,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -40,3 +41,4 @@ api_router.include_router(do_not_forget.router)
 api_router.include_router(stories.router)
 api_router.include_router(settings.router)
 api_router.include_router(menu_items.router)
+api_router.include_router(tags.router)

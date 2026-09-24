@@ -19,6 +19,17 @@ export interface Category {
   children?: Category[];
 }
 
+/** A globally-defined catalog tag (name + colour) shown as pill badges. */
+export interface CatalogTag {
+  id: number;
+  name: string;
+  slug: string;
+  color: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface FAQItem {
   question: string;
   answer: string;
@@ -39,7 +50,6 @@ export interface Product {
   how_to_guide: string | null;
   sunlight: string | null;
   watering: string | null;
-  badge: string | null;
   display_section: string | null;
   is_active: boolean;
   created_at: string;

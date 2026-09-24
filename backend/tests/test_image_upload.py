@@ -118,7 +118,6 @@ def test_response_serializers_resolve_keys(monkeypatch):
             "how_to_guide": None,
             "sunlight": None,
             "watering": None,
-            "badge": None,
             "is_active": True,
             "created_at": "2026-01-01T00:00:00Z",
             "variants": None,

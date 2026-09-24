@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { ALLOWED_TAGS_MAP, type TagConfig } from './productTagBadges.utils';
+import { useTagColorMap } from '@/hooks/useTags';
+import { resolveTagStyles } from './productTagBadges.utils';
 
 interface ProductTagBadgesProps {
   tags: string[] | null | undefined;
@@ -20,23 +21,8 @@ export default function ProductTagBadges({
   asLinks = false,
   className = '',
 }: ProductTagBadgesProps) {
-  if (!tags || tags.length === 0) return null;
-
-  // Filter and map incoming tags to keep only the allowed types
-  const mappedList = tags
-    .map((t) => {
-      const key = t.toLowerCase().trim().replace(/\s+/g, '-');
-      return ALLOWED_TAGS_MAP[key] || null;
-    })
-    .filter((styleObj): styleObj is TagConfig => styleObj !== null);
-
-  // Deduplicate by label (e.g. low-maintenance + easy-care → one "Easy Care" badge)
-  const seenLabels = new Set<string>();
-  const uniqueMapped = mappedList.filter((styleObj) => {
-    if (seenLabels.has(styleObj.label)) return false;
-    seenLabels.add(styleObj.label);
-    return true;
-  });
+  const tagColors = useTagColorMap();
+  const uniqueMapped = resolveTagStyles(tags, tagColors);
 
   if (uniqueMapped.length === 0) return null;
 

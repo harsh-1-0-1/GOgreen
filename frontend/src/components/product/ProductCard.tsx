@@ -72,13 +72,6 @@ export default function ProductCard({ product }: { product: Product }) {
             {discount}% OFF
           </span>
         )}
-
-        {/* Named badge — hidden on mobile to match TrendingNow, visible sm+ */}
-        {product.badge && (
-          <span className="hidden sm:inline-block absolute top-3 right-3 bg-primary text-white text-xs font-medium px-2.5 py-1 rounded-full">
-            {product.badge}
-          </span>
-        )}
       </div>
 
       {/* ── Content ───────────────────────────────────────────────────────── */}

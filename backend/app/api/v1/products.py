@@ -179,7 +179,6 @@ async def get_product_raw(
         "how_to_guide": product.how_to_guide,
         "sunlight": product.sunlight,
         "watering": product.watering,
-        "badge": product.badge,
         "is_active": product.is_active,
         "variants": product.variants,  # raw dict with relative keys in image fields
         "promise_banner_image": product.promise_banner_image,  # raw relative key
@@ -271,7 +270,6 @@ async def create_product(
     how_to_guide: Annotated[str | None, Form()] = None,
     sunlight: Annotated[str | None, Form()] = None,
     watering: Annotated[str | None, Form()] = None,
-    badge: Annotated[str | None, Form()] = None,
     variants: Annotated[str | None, Form()] = None,
     promise_banner_image: Annotated[str | None, Form()] = None,  # relative key from prior /upload-image call
     why_plantoga_banner_image: Annotated[str | None, Form()] = None,  # relative key from prior /upload-image call
@@ -321,7 +319,6 @@ async def create_product(
         how_to_guide=how_to_guide,
         sunlight=sunlight,
         watering=watering,
-        badge=badge,
         variants=json.loads(variants) if variants else None,
         promise_banner_image=promise_banner_image or None,
         why_plantoga_banner_image=why_plantoga_banner_image or None,

@@ -62,6 +62,22 @@ class Category(Base):
     products: Mapped[list["Product"]] = relationship(back_populates="category")
 
 
+class Tag(Base):
+    """A globally-defined catalog tag (name + colour). Products reference tags by
+    slug via their `tags` JSON array; the colour defined here is used everywhere
+    the tag pill is rendered across the catalog."""
+
+    __tablename__ = "tags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    slug: Mapped[str] = mapped_column(String(120), unique=True, index=True, nullable=False)
+    color: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class Product(Base):
     __tablename__ = "products"
 
@@ -79,7 +95,6 @@ class Product(Base):
     how_to_guide: Mapped[str | None] = mapped_column(Text, nullable=True)
     sunlight: Mapped[str | None] = mapped_column(String(100), nullable=True)
     watering: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    badge: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     variants: Mapped[dict | None] = mapped_column(JSON, nullable=True)

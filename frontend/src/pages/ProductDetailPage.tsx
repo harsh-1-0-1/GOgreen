@@ -852,15 +852,11 @@ export default function ProductDetailPage() {
           </div>
 
           <div className="space-y-4 sm:space-y-6">
-            {product.badge && (
-              <span className="inline-block bg-primary text-white text-xs font-medium px-3 py-1 rounded-full">
-                {product.badge}
-              </span>
-            )}
             <h1 className="text-2xl sm:text-3xl font-bold">{product.name}</h1>
 
             <ProductTagBadges
               tags={product.tags}
+             
               size="md"
               asLinks
               className="mt-1"

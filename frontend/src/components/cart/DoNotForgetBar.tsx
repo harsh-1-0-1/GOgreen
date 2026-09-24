@@ -43,7 +43,6 @@ export default function DoNotForgetBar() {
         how_to_guide: null,
         sunlight: null,
         watering: null,
-        badge: null,
         display_section: null,
         is_active: true,
         created_at: new Date().toISOString(),

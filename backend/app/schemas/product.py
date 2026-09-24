@@ -90,7 +90,6 @@ class ProductCreate(BaseModel):
     how_to_guide: str | None = None
     sunlight: str | None = None
     watering: str | None = None
-    badge: str | None = None
     display_section: str | None = None
     is_active: bool = True
     variants: dict | None = None
@@ -119,7 +118,6 @@ class ProductUpdate(BaseModel):
     how_to_guide: str | None = None
     sunlight: str | None = None
     watering: str | None = None
-    badge: str | None = None
     display_section: str | None = None
     is_active: bool | None = None
     # null  → field omitted from update (existing variants are preserved).
@@ -153,7 +151,6 @@ class ProductResponse(BaseModel):
     how_to_guide: str | None
     sunlight: str | None
     watering: str | None
-    badge: str | None
     display_section: str | None
     is_active: bool
     created_at: datetime

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import type { Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,6 +19,7 @@ import {
 import toast from 'react-hot-toast';
 import { useProduct, useProductRaw, useProducts, useAdminAllProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
+import { useTags, useUpsertTag } from '@/hooks/useTags';
 import { useDeleteProduct } from '@/hooks/useAdmin';
 import api from '@/lib/api';
 import { getApiErrorDetail } from '@/lib/apiError';
@@ -66,10 +67,9 @@ const productSchema = z.object({
   original_price: z.coerce.number().positive().optional().or(z.literal(0)),
   stock_qty: z.coerce.number().int().min(0, 'Stock cannot be negative'),
   category_id: z.coerce.number().int().positive('Please select a category'),
-  badge: z.string().optional(),
   display_section: z.string().optional(),
   how_to_guide: z.string().optional(),
-  tags: z.array(z.object({ value: z.string() })).optional(),
+  tags: z.array(z.object({ value: z.string().optional() })).optional(),
   care_tips: z.array(z.object({ value: z.string() })).optional(),
 });
 
@@ -129,10 +129,23 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // useProductRaw (admin endpoint, raw relative keys) — used to seed image key state for edit
   const { data: rawProduct } = useProductRaw(isEdit ? (editProduct?.id ?? null) : null);
   const { data: categories } = useCategories();
+  const { data: globalTags = [] } = useTags();
   const qc = useQueryClient();
   const allCats = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
+  const globalTagColors = useMemo(() => {
+    const map: Record<string, string> = {};
+    globalTags.forEach((t) => {
+      if (t.color) map[t.slug] = t.color;
+    });
+    return map;
+  }, [globalTags]);
   const [submitting, setSubmitting] = useState(false);
   const [variantError, setVariantError] = useState<string | null>(null);
+  const upsertTag = useUpsertTag();
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
+  const [showNewTagForm, setShowNewTagForm] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#1B4332');
   const [formInitialized, setFormInitialized] = useState(!isEdit);
 
   // Form Collapsible Sections
@@ -247,7 +260,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
   useBodyScrollLock(true);
 
-  const { register, handleSubmit, control, reset, formState: { errors } } = useForm<ProductFormData>({
+  const { register, handleSubmit, control, watch, reset, formState: { errors } } = useForm<ProductFormData>({
     resolver: zodResolver(productSchema) as unknown as Resolver<ProductFormData>,
     defaultValues: {
       name: '',
@@ -256,7 +269,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       original_price: undefined,
       stock_qty: 0,
       category_id: undefined,
-      badge: '',
       display_section: '',
       how_to_guide: '',
       tags: [],
@@ -266,6 +278,31 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const { fields: tagFields, append: addTag, remove: removeTag } = useFieldArray({ control, name: 'tags' });
   const { fields: tipFields, append: addTip, remove: removeTip } = useFieldArray({ control, name: 'care_tips' });
 
+  const addTagByName = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const exists = tagFields.some((f) => (f.value || '').trim().toLowerCase() === trimmed.toLowerCase());
+    if (!exists) addTag({ value: trimmed });
+  };
+
+  const availableTags = globalTags.filter(
+    (t) => t.is_active && !tagFields.some((f) => (f.value || '').trim().toLowerCase() === t.name.toLowerCase()),
+  );
+
+  const createNewTag = async () => {
+    const name = newTagName.trim();
+    if (!name) return;
+    try {
+      await upsertTag.mutateAsync({ name, color: newTagColor });
+      addTagByName(name);
+      setNewTagName('');
+      setNewTagColor('#1B4332');
+      toast.success(`Tag "${name}" saved`);
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Could not create tag'));
+    }
+  };
+
   const applyProductToForm = (p: Product) => {
     reset({
       name: p.name || '',
@@ -274,7 +311,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       original_price: p.original_price || undefined,
       stock_qty: p.stock_qty ?? 0,
       category_id: p.category_id,
-      badge: p.badge || '',
       display_section: p.display_section || '',
       how_to_guide: p.how_to_guide || '',
       tags: p.tags?.length ? p.tags.map((value) => ({ value })) : [],
@@ -551,7 +587,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         original_price: number | null;
         stock_qty: number;
         category_id: number;
-        badge: string | null;
         display_section: string | null;
         how_to_guide: string | null;
         tags: string[];
@@ -565,10 +600,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         original_price: data.original_price || null,
         stock_qty: totalStock,
         category_id: data.category_id,
-        badge: data.badge || null,
         display_section: data.display_section || null,
         how_to_guide: data.how_to_guide?.trim() || null,
-        tags: data.tags?.map((t) => t.value).filter(Boolean) || [],
+        tags: data.tags?.map((t) => (t.value || '').trim()).filter(Boolean) || [],
         care_tips: data.care_tips?.map((t) => t.value).filter(Boolean) || [],
       };
       if (variants !== null) {
@@ -654,7 +688,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         fd.append('stock_qty', String(payload.stock_qty));
         fd.append('tags', JSON.stringify(payload.tags));
         fd.append('care_tips', JSON.stringify(payload.care_tips));
-        if (payload.badge) fd.append('badge', payload.badge);
         if (payload.how_to_guide) fd.append('how_to_guide', payload.how_to_guide);
         if (payload.variants) fd.append('variants', JSON.stringify(payload.variants));
         if (promiseBannerKey) fd.append('promise_banner_image', promiseBannerKey);
@@ -902,13 +935,135 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-gray-700 mb-1 block">Product Tag / Badge</label>
-                  <input
-                    {...register('badge')}
-                    placeholder="e.g., Bestseller, New Arrival, Sale"
-                    className={inputClass}
-                  />
-                  <p className="text-[11px] text-gray-400 mt-1">A colorful label shown over the product image.</p>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">Product Tags</label>
+
+                  {/* Catalog tags (coloured pills shown under the product) */}
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTagDropdownOpen((v) => !v);
+                            setShowNewTagForm(false);
+                          }}
+                          className="flex items-center gap-2 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        >
+                          <span className="whitespace-nowrap text-gray-500">Choose saved tag…</span>
+                          <ChevronDown
+                            size={14}
+                            className={`text-gray-400 transition-transform ${tagDropdownOpen ? 'rotate-180' : ''}`}
+                          />
+                        </button>
+                        {tagDropdownOpen && (
+                          <div className="absolute z-20 mt-1 w-56 max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg p-1">
+                            {availableTags.length === 0 ? (
+                              <p className="px-2 py-2 text-xs text-gray-400">No saved tags yet — create one below.</p>
+                            ) : (
+                              availableTags.map((t) => (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  onClick={() => {
+                                    addTagByName(t.name);
+                                    setTagDropdownOpen(false);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-primary-light/10 text-left"
+                                >
+                                  <span
+                                    className="shrink-0 w-3.5 h-3.5 rounded-full border border-gray-200 block"
+                                    style={{ backgroundColor: t.color || '#E5E7EB' }}
+                                  />
+                                  <span className="text-xs text-gray-700">{t.name}</span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNewTagForm((v) => !v);
+                          setTagDropdownOpen(false);
+                        }}
+                        className="px-2.5 py-1.5 text-xs text-gray-600 font-medium hover:bg-gray-100 border border-gray-200 rounded transition"
+                      >
+                        {showNewTagForm ? 'Hide new tag' : '+ New tag'}
+                      </button>
+                    </div>
+
+                    {/* Create a new tag (saved to the table automatically) */}
+                    {showNewTagForm && (
+                      <div className="flex flex-wrap items-center gap-2 bg-primary-light/5 border border-primary/10 rounded-lg p-2.5">
+                        <input
+                          value={newTagName}
+                          onChange={(e) => setNewTagName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && createNewTag()}
+                          placeholder="Type a tag name"
+                          autoFocus
+                          className="w-40 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        />
+                        {/* Full-width swatch: the native picker anchors to this wide box, so it never goes off-screen */}
+                        <label
+                          className="relative flex-1 min-w-[160px] h-8 rounded-lg border border-gray-200 overflow-hidden cursor-pointer block"
+                          title="Tag colour (used everywhere in the catalog)"
+                        >
+                          <span
+                            className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white/90"
+                            style={{ backgroundColor: newTagColor, textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
+                          >
+                            colour
+                          </span>
+                          <input
+                            type="color"
+                            value={newTagColor}
+                            onChange={(e) => setNewTagColor(e.target.value)}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={createNewTag}
+                          disabled={upsertTag.isPending || !newTagName.trim()}
+                          className="px-2.5 py-1.5 text-xs bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
+                        >
+                          {upsertTag.isPending ? 'Saving…' : 'Add tag'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Added tags appear as buttons below, one after another */}
+                    <div className="flex flex-wrap gap-2">
+                      {tagFields.map((f, i) => {
+                        // Live colour preview from the global tag definition (slugified key)
+                        const previewColor =
+                          globalTagColors[((watch(`tags.${i}.value`) ?? '').toLowerCase().trim().replace(/\s+/g, '-'))] || '#E5E7EB';
+                        return (
+                          <span key={f.id} className="inline-flex items-center gap-1.5 border rounded-full bg-gray-50 px-2.5 py-1">
+                            <span
+                              className="shrink-0 w-3.5 h-3.5 rounded-full border border-gray-200 block"
+                              style={{ backgroundColor: previewColor }}
+                              title="Colour from the global tag"
+                            />
+                            <span className="text-xs text-gray-700">{f.value}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeTag(i)}
+                              className="text-red-400 hover:text-red-600"
+                              title="Remove tag"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                      {tagFields.length === 0 && (
+                        <p className="text-xs text-gray-400 italic py-2">No tags added yet.</p>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-400">Pick from saved tags, or create a new one with a colour — it saves to the tags table and appears under this product.</p>
+                  </div>
                 </div>
 
                 <div>
@@ -1694,7 +1849,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             )}
           </div>
 
-          {/* Section 7: SEO & Visibility */}
+          {/* Section 7: SEO & Search Tags */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <button
               type="button"
@@ -2021,11 +2176,6 @@ export default function ProductsAdminPage() {
                       )}
                       <div>
                         <span className="font-semibold text-gray-900 block">{p.name}</span>
-                        {p.badge && (
-                          <span className="inline-block mt-0.5 text-[9px] font-bold bg-[#E6F3EE] text-primary px-1.5 py-0.5 rounded">
-                            {p.badge}
-                          </span>
-                        )}
                       </div>
                     </div>
                   </td>
