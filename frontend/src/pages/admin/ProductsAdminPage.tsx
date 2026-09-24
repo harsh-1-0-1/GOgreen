@@ -602,6 +602,29 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         const { data: updatedProduct } = await api.put<Product>(`/products/${editProduct.id}`, updatePayload);
         toast.success('Product updated successfully!');
 
+        // Replace = delete the previous default image file (admin request):
+        // only when the key actually changed, the old key is a managed
+        // storage key (not a remote URL), and nothing else still references it
+        // (combo image_map, option images, product gallery).
+        const oldDefaultKey = rawProduct?.variants?.default_image;
+        if (
+          oldDefaultKey &&
+          oldDefaultKey !== defaultImageKey &&
+          !oldDefaultKey.startsWith('http')
+        ) {
+          const refs = new Set<string>();
+          const addRef = (x: unknown): void => {
+            if (typeof x === 'string') { if (x) refs.add(x); }
+            else if (Array.isArray(x)) x.forEach(addRef);
+            else if (x && typeof x === 'object') Object.values(x).forEach(addRef);
+          };
+          addRef(rawProduct?.variants);
+          addRef(rawProduct?.images);
+          if (!refs.has(oldDefaultKey)) {
+            void api.delete(`/products/image/${oldDefaultKey}`).catch(() => {});
+          }
+        }
+
         // Update the product detail cache immediately
         qc.setQueryData(['product', updatedProduct.slug], updatedProduct);
 

@@ -130,6 +130,21 @@ async def upload_product_image(
     return {"key": key, "url": resolve_image_url(key)}
 
 
+@router.delete("/image/{key:path}")
+async def delete_product_image(
+    key: str,
+    _admin=Depends(require_admin),
+):
+    """Delete a product image by its storage key.
+
+    Admin-only. Used to remove the previous default/variant image when it is
+    replaced with a newly uploaded one. Deleting a remote URL is a no-op; the
+    old image file (S3 key or local static path) is removed here.
+    """
+    await delete_image_file(key)
+    return {"ok": True, "key": key}
+
+
 
 @router.get("/admin/{product_id}/raw")
 async def get_product_raw(

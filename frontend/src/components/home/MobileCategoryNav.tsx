@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { useCategories } from '@/hooks/useCategories';
@@ -7,17 +8,39 @@ const MAX_CHIPS = 12;
 
 export default function MobileCategoryNav() {
   const { data: categories = [] } = useCategories();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [centered, setCentered] = useState(true);
 
   const chips = [
     ...categories,
     ...categories.flatMap((root) => sortByMenuOrder(root.children ?? [])),
   ].slice(0, MAX_CHIPS);
 
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const check = () => setCentered(el.scrollWidth <= el.clientWidth);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    window.addEventListener('resize', check);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', check);
+    };
+  }, [chips.length]);
+
   return (
     <section className="bg-white w-full border-b border-gray-100 py-3 sm:py-4">
-      <div className="overflow-x-auto scrollbar-hide px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+      <div
+        ref={scrollRef}
+        className="overflow-x-auto scrollbar-hide px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
         <style>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
-        <div className="flex gap-4 sm:gap-6 lg:gap-8">
+        <div
+          className={`flex gap-4 sm:gap-4 lg:gap-4 flex-nowrap w-max min-w-full ${centered ? 'mx-auto justify-center' : ''}`}
+        >
           {chips.map((cat) => (
             <Link
               key={cat.slug}

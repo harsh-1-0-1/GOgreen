@@ -44,6 +44,7 @@ export default function HeroBanner() {
 
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [slideRatio, setSlideRatio] = useState<number | null>(null);
   const touchStartRef = useRef(0);
 
   // Reset to the first slide when the banner set changes. React docs recommend
@@ -63,6 +64,16 @@ export default function HeroBanner() {
     () => setCurrent((c) => (c - 1 + slides.length) % slides.length),
     [slides.length],
   );
+
+  // Preserve the banner image's own aspect ratio so the hero is sized the same
+  // on web and mobile (the admin's crop obviously stays as intended). Uses the
+  // first loaded slide's ratio as the uniform height for the whole strip.
+  function handleImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+    const img = e.currentTarget;
+    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+      setSlideRatio((r) => r ?? img.naturalWidth / img.naturalHeight);
+    }
+  }
 
   useEffect(() => {
     if (paused || slides.length <= 1) return;
@@ -85,8 +96,18 @@ export default function HeroBanner() {
   if (isLoading) return <SlidesSkeleton />;
 
   return (
-    <section
-      className="relative w-full overflow-hidden group"
+<section
+        className="relative w-full overflow-hidden group"
+        style={
+          slideRatio
+            ? {
+                height: 'auto',
+                aspectRatio: String(slideRatio),
+                minHeight: 320,
+                maxHeight: 620,
+              }
+            : undefined
+        }
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={handleTouchStart}
@@ -96,6 +117,7 @@ export default function HeroBanner() {
         className="flex transition-transform duration-700 ease-in-out h-[340px] sm:h-[380px] md:h-[58vh] lg:h-[58vh]"
         style={{
           transform: `translateX(-${current * 100}%)`,
+          ...(slideRatio ? { height: '100%' } : {}),
         }}
       >
         {slides.map((slide, i) => {
@@ -107,6 +129,7 @@ export default function HeroBanner() {
                   alt=""
                   className="absolute inset-0 w-full h-full object-cover"
                   loading={i === 0 ? 'eager' : 'lazy'}
+                  onLoad={handleImageLoad}
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                   }}

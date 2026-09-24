@@ -659,7 +659,7 @@ export default function ProductDetailPage() {
   //
   // Priority chain:
   //   1. image_map[optId1__optId2__...] — exact combo match (set in admin combinations table)
-  //   2. Colour option's per-option images — fallback when only colour distinguishes the photo
+  //   2. Selected option's per-option images — the photo of any chosen option/colour
   //   3. default_image — catch-all variant fallback
   //   4. product.images — plain product gallery
   //
@@ -683,13 +683,17 @@ export default function ProductDetailPage() {
   const imageMap: Record<string, string[]> = product.variants?.image_map ?? {};
   const comboImages: string[] = (imageMap[comboKey] ?? []).filter(Boolean);
 
-  // Colour fallback: images on any selected option that belongs to a colour group
-  const colourFallbackImages: string[] = variantGroups
-    .filter((g) => /colou?r/i.test(g.label))
-    .flatMap((g) => {
-      const optId = selectedOptions[g.id];
-      return optId ? (optionById[optId]?.images ?? []).filter(Boolean) : [];
-    });
+  // Option-image fallback: images on any selected option, in variant-group order,
+  // deduped. Unlike the previous colour-only rule, this lets the photo of ANY
+  // selected option (size/type/style/… not just colour) drive the gallery.
+  const optionFallbackImages: string[] = [
+    ...new Set(
+      variantGroups.flatMap((g) => {
+        const optId = selectedOptions[g.id];
+        return optId ? (optionById[optId]?.images ?? []).filter(Boolean) : [];
+      }),
+    ),
+  ];
 
   const defaultVariantImage: string = product.variants?.default_image ?? '';
 
@@ -700,10 +704,10 @@ export default function ProductDetailPage() {
       ...comboImages,
       ...(product.images ?? []).filter((img) => !comboImages.includes(img)),
     ];
-  } else if (colourFallbackImages.length > 0) {
+  } else if (optionFallbackImages.length > 0) {
     galleryImages = [
-      ...colourFallbackImages,
-      ...(product.images ?? []).filter((img) => !colourFallbackImages.includes(img)),
+      ...optionFallbackImages,
+      ...(product.images ?? []).filter((img) => !optionFallbackImages.includes(img)),
     ];
   } else if (defaultVariantImage) {
     galleryImages = [defaultVariantImage, ...(product.images ?? [])];

@@ -24,30 +24,43 @@ def _slugify(text: str) -> str:
 
 
 def _assert_relative_keys(variants: dict | None) -> None:
-    """Guard against full URLs leaking into variant image fields.
-    
-    Variants should only contain relative keys like 'plantoga/products/42/abc.webp'.
-    If a full URL (http://... or https://...) is detected, it means the payload
-    wasn't built correctly or a bulk import bypassed the proper flow.
-    
-    Raises ValueError if any image field contains a full URL.
+    """Validate variant image fields.
+
+    Each value must be either a relative storage key (e.g.
+    'plantoga/products/42/abc.webp') or a full http(s) URL. Legacy/seed data
+    legitimately stores full URLs (unsplash images, external CDNs) and
+    resolve_image_url passes those through idempotently, so they must not block
+    an admin save. Anything else (protocol-free strings like 'javascript:...',
+    'data:...' or a bare filename) is rejected.
     """
     if not variants:
         return
-    
-    suspects = [variants.get("default_image")]
+
+    defendants = [variants.get("default_image")]
     image_map = variants.get("image_map", {}) or {}
     for val in image_map.values():
         if isinstance(val, list):
-            suspects.extend(val)
+            defendants.extend(val)
         elif isinstance(val, str):
-            suspects.append(val)
-            
-    suspects.extend([p.get("image_url") for p in variants.get("pot_types", [])])
-    
-    bad = [s for s in suspects if s and (s.startswith("http://") or s.startswith("https://"))]
+            defendants.append(val)
+
+    defendants.extend([p.get("image_url") for p in variants.get("pot_types", [])])
+
+    for option in variants.get("variant_groups", []):
+        for opt in option.get("options", []) if isinstance(option, dict) else []:
+            images = opt.get("images") if isinstance(opt, dict) else None
+            if isinstance(images, list):
+                defendants.extend(images)
+            elif isinstance(images, str):
+                defendants.append(images)
+
+    bad = [
+        s for s in defendants if s and not (
+            s.startswith("http://") or s.startswith("https://") or "/" in s
+        )
+    ]
     if bad:
-        raise ValueError(f"variants contains full URL(s), expected relative keys: {bad}")
+        raise ValueError(f"variants contains invalid image value(s), expected relative keys or http(s) URLs: {bad}")
 
 
 def _clean_and_validate_variants(variants: dict | None) -> dict | None:

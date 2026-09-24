@@ -160,7 +160,13 @@ def _crop_and_upload_sync(banner_id: int, old_key: str, x: int, y: int, width: i
     pil_format = format_map.get(original_ext, "PNG")
     
     try:
-        if is_prod and bucket:
+        if old_key.lower().startswith(("http://", "https://")):
+            # Remote URL (e.g. a seeded or externally-hosted banner): download it
+            # first so it can be cropped and re-uploaded to our storage.
+            resp = httpx.get(old_key, timeout=30, follow_redirects=True)
+            resp.raise_for_status()
+            image_bytes = resp.content
+        elif is_prod and bucket:
             # Production: Download from S3
             response = s3.get_object(Bucket=bucket, Key=old_key)
             image_bytes = response["Body"].read()

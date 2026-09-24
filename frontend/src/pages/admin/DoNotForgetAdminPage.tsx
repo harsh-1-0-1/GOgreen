@@ -97,7 +97,7 @@ function SortableDoNotForgetRow({
       <button
         {...attributes}
         {...listeners}
-        className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing"
+        className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none"
         title="Drag to reorder"
       >
         <GripVertical size={18} />

@@ -199,7 +199,7 @@ function SortableBannerRow({
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing touch-target text-gray-400 hover:text-gray-600 shrink-0"
+        className="cursor-grab active:cursor-grabbing touch-none touch-target text-gray-400 hover:text-gray-600 shrink-0"
         aria-label="Drag to reorder"
       >
         <GripVertical size={18} />
