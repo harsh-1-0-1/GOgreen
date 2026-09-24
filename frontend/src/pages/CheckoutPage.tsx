@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
+import type { FormEvent, ReactNode, RefObject } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { BadgePercent, Banknote, ChevronDown, ChevronUp, CreditCard, LockKeyhole, PackageCheck, ShieldCheck, Sprout } from 'lucide-react';
+import { BadgePercent, Banknote, ChevronDown, ChevronUp, CreditCard, LockKeyhole, PackageCheck, ShieldCheck, Sprout, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { clearDirectCheckoutSession, readDirectCheckoutSession } from '@/lib/directCheckout';
-import type { CartItemProduct, CheckoutResponse } from '@/types';
+import type { CartItemProduct, CheckoutResponse, CouponValidationResult } from '@/types';
 import { useCreateAddress } from '@/hooks/useAddresses';
+import { useValidateCoupon } from '@/hooks/useCoupons';
 import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 import { LOGO_PATH } from '@/lib/branding';
@@ -100,20 +101,76 @@ const emptyForm: AddressFormState = {
   saveInfo: false,
 };
 
+type CouponProps = {
+  couponCode: string;
+  onCouponCodeChange: (value: string) => void;
+  applying: boolean;
+  error: string;
+  applied: CouponValidationResult | null;
+  onApply: () => void;
+  onRemove: () => void;
+  inputRef: RefObject<HTMLInputElement | null>;
+};
+
+function CouponSection({ couponCode, onCouponCodeChange, applying, error, applied, onApply, onRemove, inputRef }: CouponProps) {
+  if (applied) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs">
+        <div className="flex items-center gap-2">
+          <BadgePercent size={15} className="text-primary" />
+          <span>
+            <span className="font-bold text-gray-900">{applied.code}</span>
+            <span className="ml-1 text-emerald-700">applied — you saved {money(applied.discount_amount)}</span>
+          </span>
+        </div>
+        <button type="button" onClick={onRemove} className="text-gray-400 transition hover:text-gray-700" aria-label="Remove discount">
+          <X size={15} />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className="flex gap-2">
+        <input
+          ref={inputRef}
+          value={couponCode}
+          onChange={(e) => onCouponCodeChange(e.target.value)}
+          placeholder="Discount code"
+          className={inputClass(Boolean(error))}
+        />
+        <button
+          type="button"
+          onClick={onApply}
+          disabled={applying || !couponCode.trim()}
+          className="h-11 rounded-lg border border-gray-200 bg-[#fbf8f1] px-4 text-xs sm:text-sm font-semibold text-gray-600 transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {applying ? '...' : 'Apply'}
+        </button>
+      </div>
+      {error && <p className="mt-1.5 text-[11px] text-red-500">{error}</p>}
+    </div>
+  );
+}
+
 function OrderSummary({
   items,
   subtotal,
   shipping,
+  discount,
   total,
   mobileOpen,
   setMobileOpen,
+  couponProps,
 }: {
   items: CheckoutItem[];
   subtotal: number;
   shipping: number;
+  discount: number;
   total: number;
   mobileOpen: boolean;
   setMobileOpen: (value: boolean) => void;
+  couponProps: CouponProps;
 }) {
   const body = (
     <div className="space-y-4">
@@ -133,14 +190,14 @@ function OrderSummary({
         ))}
       </div>
 
-      <div className="flex gap-2">
-        <input className={inputClass()} placeholder="Discount code or gift card" />
-        <button className="h-11 rounded-lg border border-gray-200 bg-[#fbf8f1] px-4 text-xs sm:text-sm font-semibold text-gray-600 transition hover:border-primary">Apply</button>
-      </div>
+      <CouponSection {...couponProps} />
 
       <div className="space-y-2 text-xs">
         <div className="flex justify-between"><span>Subtotal</span><span>{money(subtotal)}</span></div>
         <div className="flex justify-between"><span>Shipping</span><span className="text-right text-gray-500">{shipping === 0 ? 'Free' : money(shipping)}</span></div>
+        {discount > 0 && (
+          <div className="flex justify-between text-emerald-700"><span>Discount</span><span>−{money(discount)}</span></div>
+        )}
         <div className="flex justify-between border-t border-gray-200 pt-3 text-base font-bold text-gray-900"><span>Total</span><span><span className="mr-1.5 text-[10px] font-medium text-gray-500">INR</span>{money(total)}</span></div>
       </div>
     </div>
@@ -157,7 +214,7 @@ function OrderSummary({
   );
 }
 
-function DesktopSummary({ items, subtotal, shipping, total }: { items: CheckoutItem[]; subtotal: number; shipping: number; total: number }) {
+function DesktopSummary({ items, subtotal, shipping, discount, total, couponProps }: { items: CheckoutItem[]; subtotal: number; shipping: number; discount: number; total: number; couponProps: CouponProps }) {
   return (
     <aside className="sticky top-0 min-h-screen border-l border-gray-200 bg-[#fbfaf7] px-4 py-6 sm:px-6 lg:pl-10 lg:pr-4 lg:py-8">
       <h2 className="mb-4 text-base font-bold text-gray-900">Order Summary</h2>
@@ -175,13 +232,13 @@ function DesktopSummary({ items, subtotal, shipping, total }: { items: CheckoutI
             <p className="text-xs font-semibold text-gray-950">{money(item.line_total)}</p>
           </div>
         ))}
-        <div className="flex gap-2">
-          <input className={inputClass()} placeholder="Discount code or gift card" />
-          <button className="h-11 rounded-lg border border-gray-200 bg-[#fbf8f1] px-4 text-xs sm:text-sm font-semibold text-gray-600 transition hover:border-primary">Apply</button>
-        </div>
+        <CouponSection {...couponProps} />
         <div className="space-y-2 text-xs">
           <div className="flex justify-between"><span>Subtotal</span><span>{money(subtotal)}</span></div>
           <div className="flex justify-between"><span>Shipping</span><span className="text-right text-gray-500">{shipping === 0 ? 'Free' : money(shipping)}</span></div>
+          {discount > 0 && (
+            <div className="flex justify-between text-emerald-700"><span>Discount</span><span>−{money(discount)}</span></div>
+          )}
           <div className="flex justify-between border-t border-gray-200 pt-3 text-base font-bold text-gray-900"><span>Total</span><span><span className="mr-1.5 text-[10px] font-medium text-gray-500">INR</span>{money(total)}</span></div>
         </div>
       </div>
@@ -193,9 +250,11 @@ export default function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const couponInputRef = useRef<HTMLInputElement>(null);
   const { user, openAuthModal } = useAuthStore();
   const cart = useCartStore();
   const createAddress = useCreateAddress();
+  const validateCoupon = useValidateCoupon();
 
   const [form, setForm] = useState<AddressFormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -204,14 +263,62 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay');
   const [billingMode, setBillingMode] = useState<'same' | 'different'>('same');
   const [paying, setPaying] = useState(false);
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(null);
+  const [couponError, setCouponError] = useState('');
+  const [couponApplying, setCouponApplying] = useState(false);
 
   const isBuyNow = new URLSearchParams(location.search).get('mode') === 'buy-now';
   const directSession = useMemo(() => (isBuyNow ? readDirectCheckoutSession() : null), [isBuyNow]);
   const items: CheckoutItem[] = isBuyNow ? directSession?.items ?? [] : cart.items;
   const subtotal = items.reduce((sum, item) => sum + item.line_total, 0);
   const shipping = subtotal >= 499 ? 0 : 49;
-  const total = subtotal + shipping;
+  const discount = appliedCoupon?.discount_amount ?? 0;
+  const total = subtotal + shipping - discount;
   const addressReady = Boolean(form.address && form.city && form.state && form.pincode && form.phone);
+
+  async function applyCoupon() {
+    const code = couponCode.trim();
+    if (!code) return;
+    setCouponApplying(true);
+    setCouponError('');
+    try {
+      const result = await validateCoupon.mutateAsync({ code, subtotal });
+      setAppliedCoupon(result);
+      toast.success(result.message);
+      setCouponCode('');
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponError(getApiErrorDetail(err, 'Coupon is not valid'));
+    } finally {
+      setCouponApplying(false);
+    }
+  }
+
+  function removeCoupon() {
+    setAppliedCoupon(null);
+    setCouponError('');
+    setCouponCode('');
+  }
+
+  function focusCouponInput() {
+    couponInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    couponInputRef.current?.focus();
+  }
+
+  const couponProps: CouponProps = {
+    couponCode,
+    onCouponCodeChange: (value: string) => {
+      setCouponCode(value);
+      setCouponError('');
+    },
+    applying: couponApplying,
+    error: couponError,
+    applied: appliedCoupon,
+    onApply: applyCoupon,
+    onRemove: removeCoupon,
+    inputRef: couponInputRef,
+  };
 
   useEffect(() => {
     firstInputRef.current?.focus();
@@ -334,6 +441,7 @@ export default function CheckoutPage() {
             selected_options: item.selected_options,
           })),
           payment_method: paymentMethod,
+          coupon_code: appliedCoupon?.code ?? null,
         });
         if (paymentMethod === 'cod') completeCodOrder(data.order_id);
         else await openRazorpay(data, false);
@@ -344,6 +452,7 @@ export default function CheckoutPage() {
           address_id: savedAddress.id,
           cart_id: currentCartId,
           payment_method: paymentMethod,
+          coupon_code: appliedCoupon?.code ?? null,
         });
         if (paymentMethod === 'cod') completeCodOrder(data.order_id);
         else await openRazorpay(data, true);
@@ -367,7 +476,7 @@ export default function CheckoutPage() {
         </Link>
       </header>
 
-      <OrderSummary items={items} subtotal={subtotal} shipping={shipping} total={total} mobileOpen={summaryOpen} setMobileOpen={setSummaryOpen} />
+      <OrderSummary items={items} subtotal={subtotal} shipping={shipping} discount={discount} total={total} mobileOpen={summaryOpen} setMobileOpen={setSummaryOpen} couponProps={couponProps} />
 
       <main className="mx-auto grid max-w-5xl lg:grid-cols-[minmax(0,1fr)_400px]">
         <form onSubmit={handlePay} className="px-4 py-6 sm:px-6 lg:pl-8 lg:pr-12 lg:py-8">
@@ -499,11 +608,11 @@ export default function CheckoutPage() {
         </form>
 
         <div className="hidden lg:block">
-          <DesktopSummary items={items} subtotal={subtotal} shipping={shipping} total={total} />
+          <DesktopSummary items={items} subtotal={subtotal} shipping={shipping} discount={discount} total={total} couponProps={couponProps} />
         </div>
       </main>
 
-      <button type="button" className="fixed bottom-5 left-4 z-20 hidden rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold shadow-sm hover:border-primary transition lg:inline-flex">
+      <button type="button" onClick={focusCouponInput} className="fixed bottom-5 left-4 z-20 hidden rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold shadow-sm hover:border-primary transition lg:inline-flex">
         <BadgePercent size={16} className="mr-1.5" /> Add discount
       </button>
     </div>

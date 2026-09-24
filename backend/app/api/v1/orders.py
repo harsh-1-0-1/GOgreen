@@ -41,6 +41,7 @@ async def checkout(
             full_name=user.full_name,
             phone=user.phone or "",
             payment_method=body.payment_method,
+            coupon_code=body.coupon_code,
         )
     except StockMapMissingError:
         raise
@@ -69,6 +70,7 @@ async def direct_checkout(
             full_name=user.full_name,
             phone=user.phone or "",
             payment_method=body.payment_method,
+            coupon_code=body.coupon_code,
         )
     except StockMapMissingError:
         raise

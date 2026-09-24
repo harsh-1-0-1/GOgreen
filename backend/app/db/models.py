@@ -189,6 +189,28 @@ class PaymentStatus(str, enum.Enum):
     PARTIALLY_REFUNDED = "partially_refunded"
 
 
+class CouponType(str, enum.Enum):
+    PERCENT = "percent"
+    FIXED = "fixed"
+
+
+class Coupon(Base):
+    __tablename__ = "coupons"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    type: Mapped[CouponType] = mapped_column(
+        Enum(CouponType, values_callable=lambda e: [m.value for m in e]),
+        default=CouponType.PERCENT,
+        nullable=False,
+    )
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    min_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    times_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class Order(Base):
     __tablename__ = "orders"
 
@@ -203,6 +225,8 @@ class Order(Base):
         Enum(PaymentStatus), default=PaymentStatus.PENDING
     )
     partial_refund_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    coupon_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    coupon_discount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     address_id: Mapped[int] = mapped_column(Integer, ForeignKey("addresses.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 

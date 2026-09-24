@@ -40,6 +40,39 @@ def build_combo_key(variant_groups: List[dict], selected_option_ids: List[str]) 
     return "__".join(parts)
 
 
+def build_dense_price_map(
+    variant_groups: List[dict],
+    overrides: Optional[Dict[str, float]] = None,
+) -> Dict[str, float]:
+    """Backfill a dense per-combination price_map.
+
+    Walks the cartesian product of options (same iteration as the frontend buildComboRows,
+    ignoring the cap) and assigns each combo row price = sum of its options' prices, with
+    any supplied override applied per key. Used by the admin save path and tests.
+    """
+    keys = [""]
+    for group in variant_groups:
+        options = group.get("options", [])
+        keys = [
+            (f"{k}__{opt['id']}" if k else opt["id"])
+            for k in keys
+            for opt in options
+        ]
+        if not options:
+            return {}
+
+    price_by_option = {}
+    for group in variant_groups:
+        for opt in group.get("options", []):
+            price_by_option[opt["id"]] = float(opt.get("price", 0) or 0)
+
+    overrides = overrides or {}
+    return {
+        key: float(overrides.get(key, sum(price_by_option[opt_id] for opt_id in key.split("__"))))
+        for key in keys
+    }
+
+
 def build_dense_stock_map(variant_groups: List[dict]) -> Dict[str, int]:
     """Backfill a dense per-combination stock_map from per-option stocks.
 
@@ -193,6 +226,13 @@ def calculate_variant_price(
             raise ValueError("Selected configuration is out of stock")
         if quantity > available_stock:
             raise ValueError(f"Only {available_stock} in stock for the selected configuration")
+
+    # Per-combination price: variants.price_map[combo_key] wins when present (admin sets
+    # it per row in the combinations table). Otherwise fall back to the summed per-option
+    # prices so products that haven't been migrated keep their existing behavior.
+    price_map = variants.get("price_map")
+    explicit_price = price_map.get(combo_key) if isinstance(price_map, dict) else None
+    combo_price = float(explicit_price) if explicit_price is not None else total_price
     
     # Determine image to display
     resolved_image = (
@@ -202,7 +242,7 @@ def calculate_variant_price(
     )
     
     return {
-        "unit_price": round(total_price, 2),
+        "unit_price": round(combo_price, 2),
         "selected_options": selected_options,
         "resolved_image_url": resolved_image,  # Will be resolved to full URL by serializer
         "available_stock": available_stock,

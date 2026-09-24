@@ -133,6 +133,11 @@ function OrderDrawer({ order, onClose }: { order: Order; onClose: () => void }) 
             <div className="bg-white p-3 rounded-xl border border-gray-100">
               <span className="text-gray-400 block text-[10px] font-bold uppercase">Total Billable Amount</span>
               <p className="font-bold text-base text-primary mt-0.5">₹{order.total_amount}</p>
+              {order.coupon_code && (
+                <span className="block text-[10px] font-semibold text-emerald-600 mt-1">
+                  Coupon {order.coupon_code} · −₹{order.coupon_discount.toFixed(0)}
+                </span>
+              )}
             </div>
             <div className="bg-white p-3 rounded-xl border border-gray-100">
               <span className="text-gray-400 block text-[10px] font-bold uppercase">Order Placed Date</span>

@@ -184,10 +184,6 @@ export default function CartPage() {
                 <span className="text-primary">₹{grandTotal.toFixed(2)}</span>
               </div>
             </div>
-            <div className="flex gap-2">
-              <input type="text" placeholder="Promo code" className="flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-light" />
-              <button className="px-4 py-2 text-sm bg-gray-100 rounded-lg font-medium hover:bg-gray-200 transition">Apply</button>
-            </div>
             <Link to="/checkout" className="block w-full text-center py-3.5 bg-primary text-white rounded-xl font-semibold hover:bg-primary/90 transition">
               Proceed to Checkout <ArrowRight size={18} className="inline ml-1" />
             </Link>

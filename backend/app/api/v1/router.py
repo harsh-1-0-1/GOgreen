@@ -9,6 +9,7 @@ from app.api.v1 import (
     cart,
     categories,
     corporate_inquiries,
+    coupons,
     damage_claims,
     do_not_forget,
     health,
@@ -34,6 +35,7 @@ api_router.include_router(orders.router)
 api_router.include_router(payments.router)
 api_router.include_router(damage_claims.router)
 api_router.include_router(corporate_inquiries.router)
+api_router.include_router(coupons.router)
 api_router.include_router(admin.router)
 api_router.include_router(blog.router)
 api_router.include_router(banners.router)

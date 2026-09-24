@@ -19,6 +19,7 @@ from app.db.models import (
     Refund,
 )
 from app.schemas.order import DirectCheckoutItem
+from app.services import coupon_service
 from app.services.cart_service import combination_key, resolve_variant_details
 from app.utils.redis import cache_delete, cache_delete_pattern
 from app.utils.variant_pricing import StockMapMissingError, build_combo_key
@@ -196,6 +197,7 @@ async def restore_order_stock(db: AsyncSession, order: Order) -> list[str]:
 async def checkout(
     db: AsyncSession, user_id: int, address_id: int, cart_id: int,
     email: str, full_name: str, phone: str, payment_method: str = "razorpay",
+    coupon_code: str | None = None,
 ) -> tuple[Order, dict | None, list[str]]:
     """
     1. Validate cart + stock
@@ -236,6 +238,14 @@ async def checkout(
 
     total_amount = round(total_amount, 2)
 
+    applied_coupon_code = None
+    coupon_discount = 0.0
+    if coupon_code and coupon_code.strip():
+        applied_coupon_code, coupon_discount = await coupon_service.apply_coupon_to_order(
+            db, coupon_code, total_amount,
+        )
+        total_amount = round(max(0.0, total_amount - coupon_discount), 2)
+
     order = Order(
         user_id=user_id,
         status=OrderStatus.PENDING,
@@ -243,6 +253,8 @@ async def checkout(
         payment_method=payment_method,
         payment_status=PaymentStatus.PENDING,
         address_id=address_id,
+        coupon_code=applied_coupon_code,
+        coupon_discount=coupon_discount,
     )
     db.add(order)
     await db.flush()
@@ -274,6 +286,7 @@ async def checkout(
 async def direct_checkout(
     db: AsyncSession, user_id: int, address_id: int, items: list[DirectCheckoutItem],
     email: str, full_name: str, phone: str, payment_method: str = "razorpay",
+    coupon_code: str | None = None,
 ) -> tuple[Order, dict | None, list[str]]:
     address = await db.execute(
         select(Address).where(Address.id == address_id, Address.user_id == user_id)
@@ -298,13 +311,24 @@ async def direct_checkout(
         total_amount += round(item_data["unit_price"] * item_data["quantity"], 2)
         order_items_data.append(item_data)
 
+    applied_coupon_code = None
+    coupon_discount = 0.0
+    if coupon_code and coupon_code.strip():
+        subtotal = round(total_amount, 2)
+        applied_coupon_code, coupon_discount = await coupon_service.apply_coupon_to_order(
+            db, coupon_code, subtotal,
+        )
+        total_amount = round(max(0.0, subtotal - coupon_discount), 2)
+
     order = Order(
         user_id=user_id,
         status=OrderStatus.PENDING,
-        total_amount=round(total_amount, 2),
+        total_amount=total_amount,
         payment_method=payment_method,
         payment_status=PaymentStatus.PENDING,
         address_id=address_id,
+        coupon_code=applied_coupon_code,
+        coupon_discount=coupon_discount,
     )
     db.add(order)
     await db.flush()

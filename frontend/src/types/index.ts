@@ -89,6 +89,8 @@ export interface ProductVariants {
   default_image?: string;
   /** Per-combination stock, keyed by combo_key (option IDs joined by "__"). Dense: every combo has a row, 0 = out of stock. */
   stock_map?: Record<string, number>;
+  /** Per-combination price, keyed by combo_key. When present, wins over the summed per-option price. */
+  price_map?: Record<string, number>;
   /** Per-combination images, keyed by combo_key (admin combinations table). */
   image_map?: Record<string, string[]>;
 }
@@ -256,6 +258,8 @@ export interface Order {
   payment_status: string;
   address_id: number;
   created_at: string;
+  coupon_code: string | null;
+  coupon_discount: number;
   user: OrderUser | null;
   address: Address | null;
   items: OrderItem[];
@@ -472,4 +476,25 @@ export interface MenuItem {
   is_active: boolean;
   created_at: string;
   updated_at: string | null;
+}
+
+export interface Coupon {
+  id: number;
+  code: string;
+  type: 'percent' | 'fixed';
+  value: number;
+  min_amount: number;
+  is_active: boolean;
+  times_used: number;
+  created_at: string;
+}
+
+export interface CouponValidationResult {
+  code: string;
+  type: 'percent' | 'fixed';
+  value: number;
+  min_amount: number;
+  discount_amount: number;
+  valid: boolean;
+  message: string;
 }

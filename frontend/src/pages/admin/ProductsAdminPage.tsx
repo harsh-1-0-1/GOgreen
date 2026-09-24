@@ -208,6 +208,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const [comboImageUrls, setComboImageUrls] = useState<Record<string, string[]>>({});
   // Per-combination stock: keyed by combo_key (same space as comboImageKeys). Dense on save.
   const [comboStock, setComboStock] = useState<Record<string, number>>({});
+  // Per-combination price: keyed by combo_key (same space as comboImageKeys). When a row
+  // has a value it overrides the per-option sum, letting each combination carry its own
+  // price (e.g. Small/Krish ₹300 vs Medium/Krish ₹350). Dense on save.
+  const [comboPrice, setComboPrice] = useState<Record<string, number>>({});
   const [uploadingComboKey, setUploadingComboKey] = useState<string | null>(null);
   // Plantoga Promise banner — per-product image replacing the four hardcoded cards
   // promiseBannerKey: relative key stored in DB. promiseBannerUrl: resolved URL for preview only.
@@ -349,6 +353,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setComboImageKeys({});
     setComboImageUrls({});
     setComboStock({});
+    setComboPrice({});
     setVariantError(null);
     // Promise banner URL comes pre-resolved from the public API response.
     // The raw key is seeded separately from rawProduct in the useEffect below.
@@ -400,6 +405,23 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         });
         setComboStock(seedStock);
       }
+
+      // Seed per-combination price from raw price_map; else default each combo row to its
+      // per-option sum (the current computed price) as an editable starting point.
+      const seedPrice: Record<string, number> = {};
+      if (v.price_map && typeof v.price_map === 'object') {
+        Object.entries(v.price_map).forEach(([key, val]) => {
+          const n = Number(val);
+          seedPrice[key] = Number.isFinite(n) && n >= 0 ? n : 0;
+        });
+      } else {
+        // eslint-disable-next-line no-use-before-define -- function declarations hoist; helpers defined below
+        for (const row of buildComboRows(variantGroups)) {
+          // eslint-disable-next-line no-use-before-define -- function declarations hoist; helpers defined below
+          seedPrice[row.key] = comboSumForRow(row.key, variantGroups);
+        }
+      }
+      setComboPrice(seedPrice);
 
       // Seed per-option image keys from raw variant_groups
       if (Array.isArray(v.variant_groups)) {
@@ -511,6 +533,33 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     return map;
   }
 
+  // Sum of the option prices a combo row references (the default/fallback combo price).
+  function comboSumForRow(key: string, groups: VariantGroupDraft[]): number {
+    const priceById: Record<string, number> = {};
+    for (const g of groups) {
+      for (const o of g.options) priceById[o.id] = Number(o.price || 0);
+    }
+    return key.split('__').reduce((sum, id) => sum + (priceById[id] ?? 0), 0);
+  }
+
+  // Full dense price_map (no COMBO_CAP) for the save payload. Every cartesian combo gets
+  // a row. Editable rows come from comboPrice; overflow rows fall back to existing
+  // price_map, then to the summed per-option price.
+  function buildDensePriceMap(
+    groups: VariantGroupDraft[],
+    comboPriceMap: Record<string, number>,
+    existing: Record<string, number> | null | undefined,
+  ): Record<string, number> {
+    const rows = buildComboRows(groups);
+    const map: Record<string, number> = {};
+    for (const row of rows) {
+      const price = comboPriceMap[row.key] ?? existing?.[row.key] ?? comboSumForRow(row.key, groups);
+      const n = Number(price);
+      map[row.key] = Number.isFinite(n) && n >= 0 ? n : 0;
+    }
+    return map;
+  }
+
   async function onSubmit(data: ProductFormData) {
     setSubmitting(true);
     try {
@@ -551,6 +600,13 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           ? buildDenseStockMap(cleanGroups, comboStock, existingStockMap)
           : null;
 
+        // Build dense price_map over every cartesian combo (comboPrice state, falling
+        // back to the existing price_map, then to the summed per-option price).
+        const existingPriceMap = rawProduct?.variants?.price_map;
+        const priceMap = cleanGroups.length
+          ? buildDensePriceMap(cleanGroups, comboPrice, existingPriceMap)
+          : null;
+
         variants = {
           variant_groups: cleanGroups.map(group => ({
             id: group.id,
@@ -569,6 +625,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           })),
           ...(Object.keys(imageMap).length ? { image_map: imageMap } : {}),
           ...(stockMap ? { stock_map: stockMap } : {}),
+          ...(priceMap ? { price_map: priceMap } : {}),
           default_image: defaultImageKey || undefined,
         };
       }
@@ -1697,8 +1754,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                         <div>
                           <span className="text-xs font-semibold text-gray-700 block">Variant Combinations &amp; Images</span>
                           <p className="text-[10px] text-gray-400 mt-0.5">
-                            Upload a photo for each combination — shown in the gallery when that exact combo is selected.
-                            Combinations without a photo fall back to the colour option's image, then the default image.
+                            Set the price and stock for each combination. The price field overrides the summed
+                            option prices (each combination can have its own price).
+                            Upload a photo per combination — shown in the gallery when that exact combo is
+                            selected. Combinations without a photo fall back to the colour option's image,
+                            then the default image.
                           </p>
                         </div>
                         {hasAnyComboImage && (
@@ -1731,6 +1791,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                             <tr>
                               <th className="p-3 font-medium">Combination</th>
                               <th className="p-3 font-medium">
+                                Price (₹)
+                                <span className="font-normal text-gray-400 ml-1">(overrides per-option sum)</span>
+                              </th>
+                              <th className="p-3 font-medium">
                                 Stock
                                 <span className="font-normal text-gray-400 ml-1">(per combination)</span>
                               </th>
@@ -1744,10 +1808,27 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                             {visibleRows.map((row) => {
                               const imgs = comboImageUrls[row.key] || [];
                               const keys = comboImageKeys[row.key] || [];
+                              const rowPrice = comboPrice[row.key] ?? comboSumForRow(row.key, variantGroups);
                               return (
                                 <tr key={row.key} className="border-b last:border-0 bg-white">
                                   <td className="p-3 font-semibold text-gray-800 whitespace-nowrap align-top pt-4">
                                     {row.label}
+                                  </td>
+                                  <td className="p-3 align-top pt-3.5">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step={1}
+                                      value={rowPrice}
+                                      onChange={(e) => {
+                                        const n = Number(e.target.value);
+                                        setComboPrice(prev => ({
+                                          ...prev,
+                                          [row.key]: Number.isFinite(n) && n >= 0 ? n : 0,
+                                        }));
+                                      }}
+                                      className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-800 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                                    />
                                   </td>
                                   <td className="p-3 align-top pt-3.5">
                                     <input

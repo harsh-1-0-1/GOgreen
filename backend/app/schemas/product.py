@@ -68,6 +68,11 @@ class ProductVariantsNew(BaseModel):
     # truth for availability/reservation on variant_groups products; options[].stock is
     # retained only as the migration source. See VARIANT_COMBO_STOCK_PLAN.md.
     stock_map: Optional[dict] = None
+    # Per-combination price map (dense): keyed by the same combo key. When a row exists,
+    # it wins over the per-option sum (which the admin table seeds as the editable
+    # default), allowing each combination to carry its own price (e.g. Small/Krish ₹300
+    # vs Medium/Krish ₹350). Absent rows fall back to summing option prices.
+    price_map: Optional[dict] = None
 
     model_config = {"extra": "allow"}
 

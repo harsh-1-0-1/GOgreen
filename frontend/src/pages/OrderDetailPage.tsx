@@ -46,6 +46,11 @@ export default function OrderDetailPage() {
         </div>
         <div className="sm:text-right">
           <p className="text-xl sm:text-2xl font-bold text-primary">₹{order.total_amount.toFixed(0)}</p>
+          {order.coupon_code && order.coupon_discount > 0 && (
+            <p className="text-[10px] sm:text-xs text-emerald-600 font-medium mt-0.5">
+              Coupon {order.coupon_code} · −₹{order.coupon_discount.toFixed(0)}
+            </p>
+          )}
           <p className={`text-xs sm:text-sm font-medium capitalize ${
             order.payment_status === 'paid' ? 'text-green-600' :
             order.payment_status === 'failed' ? 'text-red-600' : 'text-yellow-600'

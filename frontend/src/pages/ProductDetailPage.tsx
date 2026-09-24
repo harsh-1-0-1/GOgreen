@@ -609,17 +609,38 @@ export default function ProductDetailPage() {
     }
   }
 
-  // Price: sum of selected option prices (absolute, not deltas over product.price).
-  // Falls back to product.price only when no group has a selection yet — which can
-  // happen briefly on first render before the auto-select effect fires, or if all
-  // groups are optional and nothing has been picked.
-  // NOTE: do NOT use `> 0` as the guard — a legitimately free option (price=0) would
-  // incorrectly fall through to product.price.
+  // Combo key = selected optionIds joined by '__' in variant_group order.
+  // Only generated when ALL groups have a selection — prevents partial keys (e.g. "opt1")
+  // from incorrectly matching image_map/price_map entries meant for full combinations ("opt1__opt2").
+  const allGroupsHaveSelection = variantGroups.every((g) => selectedOptions[g.id]);
+  const comboKey = allGroupsHaveSelection
+    ? variantGroups
+        .map((g) => selectedOptions[g.id])
+        .filter(Boolean)
+        .join('__')
+    : '';
+
+  // Price: preference order is
+  //   1. variants.price_map[comboKey] — per-combination price set in the admin
+  //      "Variant Combinations & Images" table (e.g. Small/Krish ₹300 ≠ Medium/Krish ₹350).
+  //   2. Sum of the selected option prices (fallback for products without a price_map).
+  //   3. product.price — only when no group has a selection yet (briefly on first render
+  //      before the auto-select fires, or if all groups are optional and nothing was picked).
+  // NOTE: do NOT use `> 0` as the guard — a legitimately free option/combination (price=0)
+  // would incorrectly fall through to product.price.
   const hasAnySelection = Object.keys(selectedOptions).length > 0;
   const selectedOptionsPrice = Object.values(selectedOptions).reduce((sum, optId) => {
     return sum + Number(optionById[optId]?.price ?? 0);
   }, 0);
-  const displayPrice = hasGroups && hasAnySelection ? selectedOptionsPrice : product.price;
+  const priceMap: Record<string, number> | null = hasGroups
+    ? product.variants?.price_map ?? null
+    : null;
+  const comboPrice = comboKey && priceMap ? Number(priceMap[comboKey]) : null;
+  const displayPrice = hasGroups && hasAnySelection
+    ? comboPrice !== null && Number.isFinite(comboPrice)
+      ? comboPrice
+      : selectedOptionsPrice
+    : product.price;
   const basePrice = Number(product.price ?? 0);
   const baseOriginalPrice = Number(product.original_price ?? 0);
   const scaledVariantOriginalPrice = hasGroups && basePrice > 0 && baseOriginalPrice > basePrice
@@ -673,17 +694,6 @@ export default function ProductDetailPage() {
   //   3. default_image — catch-all variant fallback
   //   4. product.images — plain product gallery
   //
-  // Combo key = selected optionIds joined by '__' in variant_group order.
-  // Only generated when ALL groups have a selection — prevents partial keys (e.g. "opt1")
-  // from incorrectly matching image_map entries meant for full combinations ("opt1__opt2").
-  const allGroupsHaveSelection = variantGroups.every((g) => selectedOptions[g.id]);
-  const comboKey = allGroupsHaveSelection
-    ? variantGroups
-        .map((g) => selectedOptions[g.id])
-        .filter(Boolean)
-        .join('__')
-    : '';
-
   // Stock: per-combination — the matched combo row's stock (no per-option min).
   // Old-format products fall back to the product-level stock_qty.
   const effectiveStock = hasGroups

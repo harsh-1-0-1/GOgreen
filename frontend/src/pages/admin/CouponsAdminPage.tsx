@@ -1,68 +1,64 @@
 import { useState } from 'react';
 import { Tag, Percent, IndianRupee, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-interface Coupon {
-  id: number;
-  code: string;
-  type: 'percent' | 'fixed';
-  value: number;
-  minAmount: number;
-  isActive: boolean;
-  timesUsed: number;
-}
-
-const INITIAL_COUPONS: Coupon[] = [
-  { id: 1, code: 'PLANTOGA15', type: 'percent', value: 15, minAmount: 999, isActive: true, timesUsed: 142 },
-  { id: 2, code: 'WELCOME200', type: 'fixed', value: 200, minAmount: 1499, isActive: true, timesUsed: 89 },
-  { id: 3, code: 'MONSOON50', type: 'percent', value: 50, minAmount: 2999, isActive: false, timesUsed: 312 },
-  { id: 4, code: 'PLANTLOVE', type: 'fixed', value: 100, minAmount: 500, isActive: true, timesUsed: 23 },
-];
+import { useCoupons, useCreateCoupon, useDeleteCoupon, useUpdateCoupon } from '@/hooks/useCoupons';
+import Spinner from '@/components/ui/Spinner';
+import { getApiErrorDetail } from '@/lib/apiError';
 
 export default function CouponsAdminPage() {
-  const [coupons, setCoupons] = useState<Coupon[]>(INITIAL_COUPONS);
+  const { data: coupons = [], isLoading } = useCoupons();
+  const createCoupon = useCreateCoupon();
+  const updateCoupon = useUpdateCoupon();
+  const deleteCoupon = useDeleteCoupon();
+
   const [code, setCode] = useState('');
   const [type, setType] = useState<'percent' | 'fixed'>('percent');
   const [value, setValue] = useState<string>('');
   const [minAmount, setMinAmount] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim() || !value || !minAmount) {
       toast.error('Please fill in all fields');
       return;
     }
-
-    const newCoupon: Coupon = {
-      id: Date.now(),
-      code: code.trim().toUpperCase(),
-      type,
-      value: Number(value),
-      minAmount: Number(minAmount),
-      isActive: true,
-      timesUsed: 0,
-    };
-
-    setCoupons([newCoupon, ...coupons]);
-    toast.success(`Coupon code "${newCoupon.code}" created successfully!`);
-    
-    // reset form
-    setCode('');
-    setValue('');
-    setMinAmount('');
+    setSubmitting(true);
+    try {
+      const created = await createCoupon.mutateAsync({
+        code: code.trim(),
+        type,
+        value: Number(value),
+        min_amount: Number(minAmount),
+        is_active: true,
+      });
+      toast.success(`Coupon code "${created.code}" created successfully!`);
+      setCode('');
+      setValue('');
+      setMinAmount('');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Could not create coupon'));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleToggle = (id: number) => {
-    setCoupons(
-      coupons.map((c) => (c.id === id ? { ...c, isActive: !c.isActive } : c))
-    );
-    toast.success('Coupon visibility toggled');
+  const handleToggle = async (coupon: { id: number; code: string; is_active: boolean }) => {
+    try {
+      await updateCoupon.mutateAsync({ id: coupon.id, body: { is_active: !coupon.is_active } });
+      toast.success(`Coupon "${coupon.code}" ${coupon.is_active ? 'paused' : 'activated'}`);
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Could not update coupon'));
+    }
   };
 
-  const handleDelete = (id: number, codeStr: string) => {
-    if (confirm(`Are you sure you want to delete coupon code "${codeStr}"?`)) {
-      setCoupons(coupons.filter((c) => c.id !== id));
+  const handleDelete = async (id: number, codeStr: string) => {
+    if (!confirm(`Are you sure you want to delete coupon code "${codeStr}"?`)) return;
+    try {
+      await deleteCoupon.mutateAsync(id);
       toast.success('Coupon code deleted');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Could not delete coupon'));
     }
   };
 
@@ -70,7 +66,7 @@ export default function CouponsAdminPage() {
 
   return (
     <div className="space-y-5">
-      
+
       {/* Title */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Coupons & Discounts</h1>
@@ -100,7 +96,7 @@ export default function CouponsAdminPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        
+
         {/* Coupon Form */}
         <div className="md:col-span-1 bg-white p-4 rounded-xl border shadow-sm space-y-4 h-fit">
           <h2 className="text-sm font-bold text-gray-800 pb-2 border-b">Create Promo Code</h2>
@@ -148,6 +144,8 @@ export default function CouponsAdminPage() {
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
                   required
+                  min={1}
+                  step="any"
                   className={inputClass}
                 />
               </div>
@@ -159,6 +157,8 @@ export default function CouponsAdminPage() {
                   value={minAmount}
                   onChange={(e) => setMinAmount(e.target.value)}
                   required
+                  min={0}
+                  step="any"
                   className={inputClass}
                 />
               </div>
@@ -175,7 +175,8 @@ export default function CouponsAdminPage() {
 
             <button
               type="submit"
-              className="w-full py-2.5 bg-primary text-white text-xs rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-primary/95 transition"
+              disabled={submitting || createCoupon.isPending}
+              className="w-full py-2.5 bg-primary text-white text-xs rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-primary/95 transition disabled:opacity-60"
             >
               <Plus size={14} /> Add Coupon
             </button>
@@ -185,55 +186,63 @@ export default function CouponsAdminPage() {
         {/* Coupon Registry Table */}
         <div className="md:col-span-2 bg-white p-4 rounded-xl border shadow-sm">
           <h2 className="text-sm font-bold text-gray-800 pb-2 border-b mb-3">Coupons Ledger</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead>
-                <tr className="border-b text-gray-500 bg-gray-50">
-                  <th className="p-3 font-semibold">Promo Code</th>
-                  <th className="p-3 font-semibold">Deduction Value</th>
-                  <th className="p-3 font-semibold">Min Basket Limit</th>
-                  <th className="p-3 font-semibold text-center">Times Claimed</th>
-                  <th className="p-3 font-semibold text-center">Active Status</th>
-                  <th className="p-3 font-semibold text-right w-16">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {coupons.map((c) => (
-                  <tr key={c.id} className="border-b last:border-0 hover:bg-gray-50/50">
-                    <td className="p-3 font-bold text-gray-900 flex items-center gap-1.5">
-                      <Tag size={13} className="text-primary-light" />
-                      {c.code}
-                    </td>
-                    <td className="p-3 font-medium">
-                      {c.type === 'percent' ? `${c.value}% Off` : `₹${c.value} Flat`}
-                    </td>
-                    <td className="p-3 text-gray-600">₹{c.minAmount}</td>
-                    <td className="p-3 text-center font-bold text-primary">{c.timesUsed} claims</td>
-                    <td className="p-3 text-center">
-                      <button
-                        onClick={() => handleToggle(c.id)}
-                        className={`text-[9px] font-bold px-2 py-0.5 rounded border ${
-                          c.isActive
-                            ? 'bg-green-50 text-green-700 border-green-200'
-                            : 'bg-gray-100 text-gray-500 border-gray-200'
-                        }`}
-                      >
-                        {c.isActive ? 'Active' : 'Paused'}
-                      </button>
-                    </td>
-                    <td className="p-3 text-right">
-                      <button
-                        onClick={() => handleDelete(c.id, c.code)}
-                        className="p-1.5 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
+          {isLoading ? (
+            <Spinner className="py-10" />
+          ) : coupons.length === 0 ? (
+            <div className="py-10 text-center text-xs text-gray-400">No coupons yet. Create your first promo code to get started.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="border-b text-gray-500 bg-gray-50">
+                    <th className="p-3 font-semibold">Promo Code</th>
+                    <th className="p-3 font-semibold">Deduction Value</th>
+                    <th className="p-3 font-semibold">Min Basket Limit</th>
+                    <th className="p-3 font-semibold text-center">Times Claimed</th>
+                    <th className="p-3 font-semibold text-center">Active Status</th>
+                    <th className="p-3 font-semibold text-right w-16">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {coupons.map((c) => (
+                    <tr key={c.id} className="border-b last:border-0 hover:bg-gray-50/50">
+                      <td className="p-3 font-bold text-gray-900 flex items-center gap-1.5">
+                        <Tag size={13} className="text-primary-light" />
+                        {c.code}
+                      </td>
+                      <td className="p-3 font-medium">
+                        {c.type === 'percent' ? `${c.value}% Off` : `₹${c.value} Flat`}
+                      </td>
+                      <td className="p-3 text-gray-600">₹{c.min_amount}</td>
+                      <td className="p-3 text-center font-bold text-primary">{c.times_used} claims</td>
+                      <td className="p-3 text-center">
+                        <button
+                          onClick={() => handleToggle(c)}
+                          disabled={updateCoupon.isPending}
+                          className={`text-[9px] font-bold px-2 py-0.5 rounded border disabled:opacity-60 ${
+                            c.is_active
+                              ? 'bg-green-50 text-green-700 border-green-200'
+                              : 'bg-gray-100 text-gray-500 border-gray-200'
+                          }`}
+                        >
+                          {c.is_active ? 'Active' : 'Paused'}
+                        </button>
+                      </td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={() => handleDelete(c.id, c.code)}
+                          disabled={deleteCoupon.isPending}
+                          className="p-1.5 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition disabled:opacity-60"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
       </div>

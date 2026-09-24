@@ -354,6 +354,7 @@ async def test_duplicate_carts_are_consolidated(client: AsyncClient):
 
 from app.utils.variant_pricing import (
     build_combo_key,
+    build_dense_price_map,
     build_dense_stock_map,
     calculate_variant_price,
     STOCK_MAP_MISSING,
@@ -427,6 +428,101 @@ def test_variant_groups_price_second_combo():
     p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
     d = calculate_variant_price(p, ["opt_red", "opt_type1", "opt_8inch"])
     assert d["unit_price"] == 2700.0, f"Expected 2700.0, got {d['unit_price']}"
+
+
+def test_variant_groups_price_map_overrides_sum_per_combo():
+    """A price_map row wins over the summed per-option price, per combination.
+
+    Mirrors the user's requirement: Small/Gro=200, Small/Krish=300, Small/Plantoga=400,
+    Medium/Gro=300, Medium/Krish=350, Medium/Plantoga=450 — a table that a single
+    Small/Medium delta cannot express because the pot surcharge differs per size.
+    """
+    groups = [
+        {
+            "id": "vg_size",
+            "label": "size",
+            "required": True,
+            "options": [
+                {"id": "opt_small",  "name": "small",  "price": 200.0, "stock": 10},
+                {"id": "opt_medium", "name": "medium", "price": 300.0, "stock": 10},
+            ],
+        },
+        {
+            "id": "vg_pot",
+            "label": "pot",
+            "required": True,
+            "options": [
+                {"id": "opt_gro",      "name": "gro",      "price": 0.0,   "stock": 10},
+                {"id": "opt_krish",    "name": "krish",    "price": 100.0, "stock": 10},
+                {"id": "opt_plantoga", "name": "plantoga", "price": 200.0, "stock": 10},
+            ],
+        },
+    ]
+    price_map = build_dense_price_map(groups)
+    # Default sums would give Medium/Krish = 400 and Medium/Plantoga = 500; override them.
+    price_map["opt_medium__opt_krish"] = 350.0
+    price_map["opt_medium__opt_plantoga"] = 450.0
+    variants = {
+        "variant_groups": groups,
+        "default_image": None,
+        "image_map": None,
+        "stock_map": build_dense_stock_map(groups),
+        "price_map": price_map,
+    }
+    p = _MockProduct(price=450.0, stock_qty=50, variants=variants)
+
+    assert calculate_variant_price(p, ["opt_small", "opt_gro"])["unit_price"] == 200.0
+    assert calculate_variant_price(p, ["opt_small", "opt_krish"])["unit_price"] == 300.0
+    assert calculate_variant_price(p, ["opt_small", "opt_plantoga"])["unit_price"] == 400.0
+    assert calculate_variant_price(p, ["opt_medium", "opt_gro"])["unit_price"] == 300.0
+    assert calculate_variant_price(p, ["opt_medium", "opt_krish"])["unit_price"] == 350.0
+    assert calculate_variant_price(p, ["opt_medium", "opt_plantoga"])["unit_price"] == 450.0
+
+
+def test_variant_groups_price_map_absent_row_falls_back_to_sum():
+    """Sparse/missing price_map rows fall back to the summed per-option price."""
+    price_map = {"opt_red__opt_krish__opt_4inch": 777.0}
+    variants = {
+        "variant_groups": [dict(g, options=list(g["options"])) for g in LEAF_GROUPS],
+        "default_image": None,
+        "image_map": None,
+        "stock_map": build_dense_stock_map(LEAF_GROUPS),
+        "price_map": price_map,
+    }
+    p = _MockProduct(price=450.0, stock_qty=50, variants=variants)
+    # Present row → override wins (red=100 + krish=100 + 4inch=1000 normally = 1200).
+    assert calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"])["unit_price"] == 777.0
+    # Absent row → original sum.
+    assert calculate_variant_price(p, ["opt_red", "opt_krish", "opt_6inch"])["unit_price"] == 1700.0
+
+
+def test_build_dense_price_map_sums_options_and_applies_overrides():
+    groups = [
+        {
+            "id": "vg_size",
+            "label": "size",
+            "required": True,
+            "options": [
+                {"id": "opt_small",  "name": "small",  "price": 200.0, "stock": 10},
+                {"id": "opt_medium", "name": "medium", "price": 300.0, "stock": 10},
+            ],
+        },
+        {
+            "id": "vg_pot",
+            "label": "pot",
+            "required": True,
+            "options": [
+                {"id": "opt_gro",   "name": "gro",   "price": 0.0,   "stock": 10},
+                {"id": "opt_krish", "name": "krish", "price": 100.0, "stock": 10},
+            ],
+        },
+    ]
+    m = build_dense_price_map(groups)
+    assert m["opt_small__opt_gro"] == 200.0
+    assert m["opt_medium__opt_krish"] == 400.0
+    m2 = build_dense_price_map(groups, {"opt_medium__opt_krish": 350.0})
+    assert m2["opt_medium__opt_krish"] == 350.0
+    assert m2["opt_medium__opt_gro"] == 300.0
 
 
 def test_variant_groups_stock_comes_from_stock_map_not_option_min():
