@@ -19,7 +19,7 @@ function QuickAccessSkeleton() {
         {Array.from({ length: 8 }).map((_, i) => (
           <div
             key={i}
-            className="shrink-0 w-[140px] sm:w-[160px] lg:w-auto lg:flex-1 aspect-[3/4] rounded-2xl bg-gray-200 animate-pulse"
+            className="shrink-0 w-[140px] sm:w-[160px] lg:w-auto lg:flex-1 h-[170px] sm:h-auto aspect-[3/4] rounded-2xl bg-gray-200 animate-pulse"
           />
         ))}
       </div>
@@ -29,7 +29,7 @@ function QuickAccessSkeleton() {
 
 function PromoTile({ tile }: { tile: Tile }) {
   const className =
-    'shrink-0 lg:shrink lg:flex-1 w-[140px] sm:w-[160px] lg:w-auto aspect-[3/4] rounded-2xl flex items-center justify-center p-4 transition-all hover:scale-[1.02] shadow-sm hover:shadow-md';
+    'shrink-0 lg:shrink lg:flex-1 w-[140px] sm:w-[160px] lg:w-auto h-[170px] sm:h-auto aspect-[3/4] rounded-2xl flex items-center justify-center p-4 transition-all hover:scale-[1.02] shadow-sm hover:shadow-md';
   const content = (
     <span
       className="text-lg sm:text-xl lg:text-2xl font-bold italic leading-tight text-center whitespace-pre-line"
@@ -55,7 +55,7 @@ function PromoTile({ tile }: { tile: Tile }) {
 
 function CategoryTile({ tile }: { tile: Tile }) {
   const className =
-    'group shrink-0 lg:shrink lg:flex-1 w-[140px] sm:w-[160px] lg:w-auto aspect-[3/4] rounded-2xl overflow-hidden relative flex flex-col shadow-sm hover:shadow-md transition-all hover:scale-[1.02]';
+    'group shrink-0 lg:shrink lg:flex-1 w-[140px] sm:w-[160px] lg:w-auto h-[170px] sm:h-auto aspect-[3/4] rounded-2xl overflow-hidden relative flex flex-col shadow-sm hover:shadow-md transition-all hover:scale-[1.02]';
   const content = (
     <>
       <div className="relative flex-1 min-h-0">

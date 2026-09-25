@@ -39,6 +39,17 @@ import type { NavItemDef } from './navData';
 
 import { LOGO_PATH } from '@/lib/branding';
 
+const CORPORATE_BULK_ORDER_HREF = '/corporate-gifting';
+const PERMANENT_NAV_ITEM: NavItemDef = {
+  label: 'CORPORATE BULK ORDER',
+  href: CORPORATE_BULK_ORDER_HREF,
+};
+const PERMANENT_MOBILE_ITEM = {
+  label: 'Corporate Bulk Order',
+  href: CORPORATE_BULK_ORDER_HREF,
+  img: 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=280&q=80',
+};
+
 export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
@@ -87,12 +98,16 @@ export default function Navbar() {
   // including an intentionally empty array chosen by the admin.
   const effectiveMenuItems = useFallback ? [] : (menuItems ?? []);
 
-  const navItems: NavItemDef[] = useFallback
+  const categoryNavItems = useFallback
     ? categoryTreeToNavItems(categories, [])
     : categoryTreeToNavItems(categories, effectiveMenuItems);
+  const navItems: NavItemDef[] = [
+    ...categoryNavItems.filter((item) => item.href !== CORPORATE_BULK_ORDER_HREF),
+    PERMANENT_NAV_ITEM,
+  ];
 
   const dbMobileItems = effectiveMenuItems
-    .filter((m) => !m.parent_id)
+    .filter((m) => !m.parent_id && m.href !== CORPORATE_BULK_ORDER_HREF)
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((m) => ({
       label: m.label,
@@ -107,6 +122,7 @@ export default function Navbar() {
       img: root.mobile_image_url || root.image_url || '',
     })),
     ...(useFallback ? [] : dbMobileItems),
+    PERMANENT_MOBILE_ITEM,
   ];
 
   useBodyScrollLock(drawerOpen);
@@ -776,7 +792,6 @@ export default function Navbar() {
                   <div className="grid grid-cols-1 gap-2.5">
                     {[
                       { label: 'About Us', href: '/#about-us' },
-                      { label: 'Corporate Bulk Order', href: '/corporate-gifting' },
                       { label: 'Track Your Order', href: '/orders' },
                       { label: 'Support', href: `https://wa.me/${WHATSAPP_NUMBER}` },
                       { label: 'Damage Replacement Form', href: '/damage-replacement' },
