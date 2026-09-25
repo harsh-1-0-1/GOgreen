@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -62,6 +62,9 @@ type MenuFormData = z.infer<typeof menuSchema>;
 
 const inputClass =
   'w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors';
+
+const MAX_MENU_IMAGE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_MENU_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 function SortableMenuRow({
   item,
@@ -231,7 +234,18 @@ function MenuDrawer({
 
   useBodyScrollLock(true);
   const [submitting, setSubmitting] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageFilePreview, setImageFilePreview] = useState<string | null>(null);
+  const imageFilePreviewRef = useRef<string | null>(null);
   const { data: categories } = useCategories();
+
+  useEffect(() => {
+    return () => {
+      if (imageFilePreviewRef.current) {
+        URL.revokeObjectURL(imageFilePreviewRef.current);
+      }
+    };
+  }, []);
 
   // react-hook-form's `watch()` is a React-Compiler-incompatible library (cannot be
   // memoized safely); the live preview needs its reactive values, so the
@@ -241,15 +255,62 @@ function MenuDrawer({
   const watchedActive = watch('is_active');
   const watchedAccent = watch('accent_color');
   const watchedHref = watch('href');
+  const watchedImageUrl = watch('image_url');
+  const imageUrlField = register('image_url');
+  const imagePreview = imageFilePreview || watchedImageUrl || null;
+
+  function clearSelectedImage() {
+    if (imageFilePreviewRef.current) {
+      URL.revokeObjectURL(imageFilePreviewRef.current);
+      imageFilePreviewRef.current = null;
+    }
+    setImageFile(null);
+    setImageFilePreview(null);
+  }
+
+  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!ALLOWED_MENU_IMAGE_TYPES.has(file.type)) {
+      toast.error('Please choose a JPG, PNG, or WEBP image');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > MAX_MENU_IMAGE_SIZE) {
+      toast.error('Menu image must be 5MB or smaller');
+      event.target.value = '';
+      return;
+    }
+
+    clearSelectedImage();
+    const previewUrl = URL.createObjectURL(file);
+    imageFilePreviewRef.current = previewUrl;
+    setImageFile(file);
+    setImageFilePreview(previewUrl);
+    setValue('image_url', '');
+  }
 
   async function onSubmit(data: MenuFormData) {
     setSubmitting(true);
     try {
+      let imageUrl = data.image_url || null;
+      if (imageFile) {
+        const formData = new FormData();
+        formData.append('image', imageFile);
+        const uploadResponse = await api.post<{ key: string; url: string }>(
+          '/menu_items/admin/upload-image',
+          formData,
+          { headers: { 'Content-Type': 'multipart/form-data' } },
+        );
+        imageUrl = uploadResponse.data.key;
+      }
+
       const payload = {
         label: data.label,
         href: data.href,
         parent_id: data.parent_id ? Number(data.parent_id) : null,
-        image_url: data.image_url || null,
+        image_url: imageUrl,
         accent_color: data.accent_color || null,
         highlight: data.highlight,
         sort_order: data.sort_order,
@@ -334,14 +395,41 @@ function MenuDrawer({
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-gray-700 mb-1 block">
-              Image URL (mobile thumbnail)
-            </label>
-            <input
-              {...register('image_url')}
-              className={inputClass}
-              placeholder="https://... (optional)"
-            />
+            <label className="text-xs font-semibold text-gray-700 mb-1 block">Menu Image</label>
+            <div className="flex items-center gap-3">
+              <div className="w-20 h-20 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+                {imagePreview ? (
+                  <img
+                    src={imagePreview}
+                    alt="Menu preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <ImageIcon size={24} className="text-gray-300" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleImageChange}
+                  className="w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">JPG, PNG, or WEBP up to 5 MB.</p>
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">Or use an image URL</label>
+              <input
+                {...imageUrlField}
+                onChange={(event) => {
+                  imageUrlField.onChange(event);
+                  if (imageFile) clearSelectedImage();
+                }}
+                className={inputClass}
+                placeholder="https://... (optional)"
+              />
+            </div>
           </div>
 
           <div>

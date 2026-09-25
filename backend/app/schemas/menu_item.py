@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 
 class MenuItemCreate(BaseModel):
@@ -74,6 +74,11 @@ class MenuItemOut(BaseModel):
     updated_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("image_url")
+    def serialize_image_url(self, val: str | None) -> str | None:
+        from app.utils.image_upload import resolve_image_url
+        return resolve_image_url(val)
 
 
 class MenuItemReorderItem(BaseModel):

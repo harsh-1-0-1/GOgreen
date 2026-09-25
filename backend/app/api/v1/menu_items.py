@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,11 +12,14 @@ from app.schemas.menu_item import (
     MenuItemReorderRequest,
     MenuItemUpdate,
 )
+from app.utils.image_upload import resolve_image_url, upload_image_file
 from app.utils.redis import cache_delete, cache_get, cache_set
 
 router = APIRouter(prefix="/menu_items", tags=["menu_items"])
 
 CACHE_KEY = "menu_items"
+MAX_MENU_IMAGE_SIZE = 5 * 1024 * 1024
+ALLOWED_MENU_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 async def _invalidate_menu_cache() -> None:
@@ -105,6 +108,20 @@ async def get_menu_items(db: AsyncSession = Depends(get_db)):
 
 # -- ADMIN --
 
+@router.post("/admin/upload-image")
+async def upload_menu_image(
+    image: UploadFile = File(...),
+    _admin=Depends(require_admin),
+):
+    if image.content_type not in ALLOWED_MENU_IMAGE_TYPES:
+        raise HTTPException(400, "Menu image must be a JPG, PNG, or WEBP file")
+    if image.size is not None and image.size > MAX_MENU_IMAGE_SIZE:
+        raise HTTPException(400, "Menu image must be 5MB or smaller")
+
+    key = await upload_image_file(image, folder="menus")
+    return {"key": key, "url": resolve_image_url(key)}
+
+
 @router.get("/admin", response_model=list[MenuItemOut])
 async def admin_list_menu_items(
     db: AsyncSession = Depends(get_db),
@@ -165,7 +182,8 @@ async def update_menu_item(
     if not item:
         raise HTTPException(404, "Menu item not found")
 
-    new_parent_id = body.parent_id if body.parent_id is not None else item.parent_id
+    fields_set = body.model_fields_set
+    new_parent_id = body.parent_id if "parent_id" in fields_set else item.parent_id
     await _validate_parent(db, new_parent_id, self_id=item.id)
 
     new_label = body.label if body.label is not None else item.label
@@ -175,14 +193,14 @@ async def update_menu_item(
         "label": new_label,
         "href": body.href if body.href is not None else item.href,
         "parent_id": new_parent_id,
-        "image_url": body.image_url,
-        "accent_color": body.accent_color,
-        "highlight": body.highlight,
-        "sort_order": body.sort_order,
-        "is_active": body.is_active,
+        "image_url": body.image_url if "image_url" in fields_set else item.image_url,
+        "accent_color": body.accent_color if "accent_color" in fields_set else item.accent_color,
+        "highlight": body.highlight if body.highlight is not None else item.highlight,
+        "sort_order": body.sort_order if body.sort_order is not None else item.sort_order,
+        "is_active": body.is_active if body.is_active is not None else item.is_active,
     }
     for field, value in updatable.items():
-        if value is not None:
+        if value is not None or field in {"parent_id", "image_url", "accent_color"}:
             setattr(item, field, value)
 
     await db.flush()
