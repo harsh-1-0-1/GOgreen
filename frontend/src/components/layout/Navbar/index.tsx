@@ -39,17 +39,6 @@ import type { NavItemDef } from './navData';
 
 import { LOGO_PATH } from '@/lib/branding';
 
-const CORPORATE_BULK_ORDER_HREF = '/corporate-gifting';
-const PERMANENT_NAV_ITEM: NavItemDef = {
-  label: 'CORPORATE BULK ORDER',
-  href: CORPORATE_BULK_ORDER_HREF,
-};
-const PERMANENT_MOBILE_ITEM = {
-  label: 'Corporate Bulk Order',
-  href: CORPORATE_BULK_ORDER_HREF,
-  img: 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=280&q=80',
-};
-
 export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
@@ -93,21 +82,17 @@ export default function Navbar() {
   const hasFetched = menuQuery.dataUpdatedAt > 0;
   const useFallback = !hasFetched && (menuQuery.isPending || menuQuery.isError);
 
-  // When in fallback mode pass [] to the pure functions and use the hardcoded
-  // constants directly. Otherwise always prefer real (even stale) DB data —
-  // including an intentionally empty array chosen by the admin.
+  // In fallback mode pass [] to the pure functions so DB-driven links stay
+  // hidden until the API responds. Otherwise always prefer real (even stale)
+  // DB data — including an intentionally empty array chosen by the admin.
   const effectiveMenuItems = useFallback ? [] : (menuItems ?? []);
 
   const categoryNavItems = useFallback
     ? categoryTreeToNavItems(categories, [])
     : categoryTreeToNavItems(categories, effectiveMenuItems);
-  const navItems: NavItemDef[] = [
-    ...categoryNavItems.filter((item) => item.href !== CORPORATE_BULK_ORDER_HREF),
-    PERMANENT_NAV_ITEM,
-  ];
 
   const dbMobileItems = effectiveMenuItems
-    .filter((m) => !m.parent_id && m.href !== CORPORATE_BULK_ORDER_HREF)
+    .filter((m) => !m.parent_id)
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((m) => ({
       label: m.label,
@@ -122,7 +107,6 @@ export default function Navbar() {
       img: root.mobile_image_url || root.image_url || '',
     })),
     ...(useFallback ? [] : dbMobileItems),
-    PERMANENT_MOBILE_ITEM,
   ];
 
   useBodyScrollLock(drawerOpen);
@@ -428,7 +412,7 @@ export default function Navbar() {
         <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <style>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
           <ul className="flex items-center justify-center text-[14px] font-semibold tracking-[0.03em] gap-0 min-w-max">
-            {navItems.map((item) => {
+            {categoryNavItems.map((item) => {
               const hasDropdown = item.groups && item.groups.length > 0;
               const isOpen = activeDropdown === item.label;
               const active = isNavActive(item);
