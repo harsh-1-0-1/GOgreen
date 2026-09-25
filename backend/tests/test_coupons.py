@@ -140,7 +140,7 @@ async def test_checkout_applies_percent_coupon_and_increments_usage(client: Asyn
     order = detail.json()
     assert order["coupon_code"] == "WELCOME"
     assert abs(order["coupon_discount"] - round(subtotal * 0.1, 2)) < 0.01
-    assert abs(order["total_amount"] - (subtotal - round(subtotal * 0.1, 2))) < 0.01
+    assert abs(order["total_amount"] - (subtotal - round(subtotal * 0.1, 2) + 75)) < 0.01
 
     from app.db.models import Coupon
     async with test_session_factory() as db:
@@ -203,7 +203,7 @@ async def test_direct_checkout_applies_fixed_coupon(client: AsyncClient):
     order = detail.json()
     assert order["coupon_code"] == "FLAT100"
     assert abs(order["coupon_discount"] - 100.0) < 0.01
-    assert abs(order["total_amount"] - (product["price"] - 100)) < 0.01
+    assert abs(order["total_amount"] - (product["price"] - 100 + 75)) < 0.01
 
 
 async def test_fixed_coupon_cannot_exceed_subtotal(client: AsyncClient):
@@ -235,7 +235,7 @@ async def test_fixed_coupon_cannot_exceed_subtotal(client: AsyncClient):
         f"/api/v1/orders/{resp.json()['order_id']}",
         headers={"Authorization": f"Bearer {token}"},
     )).json()
-    assert order["total_amount"] == 0.0
+    assert order["total_amount"] == 75.0
 
 
 async def test_admin_coupon_crud(client: AsyncClient):

@@ -1341,7 +1341,7 @@ function BannerDrawer({
                       className="text-[10px] font-bold"
                       style={{ color: watchedTextColor }}
                     >
-                      {watchedTitle || 'Free Delivery Above ₹499'}
+                      {watchedTitle || 'Free Delivery — Shop Now'}
                     </span>
                   </div>
                 )}

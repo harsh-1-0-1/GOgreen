@@ -160,7 +160,7 @@ async def test_duplicate_webhook_is_idempotent(client: AsyncClient, monkeypatch)
     order_id, product_id, _ = await _bootstrap_paid_order(client, monkeypatch)
 
     # Build a single payload with a fixed event_id (Razorpay uses UUID per event)
-    amount_paise = int(100.0 * 100)  # price * 100
+    amount_paise = int((100.0 + 75) * 100)
     body = _make_webhook_payload(order_id, "pay_dup_test_001", amount_paise)
     headers = _webhook_headers(body, "evt_dup_test_001")
 
@@ -198,7 +198,7 @@ async def test_out_of_order_webhook_does_not_overwrite_paid(client: AsyncClient,
     the idempotency guard on mark_paid must prevent any state regression.
     """
     order_id, _, _ = await _bootstrap_paid_order(client, monkeypatch)
-    amount_paise = int(100.0 * 100)
+    amount_paise = int((100.0 + 75) * 100)
 
     # First webhook: marks order PAID
     body1 = _make_webhook_payload(order_id, "pay_first_001", amount_paise)
@@ -456,7 +456,7 @@ async def test_late_capture_does_not_reopen_failed_order(client: AsyncClient, mo
     )
     assert failed_resp.status_code == 200, failed_resp.text
 
-    captured_body = _make_webhook_payload(order_id, "pay_late_capture", 10000)
+    captured_body = _make_webhook_payload(order_id, "pay_late_capture", 17500)
     captured_resp = await client.post(
         "/api/v1/payments/razorpay/webhook",
         content=captured_body,
@@ -841,7 +841,7 @@ async def test_refund_limit_capping(client: AsyncClient, monkeypatch):
     Verifies that the total refunded amount cannot exceed the order's total amount,
     even if duplicate/retried refund events come in with different refund IDs.
     """
-    # 1. Create a paid order (order total is 100.0)
+    # 1. Create a paid order (order total is 175.0)
     order_id, _, _ = await _bootstrap_paid_order(client, monkeypatch, price=100.0)
 
     # 2. Record first refund of 60.0 (6000 paise)
@@ -871,8 +871,7 @@ async def test_refund_limit_capping(client: AsyncClient, monkeypatch):
         assert order.partial_refund_amount == 60.0
         assert order.payment_status == PaymentStatus.PARTIALLY_REFUNDED
 
-    # 3. Record second refund of 60.0 (6000 paise) under different refund ID
-    # Since total refunded would be 120.0 (exceeding 100.0), it must cap the second refund to 40.0
+    # 3. Record second refund of 120.0 (12000 paise)
     body2 = {
         "event": "refund.processed",
         "payload": {
@@ -880,7 +879,7 @@ async def test_refund_limit_capping(client: AsyncClient, monkeypatch):
                 "entity": {
                     "id": "ref_second_222",
                     "payment_id": "pay_dup_test_001",
-                    "amount": 6000,
+                    "amount": 12000,
                     "notes": {"order_id": str(order_id)},
                 }
             }
@@ -896,13 +895,13 @@ async def test_refund_limit_capping(client: AsyncClient, monkeypatch):
 
     async with test_session_factory() as db:
         order = (await db.execute(select(Order).where(Order.id == order_id))).scalar_one()
-        # Must be exactly capped at 100.0
-        assert order.partial_refund_amount == 100.0
+        # Must be exactly capped at 175.0
+        assert order.partial_refund_amount == 175.0
         assert order.payment_status == PaymentStatus.REFUNDED
 
         from app.db.models import Refund
         refunds = (await db.execute(select(Refund).where(Refund.order_id == order_id))).scalars().all()
         assert len(refunds) == 2
-        # First refund: 60.0, second refund: capped to 40.0
+        # First refund: 60.0, second refund: capped to 115.0
         refund_amounts = sorted([r.amount for r in refunds])
-        assert refund_amounts == [40.0, 60.0]
+        assert refund_amounts == [60.0, 115.0]

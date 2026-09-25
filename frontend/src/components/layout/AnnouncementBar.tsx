@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { useBanners } from '@/hooks/useBanners';
+import { DEFAULT_SHIPPING_SETTINGS, useShippingSettings } from '@/hooks/useSettings';
 
 const COOKIE_NAME = 'bar_dismissed';
 const COOKIE_MAX_AGE = 86400;
 
 const FALLBACK_MESSAGES = [
-  { title: 'Free Delivery Above ₹499 — Shop Now', cta_link: '' },
+  { title: 'Free Delivery — Shop Now', cta_link: '' },
 ];
 
 function getCookie(name: string): string | undefined {
@@ -30,13 +31,16 @@ const Separator = () => (
 
 export default function AnnouncementBar() {
   const { data: banners = [] } = useBanners('announcement');
+  const { data: shippingSettings = DEFAULT_SHIPPING_SETTINGS } = useShippingSettings();
   const [visible, setVisible] = useState(
     () => getCookie(COOKIE_NAME) !== '1',
   );
 
   if (!visible) return null;
 
-  const messages = banners.length > 0 ? banners : FALLBACK_MESSAGES;
+  const messages = banners.length > 0
+    ? banners
+    : [{ ...FALLBACK_MESSAGES[0], title: `Free Delivery Above ₹${shippingSettings.free_shipping_threshold} — Shop Now` }];
 
   function dismiss() {
     setCookie(COOKIE_NAME, '1', COOKIE_MAX_AGE);

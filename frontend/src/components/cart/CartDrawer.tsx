@@ -7,6 +7,7 @@ import DoNotForgetBar from './DoNotForgetBar';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
 import { getApiErrorDetail } from '@/lib/apiError';
 import { useSuggestionTiles } from '@/hooks/useSuggestionTiles';
+import { getShippingFee, useShippingSettings } from '@/hooks/useSettings';
 
 function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
   if (!item.selected_options) return null;
@@ -17,6 +18,9 @@ export default function CartDrawer() {
   const { isDrawerOpen, closeDrawer, items, total, itemCount, updateItem, removeItem } =
     useCartStore();
   const suggestionTiles = useSuggestionTiles(4);
+  const { data: shippingSettings } = useShippingSettings();
+  const shipping = getShippingFee(total, shippingSettings);
+  const grandTotal = total + shipping;
 
   useBodyScrollLock(isDrawerOpen);
 
@@ -177,7 +181,15 @@ export default function CartDrawer() {
           <div className="border-t p-4 space-y-3 shrink-0 safe-bottom">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Subtotal</span>
-              <span className="font-bold text-lg">₹{total.toFixed(2)}</span>
+              <span className="font-medium">₹{total.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Delivery</span>
+              <span className="font-medium text-green-600">{shipping === 0 ? 'Free' : `₹${shipping.toFixed(2)}`}</span>
+            </div>
+            <div className="flex justify-between border-t pt-3 text-base font-bold">
+              <span>Total</span>
+              <span className="text-primary">₹{grandTotal.toFixed(2)}</span>
             </div>
             <Link
               to="/checkout"

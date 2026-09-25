@@ -21,6 +21,7 @@ from app.db.models import (
 from app.schemas.order import DirectCheckoutItem
 from app.services import coupon_service
 from app.services.cart_service import combination_key, resolve_variant_details
+from app.services.settings_service import calculate_shipping_fee, get_or_create_settings
 from app.utils.redis import cache_delete, cache_delete_pattern
 from app.utils.variant_pricing import StockMapMissingError, build_combo_key
 
@@ -142,6 +143,19 @@ async def invalidate_product_caches(slugs: list[str]) -> None:
     await cache_delete_pattern("products:*")
 
 
+async def _calculate_order_total(
+    db: AsyncSession, subtotal: float, coupon_discount: float,
+) -> tuple[float, float]:
+    store_settings = await get_or_create_settings(db)
+    shipping_fee = calculate_shipping_fee(
+        subtotal,
+        store_settings.free_shipping_threshold,
+        store_settings.flat_shipping_rate,
+    )
+    total = round(max(0.0, subtotal - coupon_discount + shipping_fee), 2)
+    return total, shipping_fee
+
+
 def _selected_option_ids(selected_options: dict | list | None) -> list[str]:
     if isinstance(selected_options, list):
         return [str(option_id) for option_id in selected_options if option_id]
@@ -236,15 +250,15 @@ async def checkout(
         total_amount += line
         order_items_data.append(item_data)
 
-    total_amount = round(total_amount, 2)
+    subtotal = round(total_amount, 2)
 
     applied_coupon_code = None
     coupon_discount = 0.0
     if coupon_code and coupon_code.strip():
         applied_coupon_code, coupon_discount = await coupon_service.apply_coupon_to_order(
-            db, coupon_code, total_amount,
+            db, coupon_code, subtotal,
         )
-        total_amount = round(max(0.0, total_amount - coupon_discount), 2)
+    total_amount, shipping_fee = await _calculate_order_total(db, subtotal, coupon_discount)
 
     order = Order(
         user_id=user_id,
@@ -279,7 +293,7 @@ async def checkout(
     order.razorpay_order_id = razorpay_data.get("order_id") if razorpay_data else None
     await db.flush()
 
-    logger.info("Checkout complete: order_id={} amount={} payment_method={}", order.id, total_amount, payment_method)
+    logger.info("Checkout complete: order_id={} amount={} shipping={} payment_method={}", order.id, total_amount, shipping_fee, payment_method)
     return order, razorpay_data, affected_product_slugs
 
 
@@ -311,14 +325,14 @@ async def direct_checkout(
         total_amount += round(item_data["unit_price"] * item_data["quantity"], 2)
         order_items_data.append(item_data)
 
+    subtotal = round(total_amount, 2)
     applied_coupon_code = None
     coupon_discount = 0.0
     if coupon_code and coupon_code.strip():
-        subtotal = round(total_amount, 2)
         applied_coupon_code, coupon_discount = await coupon_service.apply_coupon_to_order(
             db, coupon_code, subtotal,
         )
-        total_amount = round(max(0.0, subtotal - coupon_discount), 2)
+    total_amount, shipping_fee = await _calculate_order_total(db, subtotal, coupon_discount)
 
     order = Order(
         user_id=user_id,
@@ -349,7 +363,7 @@ async def direct_checkout(
     order.razorpay_order_id = razorpay_data.get("order_id") if razorpay_data else None
     await db.flush()
 
-    logger.info("Direct checkout complete: order_id={} amount={} payment_method={}", order.id, order.total_amount, payment_method)
+    logger.info("Direct checkout complete: order_id={} amount={} shipping={} payment_method={}", order.id, order.total_amount, shipping_fee, payment_method)
     return order, razorpay_data, affected_product_slugs
 
 

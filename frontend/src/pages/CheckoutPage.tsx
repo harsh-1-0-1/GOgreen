@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
 import { getApiErrorDetail } from '@/lib/apiError';
+import { getShippingFee, useShippingSettings } from '@/hooks/useSettings';
 
 declare global {
   interface Window {
@@ -193,7 +194,7 @@ function OrderSummary({
 
       <div className="space-y-2 text-xs">
         <div className="flex justify-between"><span>Subtotal</span><span>{money(subtotal)}</span></div>
-        <div className="flex justify-between"><span>Shipping</span><span className="text-right text-gray-500">{shipping === 0 ? 'Free' : money(shipping)}</span></div>
+        <div className="flex justify-between"><span>Delivery</span><span className="text-right text-gray-500">{shipping === 0 ? 'Free' : money(shipping)}</span></div>
         {discount > 0 && (
           <div className="flex justify-between text-emerald-700"><span>Discount</span><span>−{money(discount)}</span></div>
         )}
@@ -234,7 +235,7 @@ function DesktopSummary({ items, subtotal, shipping, discount, total, couponProp
         <CouponSection {...couponProps} />
         <div className="space-y-2 text-xs">
           <div className="flex justify-between"><span>Subtotal</span><span>{money(subtotal)}</span></div>
-          <div className="flex justify-between"><span>Shipping</span><span className="text-right text-gray-500">{shipping === 0 ? 'Free' : money(shipping)}</span></div>
+          <div className="flex justify-between"><span>Delivery</span><span className="text-right text-gray-500">{shipping === 0 ? 'Free' : money(shipping)}</span></div>
           {discount > 0 && (
             <div className="flex justify-between text-emerald-700"><span>Discount</span><span>−{money(discount)}</span></div>
           )}
@@ -254,11 +255,11 @@ export default function CheckoutPage() {
   const cart = useCartStore();
   const createAddress = useCreateAddress();
   const validateCoupon = useValidateCoupon();
+  const { data: shippingSettings } = useShippingSettings();
 
   const [form, setForm] = useState<AddressFormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [shippingMethod, setShippingMethod] = useState<'standard' | 'express'>('standard');
   const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay');
   const [billingMode, setBillingMode] = useState<'same' | 'different'>('same');
   const [paying, setPaying] = useState(false);
@@ -271,10 +272,9 @@ export default function CheckoutPage() {
   const directSession = useMemo(() => (isBuyNow ? readDirectCheckoutSession() : null), [isBuyNow]);
   const items: CheckoutItem[] = isBuyNow ? directSession?.items ?? [] : cart.items;
   const subtotal = items.reduce((sum, item) => sum + item.line_total, 0);
-  const shipping = subtotal >= 499 ? 0 : 49;
+  const shipping = getShippingFee(subtotal, shippingSettings);
   const discount = appliedCoupon?.discount_amount ?? 0;
-  const total = subtotal + shipping - discount;
-  const addressReady = Boolean(form.address && form.city && form.state && form.pincode && form.phone);
+  const total = Math.max(0, subtotal + shipping - discount);
 
   async function applyCoupon() {
     const code = couponCode.trim();
@@ -514,22 +514,12 @@ export default function CheckoutPage() {
 
           <section className="mt-7 space-y-3">
             <h2 className="text-base sm:text-lg font-bold text-gray-900">Shipping method</h2>
-            {addressReady ? (
-              <div className="overflow-hidden rounded-lg border border-gray-200">
-                {[
-                  ['standard', 'Standard Delivery', '3-5 Days', shipping === 0 ? 'Free' : money(shipping)],
-                  ['express', 'Express Delivery', '1-2 Days', money(99)],
-                ].map(([value, title, subtitle, price]) => (
-                  <label key={value} className={`flex cursor-pointer items-center gap-3 border-b border-gray-200 p-3 last:border-0 text-sm ${shippingMethod === value ? 'border-primary bg-primary/5' : ''}`}>
-                    <input type="radio" name="shipping" checked={shippingMethod === value} onChange={() => setShippingMethod(value as 'standard' | 'express')} className="h-4 w-4 accent-primary" />
-                    <span className="flex-1"><span className="block font-semibold text-gray-950">{title}</span><span className="text-xs text-gray-500">{subtitle}</span></span>
-                    <span className="font-semibold text-gray-950">{price}</span>
-                  </label>
-                ))}
+            <div className="overflow-hidden rounded-lg border border-gray-200">
+              <div className="flex items-center gap-3 p-3 text-sm">
+                <span className="flex-1"><span className="block font-semibold text-gray-950">Standard Delivery</span><span className="text-xs text-gray-500">3-5 Days</span></span>
+                <span className="font-semibold text-gray-950">{shipping === 0 ? 'Free' : money(shipping)}</span>
               </div>
-            ) : (
-              <div className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">Enter your shipping address to view available shipping methods.</div>
-            )}
+            </div>
           </section>
 
           <section className="mt-7 space-y-3">

@@ -6,6 +6,7 @@ import DoNotForgetBar from '@/components/cart/DoNotForgetBar';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
 import { getApiErrorDetail } from '@/lib/apiError';
 import { useSuggestionTiles } from '@/hooks/useSuggestionTiles';
+import { getShippingFee, useShippingSettings } from '@/hooks/useSettings';
 
 function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
   if (!item.selected_options) return null;
@@ -15,6 +16,7 @@ function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][n
 export default function CartPage() {
   const { items, total, itemCount, updateItem, removeItem } = useCartStore();
   const suggestionTiles = useSuggestionTiles(6);
+  const { data: shippingSettings } = useShippingSettings();
 
   async function handleUpdate(itemId: number, qty: number) {
     try {
@@ -95,7 +97,7 @@ export default function CartPage() {
     );
   }
 
-  const shipping = total >= 499 ? 0 : 49;
+  const shipping = getShippingFee(total, shippingSettings);
   const grandTotal = total + shipping;
 
   return (
@@ -174,7 +176,7 @@ export default function CartPage() {
                 <span className="font-medium">₹{total.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Shipping</span>
+                <span className="text-gray-500">Delivery</span>
                 <span className="font-medium text-green-600">{shipping === 0 ? 'Free' : `₹${shipping}`}</span>
               </div>
             </div>
@@ -197,7 +199,7 @@ export default function CartPage() {
             <span className="font-medium">₹{total.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Shipping</span>
+            <span className="text-gray-500">Delivery</span>
             <span className="font-medium text-green-600">{shipping === 0 ? 'Free' : `₹${shipping}`}</span>
           </div>
           <div className="border-t pt-2 flex justify-between font-bold text-base">

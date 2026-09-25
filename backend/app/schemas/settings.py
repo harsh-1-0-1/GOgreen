@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class StoreSettingsOut(BaseModel):
@@ -23,6 +23,13 @@ class StoreSettingsOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ShippingSettingsOut(BaseModel):
+    free_shipping_threshold: int
+    flat_shipping_rate: int
+
+    model_config = {"from_attributes": True}
+
+
 class StoreSettingsUpdate(BaseModel):
     store_name: str | None = Field(None, max_length=255)
     support_email: str | None = Field(None, max_length=255)
@@ -37,3 +44,10 @@ class StoreSettingsUpdate(BaseModel):
     meta_description: str | None = None
     primary_color: str | None = Field(None, max_length=20)
     accent_color: str | None = Field(None, max_length=20)
+
+    @field_validator("free_shipping_threshold", "flat_shipping_rate")
+    @classmethod
+    def shipping_values_cannot_be_null(cls, value: int | None) -> int | None:
+        if value is None:
+            raise ValueError("Shipping values cannot be null")
+        return value

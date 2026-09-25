@@ -1,6 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 
+export interface ShippingSettings {
+  free_shipping_threshold: number;
+  flat_shipping_rate: number;
+}
+
+export const DEFAULT_SHIPPING_SETTINGS: ShippingSettings = {
+  free_shipping_threshold: 999,
+  flat_shipping_rate: 75,
+};
+
+export function getShippingFee(subtotal: number, settings: ShippingSettings = DEFAULT_SHIPPING_SETTINGS): number {
+  return subtotal >= settings.free_shipping_threshold ? 0 : settings.flat_shipping_rate;
+}
+
 export interface StoreSettings {
   id: number;
   store_name: string;
@@ -21,6 +35,16 @@ export interface StoreSettings {
 
 export type StoreSettingsUpdate = Partial<Omit<StoreSettings, 'id' | 'updated_at'>>;
 
+export function useShippingSettings() {
+  return useQuery<ShippingSettings>({
+    queryKey: ['shipping-settings'],
+    queryFn: async () => {
+      const { data } = await api.get<ShippingSettings>('/settings/shipping');
+      return data;
+    },
+  });
+}
+
 export function useSettings() {
   return useQuery<StoreSettings>({
     queryKey: ['settings'],
@@ -40,6 +64,7 @@ export function useUpdateSettings() {
     },
     onSuccess: (updated) => {
       qc.setQueryData(['settings'], updated);
+      qc.invalidateQueries({ queryKey: ['shipping-settings'] });
     },
   });
 }

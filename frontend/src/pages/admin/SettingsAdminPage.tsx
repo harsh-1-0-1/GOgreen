@@ -179,10 +179,11 @@ function SettingsForm({
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold text-gray-700">Free Delivery Minimum (₹)</label>
+                  <label className="text-xs font-semibold text-gray-700">Order Price for Free Delivery (₹)</label>
                   <input
                     type="number"
                     min={0}
+                    step={1}
                     value={form.free_shipping_threshold}
                     onChange={(e) => set('free_shipping_threshold', Number(e.target.value))}
                     required
@@ -191,10 +192,11 @@ function SettingsForm({
                   <p className="text-[9px] text-gray-400 mt-1">Orders at or above this total get free delivery.</p>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-700">Flat Shipping Charge (₹)</label>
+                  <label className="text-xs font-semibold text-gray-700">Delivery Charge (₹)</label>
                   <input
                     type="number"
                     min={0}
+                    step={1}
                     value={form.flat_shipping_rate}
                     onChange={(e) => set('flat_shipping_rate', Number(e.target.value))}
                     required

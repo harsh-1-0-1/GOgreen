@@ -12,10 +12,12 @@ import DecorPotsGrid from '@/components/home/DecorPotsGrid';
 import BlogSection from '@/components/home/BlogSection';
 import PromoCTASection from '@/components/home/PromoCTASection';
 import AboutSection from '@/components/home/AboutSection';
+import { DEFAULT_SHIPPING_SETTINGS, useShippingSettings } from '@/hooks/useSettings';
 
 function FeatureStrip() {
+  const { data: shippingSettings = DEFAULT_SHIPPING_SETTINGS } = useShippingSettings();
   const features = [
-    { icon: Truck, title: 'Free Delivery', desc: 'On orders above ₹499' },
+    { icon: Truck, title: 'Free Delivery', desc: `On orders above ₹${shippingSettings.free_shipping_threshold}` },
     { icon: RotateCcw, title: 'Easy Returns', desc: '7-day return policy' },
     { icon: Leaf, title: 'Expert Plant Care', desc: 'Free care guides' },
     { icon: HeartHandshake, title: 'Plant Guarantee', desc: 'Healthy plants or replace' },

@@ -80,6 +80,86 @@ async def test_checkout_success(client: AsyncClient):
     assert data["razorpay_order_data"] is not None
 
 
+async def test_shipping_settings_are_public_and_configurable(client: AsyncClient):
+    default_resp = await client.get("/api/v1/settings/shipping")
+    assert default_resp.status_code == 200
+    assert default_resp.json() == {
+        "free_shipping_threshold": 999,
+        "flat_shipping_rate": 75,
+    }
+
+    unauthenticated_resp = await client.patch(
+        "/api/v1/settings",
+        json={"free_shipping_threshold": 500, "flat_shipping_rate": 25},
+    )
+    assert unauthenticated_resp.status_code == 401
+
+    admin = await _register_and_make_admin(client)
+    update_resp = await client.patch(
+        "/api/v1/settings",
+        json={"free_shipping_threshold": 500, "flat_shipping_rate": 25},
+        headers={"Authorization": f"Bearer {admin}"},
+    )
+    assert update_resp.status_code == 200, update_resp.text
+    assert update_resp.json()["free_shipping_threshold"] == 500
+    assert update_resp.json()["flat_shipping_rate"] == 25
+
+    public_resp = await client.get("/api/v1/settings/shipping")
+    assert public_resp.status_code == 200
+    assert public_resp.json() == {
+        "free_shipping_threshold": 500,
+        "flat_shipping_rate": 25,
+    }
+
+    product = await _seed_product_and_category(client, admin, stock=10)
+    token = await _register_user(client)
+    address = await _seed_address(client, token)
+    cart_id = await _setup_cart(client, token, product["id"], quantity=1)
+
+    checkout_resp = await client.post(
+        "/api/v1/orders/checkout",
+        json={"address_id": address["id"], "cart_id": cart_id, "payment_method": "cod"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert checkout_resp.status_code == 201, checkout_resp.text
+
+    detail_resp = await client.get(
+        f"/api/v1/orders/{checkout_resp.json()['order_id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert detail_resp.status_code == 200
+    assert detail_resp.json()["total_amount"] == 324.0
+
+
+async def test_checkout_is_free_at_configured_shipping_threshold(client: AsyncClient):
+    admin = await _register_and_make_admin(client)
+    update_resp = await client.patch(
+        "/api/v1/settings",
+        json={"free_shipping_threshold": 299, "flat_shipping_rate": 25},
+        headers={"Authorization": f"Bearer {admin}"},
+    )
+    assert update_resp.status_code == 200, update_resp.text
+
+    product = await _seed_product_and_category(client, admin, stock=10)
+    token = await _register_user(client)
+    address = await _seed_address(client, token)
+    cart_id = await _setup_cart(client, token, product["id"], quantity=1)
+
+    checkout_resp = await client.post(
+        "/api/v1/orders/checkout",
+        json={"address_id": address["id"], "cart_id": cart_id, "payment_method": "cod"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert checkout_resp.status_code == 201, checkout_resp.text
+
+    detail_resp = await client.get(
+        f"/api/v1/orders/{checkout_resp.json()['order_id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert detail_resp.status_code == 200
+    assert detail_resp.json()["total_amount"] == product["price"]
+
+
 async def test_checkout_cod_skips_razorpay_and_records_payment_method(client: AsyncClient, monkeypatch):
     monkeypatch.setattr("app.core.config.settings.WHATSAPP_ACCESS_TOKEN", "")
     admin = await _register_and_make_admin(client)
