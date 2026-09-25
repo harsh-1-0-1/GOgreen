@@ -84,6 +84,22 @@ export interface VariantGroup {
   options: VariantOption[];
 }
 
+export interface DisplaySection {
+  id: number;
+  name: string;
+  key: string;
+  sort_order: number;
+  is_active: boolean;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface DisplaySectionAdmin extends DisplaySection {
+  product_count: number;
+}
+
+
 export interface ProductVariants {
   variant_groups: VariantGroup[];
   default_image?: string;

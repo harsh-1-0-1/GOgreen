@@ -38,6 +38,7 @@ import CouponsAdminPage from '@/pages/admin/CouponsAdminPage';
 import DamageClaimsAdminPage from '@/pages/admin/DamageClaimsAdminPage';
 import DoNotForgetAdminPage from '@/pages/admin/DoNotForgetAdminPage';
 import MenuAdminPage from '@/pages/admin/MenuAdminPage';
+import DisplaySectionsAdminPage from '@/pages/admin/DisplaySectionsAdminPage';
 import SettingsAdminPage from '@/pages/admin/SettingsAdminPage';
 
 function ScrollToTop() {
@@ -130,6 +131,7 @@ export default function App() {
                 <Route path="damage-claims" element={<DamageClaimsAdminPage />} />
                 <Route path="do-not-forget" element={<DoNotForgetAdminPage />} />
                 <Route path="navigation" element={<MenuAdminPage />} />
+                <Route path="display-sections" element={<DisplaySectionsAdminPage />} />
                 <Route path="settings" element={<SettingsAdminPage />} />
               </Route>
             </Route>

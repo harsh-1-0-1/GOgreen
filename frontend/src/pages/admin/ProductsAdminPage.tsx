@@ -20,6 +20,7 @@ import toast from 'react-hot-toast';
 import { useProduct, useProductRaw, useProducts, useAdminAllProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useTags, useUpsertTag } from '@/hooks/useTags';
+import { useAdminDisplaySections } from '@/hooks/useDisplaySections';
 import { useDeleteProduct } from '@/hooks/useAdmin';
 import api from '@/lib/api';
 import { getApiErrorDetail } from '@/lib/apiError';
@@ -129,6 +130,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // useProductRaw (admin endpoint, raw relative keys) — used to seed image key state for edit
   const { data: rawProduct } = useProductRaw(isEdit ? (editProduct?.id ?? null) : null);
   const { data: categories } = useCategories();
+  const { data: displaySections = [] } = useAdminDisplaySections();
   const { data: globalTags = [] } = useTags();
   const qc = useQueryClient();
   const allCats = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
@@ -279,6 +281,15 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       care_tips: [],
     },
   });
+  const selectedDisplaySection = watch('display_section');
+  const assignableSections = useMemo(
+    () => displaySections.filter((section) => section.is_active),
+    [displaySections],
+  );
+  const hiddenSectionName = useMemo(() => {
+    if (!selectedDisplaySection) return null;
+    return displaySections.find((section) => section.key === selectedDisplaySection)?.name ?? null;
+  }, [displaySections, selectedDisplaySection]);
   const { fields: tagFields, append: addTag, remove: removeTag } = useFieldArray({ control, name: 'tags' });
   const { fields: tipFields, append: addTip, remove: removeTip } = useFieldArray({ control, name: 'care_tips' });
 
@@ -745,6 +756,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         fd.append('stock_qty', String(payload.stock_qty));
         fd.append('tags', JSON.stringify(payload.tags));
         fd.append('care_tips', JSON.stringify(payload.care_tips));
+        if (payload.display_section) fd.append('display_section', payload.display_section);
         if (payload.how_to_guide) fd.append('how_to_guide', payload.how_to_guide);
         if (payload.variants) fd.append('variants', JSON.stringify(payload.variants));
         if (promiseBannerKey) fd.append('promise_banner_image', promiseBannerKey);
@@ -982,12 +994,24 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">Display Section</label>
                     <select {...register('display_section')} className={inputClass}>
                       <option value="">None (Hidden from sections)</option>
-                      <option value="new_arrival">🆕 New Arrivals</option>
-                      <option value="trending">🔥 Trending</option>
-                      <option value="featured">⭐ Featured</option>
-                      <option value="seasonal">🌸 Seasonal</option>
+                      {assignableSections.map((section) => (
+                        <option key={section.id} value={section.key}>
+                          {section.name}
+                        </option>
+                      ))}
+                      {selectedDisplaySection &&
+                        !assignableSections.some(
+                          (section) => section.key === selectedDisplaySection,
+                        ) && (
+                          <option value={selectedDisplaySection}>
+                            {hiddenSectionName ?? selectedDisplaySection} (hidden)
+                          </option>
+                        )}
                     </select>
-                    <p className="text-[11px] text-gray-400 mt-1">Where this product appears on the home page.</p>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Where this product appears on the home page. Hidden sections keep existing
+                      assignments but are not offered for new ones.
+                    </p>
                   </div>
                 </div>
 

@@ -111,7 +111,7 @@ async def upload_product_image(
     _admin=Depends(require_admin),
 ):
     """Upload a product image.
-    
+
     Returns both the relative storage key and the resolved full URL.
     The key should be stored in the database; the URL is for display only.
     """
@@ -153,16 +153,16 @@ async def get_product_raw(
     _admin=Depends(require_admin),
 ):
     """Return product raw data for admin editing.
-    
+
     Returns relative image keys exactly as stored in DB, not resolved URLs.
     Used by admin edit form to seed state without URL→key round-trip.
-    
+
     ⚠️ Keep field list in sync with Product model when schema changes.
     """
     product = await product_service.get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
     # Explicit dict to avoid SQLAlchemy __dict__ leakage and datetime encoding issues
     return {
         "id": product.id,
@@ -179,6 +179,7 @@ async def get_product_raw(
         "how_to_guide": product.how_to_guide,
         "sunlight": product.sunlight,
         "watering": product.watering,
+        "display_section": product.display_section,
         "is_active": product.is_active,
         "variants": product.variants,  # raw dict with relative keys in image fields
         "promise_banner_image": product.promise_banner_image,  # raw relative key
@@ -197,7 +198,7 @@ async def admin_get_all_products(
     limit: Annotated[int, Query(ge=1, le=5000)] = 1000,
 ):
     """Admin endpoint to fetch all products without pagination limit.
-    
+
     Used by admin panels that need to show full product lists for selection.
     """
     items, total, pages = await product_service.list_products(
@@ -205,7 +206,7 @@ async def admin_get_all_products(
         page=1,
         limit=limit,
     )
-    
+
     return ProductListResponse(
         items=[ProductResponse.model_validate(p) for p in items],
         total=total,
@@ -221,7 +222,7 @@ async def get_products_by_ids(
     db: AsyncSession = Depends(get_db),
 ):
     """Fetch multiple products by comma-separated IDs (public endpoint).
-    
+
     Used by the product detail page to render admin-curated 'You May Also Like' products.
     Only returns active products; missing/inactive IDs are silently omitted.
     """
@@ -267,6 +268,7 @@ async def create_product(
     stock_qty: Annotated[int, Form()] = 0,
     tags: Annotated[str, Form()] = "[]",
     care_tips: Annotated[str, Form()] = "[]",
+    display_section: Annotated[str | None, Form()] = None,
     how_to_guide: Annotated[str | None, Form()] = None,
     sunlight: Annotated[str | None, Form()] = None,
     watering: Annotated[str | None, Form()] = None,
@@ -316,6 +318,7 @@ async def create_product(
         category_id=category_id,
         tags=json.loads(tags),
         care_tips=json.loads(care_tips),
+        display_section=display_section or None,
         how_to_guide=how_to_guide,
         sunlight=sunlight,
         watering=watering,

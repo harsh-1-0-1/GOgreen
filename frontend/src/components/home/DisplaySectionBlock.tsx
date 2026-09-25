@@ -5,9 +5,10 @@ import { useProducts } from '@/hooks/useProducts';
 import { useCartStore } from '@/store/cartStore';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
 import { getApiErrorDetail } from '@/lib/apiError';
-import type { Product } from '@/types';
+import type { DisplaySection, Product } from '@/types';
 
 const SECONDARY = '#16A34A';
+const LIMIT = 8;
 
 function ProductTile({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
@@ -19,8 +20,7 @@ function ProductTile({ product }: { product: Product }) {
   const discount =
     product.original_price && product.original_price > product.price
       ? Math.round(
-          ((product.original_price - product.price) / product.original_price) *
-            100,
+          ((product.original_price - product.price) / product.original_price) * 100,
         )
       : null;
 
@@ -56,7 +56,7 @@ function ProductTile({ product }: { product: Product }) {
           <div className="w-full h-full bg-gray-100" />
         )}
         {discount !== null && discount > 0 && (
-          <span className="absolute top-0 left-0 bg-[#1B4332] text-white text-[9px] sm:text-[10px] font-bold px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-br-xl shadow-sm whitespace-nowrap leading-none flex items-center justify-center z-10">
+          <span className="absolute top-0 left-0 bg-[#1B4332] text-white text-[9px] sm:text-[10px] font-bold px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-br-xl shadow-sm whitespace-nowrap leading-none flex items-center justify-center z-10">
             {discount}% OFF
           </span>
         )}
@@ -74,7 +74,9 @@ function ProductTile({ product }: { product: Product }) {
             className="text-base sm:text-lg font-semibold"
             style={{ color: SECONDARY }}
           >
-            {hasVariants && <span className="text-xs font-normal text-gray-500 mr-0.5">from</span>}
+            {hasVariants && (
+              <span className="text-xs font-normal text-gray-500 mr-0.5">from</span>
+            )}
             ₹{product.price}
           </span>
           {product.original_price &&
@@ -108,7 +110,7 @@ function ProductTile({ product }: { product: Product }) {
   );
 }
 
-function GridSkeleton({ count = 8 }: { count?: number }) {
+function GridSkeleton({ count = LIMIT }: { count?: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
@@ -117,10 +119,10 @@ function GridSkeleton({ count = 8 }: { count?: number }) {
           className="flex flex-col bg-white rounded-2xl border border-gray-100 overflow-hidden"
         >
           <div className="aspect-square bg-gray-100 animate-pulse" />
-          <div className="px-3 sm:px-4 pt-3 pb-3 sm:pb-4 space-y-2">
+          <div className="px-3 sm:px-4 py-3 sm:py-4 space-y-2">
             <div className="h-4 w-3/4 bg-gray-100 rounded animate-pulse" />
             <div className="h-4 w-1/3 bg-gray-100 rounded animate-pulse" />
-            <div className="h-9 w-full bg-gray-100 rounded-lg animate-pulse mt-2" />
+            <div className="h-9 w-full bg-gray-100 rounded-lg animate-pulse" />
           </div>
         </div>
       ))}
@@ -128,38 +130,29 @@ function GridSkeleton({ count = 8 }: { count?: number }) {
   );
 }
 
-export default function ExoticFindsGrid({
-  title = 'Exotic Finds',
-  subtitle,
-  limit = 8,
-}: {
-  title?: string;
-  subtitle?: string;
-  limit?: number;
-}) {
-  const { data, isLoading } = useProducts({ tags: 'exotic', limit, display_section: 'featured' });
+export default function DisplaySectionBlock({ section }: { section: DisplaySection }) {
+  const { data, isLoading } = useProducts({
+    display_section: section.key,
+    limit: LIMIT,
+  });
   const products = data?.items ?? [];
 
   if (!isLoading && products.length === 0) return null;
+
+  const viewAllHref = `/products?display_section=${encodeURIComponent(section.key)}&collection_title=${encodeURIComponent(section.name)}`;
 
   return (
     <section className="w-full py-8 sm:py-10 bg-white">
       <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 max-w-7xl">
         <div className="mb-5 sm:mb-6">
-          <h2
-            className="text-xl sm:text-2xl lg:text-3xl font-bold"
-            style={{ color: '#000000' }}
-          >
-            {title}
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-black">
+            {section.name}
           </h2>
-          {subtitle && (
-            <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
-          )}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
           {isLoading ? (
-            <GridSkeleton count={limit} />
+            <GridSkeleton />
           ) : (
             products.map((p) => <ProductTile key={p.id} product={p} />)
           )}
@@ -167,13 +160,17 @@ export default function ExoticFindsGrid({
 
         <div className="mt-8 flex justify-center">
           <Link
-            to={`/products?tags=exotic&display_section=featured&collection_title=${encodeURIComponent(title)}`}
+            to={viewAllHref}
             className="px-6 py-2.5 rounded-lg text-sm font-semibold border-2 transition-colors hover:text-white"
             style={{ borderColor: SECONDARY, color: SECONDARY }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = SECONDARY;
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+            }}
           >
-            View all {title} →
+            View all {section.name} →
           </Link>
         </div>
       </div>

@@ -156,7 +156,7 @@ class ProductResponse(BaseModel):
     how_to_guide: str | None
     sunlight: str | None
     watering: str | None
-    display_section: str | None
+    display_section: str | None = None
     is_active: bool
     created_at: datetime
     variants: dict | None = None

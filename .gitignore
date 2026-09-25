@@ -27,7 +27,6 @@ backend/docker-compose.dev.yml
 backend/static/
 
 # Internal docs / plans
-plan-docs/
 plan_docs/
 BUG_POT_COLOR_CROSSFILTER.md
 CDN_OPTIMIZATION_GUIDE.md
