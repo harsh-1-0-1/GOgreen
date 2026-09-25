@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode, RefObject } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { BadgePercent, Banknote, ChevronDown, ChevronUp, CreditCard, LockKeyhole, PackageCheck, ShieldCheck, Sprout, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
@@ -10,7 +10,6 @@ import { useCreateAddress } from '@/hooks/useAddresses';
 import { useValidateCoupon } from '@/hooks/useCoupons';
 import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
-import { LOGO_PATH } from '@/lib/branding';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
 import { getApiErrorDetail } from '@/lib/apiError';
 
@@ -466,16 +465,6 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-white text-gray-950">
-      <header className="border-b border-gray-200 bg-white px-4 py-4 text-center lg:py-5">
-        <Link to="/" className="inline-block">
-          <img
-            src={LOGO_PATH}
-            alt="Plantoga"
-            className="mx-auto object-contain h-[76px] sm:h-[88px] lg:h-[96px] w-auto"
-          />
-        </Link>
-      </header>
-
       <OrderSummary items={items} subtotal={subtotal} shipping={shipping} discount={discount} total={total} mobileOpen={summaryOpen} setMobileOpen={setSummaryOpen} couponProps={couponProps} />
 
       <main className="mx-auto grid max-w-5xl lg:grid-cols-[minmax(0,1fr)_400px]">

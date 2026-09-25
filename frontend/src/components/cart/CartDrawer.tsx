@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
+import { ArrowRight, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -180,11 +180,11 @@ export default function CartDrawer() {
               <span className="font-bold text-lg">₹{total.toFixed(2)}</span>
             </div>
             <Link
-              to="/cart"
+              to="/checkout"
               onClick={closeDrawer}
-              className="block w-full text-center py-3 bg-primary text-white rounded-xl font-medium hover:bg-primary/90 transition"
+              className="block w-full text-center py-3 bg-primary text-white rounded-xl font-semibold hover:bg-primary/90 transition"
             >
-              View Cart & Checkout
+              Proceed to Checkout <ArrowRight size={18} className="inline ml-1" />
             </Link>
           </div>
         )}
