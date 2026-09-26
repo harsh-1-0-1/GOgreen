@@ -33,16 +33,23 @@ class BannerUpdate(BannerBase):
     title: Optional[str] = Field(None, max_length=100)
     placement: Optional[str] = None
     image_url_manual: Optional[str] = Field(None, max_length=512)
+    image_url_web_manual: Optional[str] = Field(None, max_length=512)
 
 
 class BannerOut(BannerBase):
     id: int
     image_url: Optional[str] = None
+    image_url_web: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
     @field_serializer("image_url")
     def serialize_image_url(self, val: Optional[str]) -> Optional[str]:
+        from app.utils.image_upload import resolve_image_url
+        return resolve_image_url(val)
+
+    @field_serializer("image_url_web")
+    def serialize_image_url_web(self, val: Optional[str]) -> Optional[str]:
         from app.utils.image_upload import resolve_image_url
         return resolve_image_url(val)
 

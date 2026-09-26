@@ -2,7 +2,7 @@ import hashlib
 import math
 import re
 
-from sqlalchemy import Select, cast, func, or_, select  # func used in list_products count queries
+from sqlalchemy import Select, cast, exists, func, or_, select  # func used in list_products count queries
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -115,10 +115,49 @@ def make_list_cache_key(
     return f"products:{h}"
 
 
+def _tag_match_key(value: str) -> str:
+    """Normalised form used to compare a tag label with a filter value.
+
+    Products store the label as typed (`"Vastu friendly"`), the storefront links
+    with the slug (`vastu-friendly`) and older data may use either, so dashes
+    and whitespace are treated as the same separator and case is ignored. This
+    is mirrored by `_tag_key_expr` so the SQL and Python sides cannot drift.
+    """
+    return re.sub(r"\s+", " ", value.replace("-", " ")).strip().lower()
+
+
+def _tag_key_expr(column):
+    """SQL equivalent of `_tag_match_key`, valid on both Postgres and SQLite."""
+    expr = func.replace(column, "-", " ")
+    for _ in range(3):  # collapse runs of whitespace
+        expr = func.replace(expr, "  ", " ")
+    return func.lower(func.trim(expr, " "))
+
+
 def _tag_filter(db: AsyncSession, tag: str):
+    """Match products whose `tags` array holds this tag.
+
+    Comparing the raw JSON element missed every label containing a space, so a
+    sidebar filter built from slugs silently returned nothing for tags like
+    `Vastu friendly`. Comparing normalised forms keeps `vastu-friendly`,
+    `Vastu friendly` and `vastu friendly` equivalent without letting the short
+    `vastu` tag match `vastu friendly`.
+    """
+    target = _tag_match_key(tag)
+    if not target:
+        return Product.id.is_(None)  # matches nothing
+
     if db.bind and db.bind.dialect.name == "postgresql":
-        return cast(Product.tags, JSONB).contains([tag])
-    return Product.tags.contains(tag)
+        elements = func.jsonb_array_elements_text(
+            cast(Product.tags, JSONB)
+        ).table_valued("value")
+    else:
+        # SQLite has no jsonb_array_elements_text; json_each is the equivalent.
+        elements = func.json_each(Product.tags).table_valued("value")
+
+    return exists(
+        select(1).select_from(elements).where(_tag_key_expr(elements.c.value) == target)
+    )
 
 
 async def list_products(

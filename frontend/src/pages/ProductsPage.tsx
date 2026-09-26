@@ -5,7 +5,10 @@ import { useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useBanners } from '@/hooks/useBanners';
 import ProductCard from '@/components/product/ProductCard';
-import { getTagStyle } from '@/components/product/productTagBadges.utils';
+import ResponsiveBannerImage from '@/components/banner/ResponsiveBannerImage';
+import { getTagStyle, getReadableTextColor, shadeColor } from '@/components/product/productTagBadges.utils';
+import { toTagKey } from '@/lib/tagKey';
+import { useTags } from '@/hooks/useTags';
 import SkeletonCard from '@/components/ui/SkeletonCard';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -111,47 +114,18 @@ function TrendingPromoBanner({
         style={{ transform: `translateX(-${current * 100}%)` }}
       >
         {slides.map((slide, slideIndex) => {
-          const sideImages = images
-            .filter((src) => src && src !== slide.image_url)
-            .slice(0, 3);
-
-          const slideContent = (
-            <>
-              <img
-                src={slide.image_url || images[0] || undefined}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                loading={slideIndex === 0 ? 'eager' : 'lazy'}
-              />
-              {sideImages.map((src, index) => (
-                <img
-                  key={`${src}-${index}`}
-                  src={src}
-                  alt=""
-                  className={[
-                    'absolute hidden rounded-xl border-4 border-white/85 object-cover shadow-xl sm:block',
-                    index === 0 && 'right-[9%] top-[14%] h-[34%] w-[22%] rotate-3',
-                    index === 1 && 'right-[23%] bottom-[12%] h-[30%] w-[18%] -rotate-2',
-                    index === 2 && 'right-[4%] bottom-[18%] h-[25%] w-[16%] rotate-6',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  loading="lazy"
-                />
-              ))}
-
-              {slide.subtitle && (
-                <div className="absolute right-7 top-10 grid h-24 w-24 rotate-[-10deg] place-items-center rounded-full bg-[#ffeb3b] text-center text-primary shadow-lg [clip-path:polygon(50%_0%,59%_12%,73%_6%,78%_21%,94%_22%,88%_38%,100%_50%,88%_62%,94%_78%,78%_79%,73%_94%,59%_88%,50%_100%,41%_88%,27%_94%,22%_79%,6%_78%,12%_62%,0%_50%,12%_38%,6%_22%,22%_21%,27%_6%,41%_12%)] sm:right-12 sm:top-12 sm:h-32 sm:w-32">
-                </div>
-              )}
-            </>
-          );
-
           const slideClass =
             'relative h-full w-full shrink-0 overflow-hidden block';
           const slideStyle = {
             backgroundColor: slide.bg_color || '#e9dfc9',
           };
+
+          const slideImage = (
+            <ResponsiveBannerImage
+              banner={{ ...slide, image_url: slide.image_url || images[0] }}
+              loading={slideIndex === 0 ? 'eager' : 'lazy'}
+            />
+          );
 
           return slide.cta_link ? (
             <Link
@@ -160,7 +134,7 @@ function TrendingPromoBanner({
               className={slideClass}
               style={slideStyle}
             >
-              {slideContent}
+              {slideImage}
             </Link>
           ) : (
             <div
@@ -168,7 +142,7 @@ function TrendingPromoBanner({
               className={slideClass}
               style={slideStyle}
             >
-              {slideContent}
+              {slideImage}
             </div>
           );
         })}
@@ -214,7 +188,11 @@ function FiltersSidebar({
 }) {
   const { data: categories } = useCategories();
   const allCategories = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
-  const popularTags = [
+  // Drive the filter from the admin-defined tags so newly created tags (and
+  // their colours) show up here. The hardcoded list is only a fallback for an
+  // install with no tags configured yet.
+  const { data: savedTags = [] } = useTags();
+  const legacyTags = [
     'indoor',
     'outdoor',
     'flowering',
@@ -224,6 +202,20 @@ function FiltersSidebar({
     'beginner-friendly',
     'vastu-friendly',
   ];
+  const tagOptions =
+    savedTags.length > 0
+      ? savedTags
+          .filter((t) => t.is_active)
+          .map((t) => ({
+            key: toTagKey(t.name),
+            label: t.name,
+            color: t.color || null,
+          }))
+          .filter((t) => t.key)
+      : legacyTags.map((t) => ({ key: t, label: formatSlugTitle(t), color: null }));
+  // A tag can be selected via its slug (from a badge link) or its label (from
+  // this list), so compare on the normalised key.
+  const selectedTagKeys = new Set(selectedTags.map(toTagKey));
 
   return (
     <div className="space-y-6">
@@ -264,25 +256,36 @@ function FiltersSidebar({
       <div>
         <h4 className="font-semibold text-sm mb-3">Tags</h4>
         <div className="flex flex-wrap gap-2">
-          {popularTags.map((tag) => {
-            const isSelected = selectedTags.includes(tag);
-            const style = getTagStyle(tag);
-            const label = tag.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          {tagOptions.map((tag) => {
+            const isSelected = selectedTagKeys.has(tag.key);
+            // Admin colour wins; fall back to the legacy palette, then to grey.
+            const style = tag.color
+              ? {
+                  backgroundColor: tag.color,
+                  color: getReadableTextColor(tag.color),
+                  borderColor: shadeColor(tag.color, -0.18),
+                }
+              : {
+                  backgroundColor: getTagStyle(tag.key).bg,
+                  color: getTagStyle(tag.key).text,
+                  borderColor: getTagStyle(tag.key).border,
+                };
             return (
               <button
-                key={tag}
-                onClick={() => onTagToggle(tag)}
-                className="px-3 py-1.5 text-xs rounded-full border transition-all touch-target font-medium"
-                style={isSelected ? {
-                  backgroundColor: style.bg,
-                  color: style.text,
-                  borderColor: style.border,
-                } : undefined}
+                key={tag.key}
+                onClick={() => onTagToggle(tag.key)}
+                className={`px-3 py-1.5 text-xs rounded-full border transition-all touch-target font-medium ${
+                  isSelected ? '' : 'text-gray-600 border-gray-200 hover:border-gray-300'
+                }`}
+                style={isSelected ? style : undefined}
               >
-                {label}
+                {tag.label}
               </button>
             );
           })}
+          {tagOptions.length === 0 && (
+            <p className="text-xs text-gray-400">No tags yet.</p>
+          )}
         </div>
       </div>
     </div>

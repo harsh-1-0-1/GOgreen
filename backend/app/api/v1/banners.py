@@ -27,6 +27,9 @@ class CropRequest(BaseModel):
     y: int
     width: int
     height: int
+    # "mobile" (default) targets the banner's `image_url`; "web" targets the
+    # separate wide `image_url_web` used from the `sm` breakpoint up.
+    variant: str = "mobile"
 
 
 async def _invalidate_banner_cache(placement: str, target_path: str | None = None) -> None:
@@ -121,7 +124,7 @@ async def get_banner_config(_admin=Depends(require_admin)):
     return {"cloudinary_enabled": False}
 
 
-def _crop_and_upload_sync(banner_id: int, old_key: str, x: int, y: int, width: int, height: int) -> str:
+def _crop_and_upload_sync(banner_id: int, old_key: str, x: int, y: int, width: int, height: int, variant: str = "mobile") -> str:
     """
     Synchronous function that:
     1. Downloads image from S3
@@ -196,8 +199,9 @@ def _crop_and_upload_sync(banner_id: int, old_key: str, x: int, y: int, width: i
         output_buffer.seek(0)
         cropped_bytes = output_buffer.read()
         
-        # Generate new key for cropped image
-        new_key = generate_image_key("banners", banner_id, f"cropped{original_ext}")
+        # Generate new key for cropped image (suffix keeps web/mobile apart)
+        suffix = "cropped-web" if variant == "web" else "cropped"
+        new_key = generate_image_key("banners", banner_id, f"{suffix}{original_ext}")
         
         # Upload cropped image
         if is_prod and bucket:
@@ -241,15 +245,26 @@ async def crop_banner_image(
     Accepts crop coordinates from the frontend, downloads the original image from S3,
     crops it with Pillow, uploads the cropped version, and updates the banner record.
     
+    `crop.variant` picks which image is cropped: "mobile" (the default) edits
+    `image_url`, "web" edits the separate wide `image_url_web`.
+    
     This avoids CORS issues with client-side canvas cropping.
     """
     banner = await db.get(Banner, banner_id)
     if not banner:
         raise HTTPException(404, "Banner not found")
-    
-    old_key = banner.image_public_id or banner.image_url
+
+    if crop.variant not in {"mobile", "web"}:
+        raise HTTPException(400, "variant must be 'mobile' or 'web'")
+
+    is_web = crop.variant == "web"
+    old_key = (
+        (banner.image_public_id_web or banner.image_url_web)
+        if is_web
+        else (banner.image_public_id or banner.image_url)
+    )
     if not old_key:
-        raise HTTPException(400, "Banner has no image to crop")
+        raise HTTPException(400, f"Banner has no {crop.variant} image to crop")
     
     # Validate crop coordinates
     if crop.width <= 0 or crop.height <= 0:
@@ -265,11 +280,16 @@ async def crop_banner_image(
             crop.y,
             crop.width,
             crop.height,
+            crop.variant,
         )
         
         # Update banner with new cropped image
-        banner.image_url = new_key
-        banner.image_public_id = new_key
+        if is_web:
+            banner.image_url_web = new_key
+            banner.image_public_id_web = new_key
+        else:
+            banner.image_url = new_key
+            banner.image_public_id = new_key
         
         # Delete old image to prevent S3 orphans
         if old_key != new_key:
@@ -281,7 +301,7 @@ async def crop_banner_image(
         # Invalidate cache
         await _invalidate_banner_cache(banner.placement, banner.target_path)
         
-        logger.info(f"Banner {banner_id} image cropped successfully")
+        logger.info(f"Banner {banner_id} {crop.variant} image cropped successfully")
         return banner
         
     except ValueError as e:
@@ -338,7 +358,9 @@ async def create_banner(
     valid_from: Optional[str] = Form(None),
     valid_until: Optional[str] = Form(None),
     image_url_manual: Optional[str] = Form(None),
+    image_url_web_manual: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
+    image_web: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
@@ -356,6 +378,8 @@ async def create_banner(
         is_active=is_active,
         image_url=extract_relative_key(image_url_manual) if image_url_manual else None,
         image_public_id=None,
+        image_url_web=extract_relative_key(image_url_web_manual) if image_url_web_manual else None,
+        image_public_id_web=None,
         valid_from=datetime.fromisoformat(valid_from) if valid_from else None,
         valid_until=datetime.fromisoformat(valid_until) if valid_until else None,
     )
@@ -365,6 +389,11 @@ async def create_banner(
         key = await upload_image_file(image, folder="banners", entity_id=banner.id)
         banner.image_url = key
         banner.image_public_id = key
+        await db.flush()
+    if image_web and image_web.filename:
+        key = await upload_image_file(image_web, folder="banners", entity_id=banner.id)
+        banner.image_url_web = key
+        banner.image_public_id_web = key
         await db.flush()
     await db.refresh(banner)
     await _invalidate_banner_cache(placement, target_path)
@@ -389,7 +418,14 @@ async def update_banner(
     valid_from: Optional[str] = Form(None),
     valid_until: Optional[str] = Form(None),
     image_url_manual: Optional[str] = Form(None),
+    image_url_web_manual: Optional[str] = Form(None),
+    # Explicit removal flags. A blank `image_url_manual` cannot be used for this:
+    # python-multipart drops empty form fields, so it arrives as None and is
+    # indistinguishable from "field not sent".
+    clear_image: bool = Form(False),
+    clear_image_web: bool = Form(False),
     image: Optional[UploadFile] = File(None),
+    image_web: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
@@ -406,15 +442,37 @@ async def update_banner(
         banner.image_public_id = key
         if old_key != key:
             await delete_image_file(old_key)
+    elif clear_image or (image_url_manual is not None and image_url_manual == ""):
+        old_key = banner.image_public_id or banner.image_url
+        banner.image_url = None
+        banner.image_public_id = None
+        if old_key:
+            await delete_image_file(old_key)
     elif image_url_manual is not None:
         old_key = banner.image_public_id or banner.image_url
-        if image_url_manual == "":
-            banner.image_url = None
-            banner.image_public_id = None
-        else:
-            banner.image_url = extract_relative_key(image_url_manual)
-            banner.image_public_id = None
+        banner.image_url = extract_relative_key(image_url_manual)
+        banner.image_public_id = None
         if old_key != banner.image_url:
+            await delete_image_file(old_key)
+
+    if image_web and image_web.filename:
+        old_key = banner.image_public_id_web or banner.image_url_web
+        key = await upload_image_file(image_web, folder="banners", entity_id=banner_id)
+        banner.image_url_web = key
+        banner.image_public_id_web = key
+        if old_key != key:
+            await delete_image_file(old_key)
+    elif clear_image_web or (image_url_web_manual is not None and image_url_web_manual == ""):
+        old_key = banner.image_public_id_web or banner.image_url_web
+        banner.image_url_web = None
+        banner.image_public_id_web = None
+        if old_key:
+            await delete_image_file(old_key)
+    elif image_url_web_manual is not None:
+        old_key = banner.image_public_id_web or banner.image_url_web
+        banner.image_url_web = extract_relative_key(image_url_web_manual)
+        banner.image_public_id_web = None
+        if old_key != banner.image_url_web:
             await delete_image_file(old_key)
 
     updatable = dict(
@@ -456,7 +514,8 @@ async def delete_banner(
     banner = await db.get(Banner, banner_id)
     if not banner:
         raise HTTPException(404, "Banner not found")
-    await delete_image_file(banner.image_public_id)
+    await delete_image_file(banner.image_public_id or banner.image_url)
+    await delete_image_file(banner.image_public_id_web or banner.image_url_web)
     placement = banner.placement
     target_path = banner.target_path
     await db.delete(banner)

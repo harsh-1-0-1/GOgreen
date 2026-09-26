@@ -36,7 +36,7 @@ const PLACEMENTS = [
     key: 'hero',
     label: '🏠 Home Page Hero Banner',
     description: 'This banner appears at the very top of the homepage. It is the first thing customers see.',
-    helpText: 'Use high-quality widescreen landscape images. Recommended size: 1920x650px.',
+    helpText: 'Upload two images: a phone crop (portrait 4:5, e.g. 800×1000px) and a wide desktop crop (21:9, e.g. 1920×824px). Each has its own crop presets.',
   },
   {
     key: 'announcement',
@@ -54,7 +54,7 @@ const PLACEMENTS = [
     key: 'trending',
     label: '🔥 Trending Carousel Banner',
     description: 'Square promotional banners displayed within the "Trending Now" homepage slider.',
-    helpText: 'Required size: 600x600px (1:1 square format). Use the crop tool to ensure proper dimensions. Use vibrant colors.',
+    helpText: 'Upload two images: a phone crop (required 600×600px, 1:1 square) and a wide desktop crop (16:9, e.g. 1920×1080px). Each has its own crop presets.',
   },
   {
     key: 'themed',
@@ -165,6 +165,274 @@ const EMPTY_BANNERS: Banner[] = [];
 const inputClass =
   'w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors';
 
+// ── Banner image field (one per device variant) ─────────────────────────────
+
+export type BannerImageSlot = {
+  file: File | null;
+  preview: string | null;
+  // True only while `preview` is a local data: URL from a client-side crop.
+  // Drives whether cropping re-runs in the browser or on the server.
+  fromFile: boolean;
+  manualUrl: string;
+  urlValid: boolean | null;
+  cleared: boolean;
+  error: string;
+};
+
+const emptyImageSlot = (): BannerImageSlot => ({
+  file: null,
+  preview: null,
+  fromFile: false,
+  manualUrl: '',
+  urlValid: null,
+  cleared: false,
+  error: '',
+});
+
+export type BannerImageVariant = 'mobile' | 'web';
+
+type CropRequest = {
+  src: string;
+  useServerCrop: boolean;
+  variant: BannerImageVariant;
+};
+
+/**
+ * Upload / URL / crop control for a single banner image variant. The drawer
+ * renders this twice — once for the phone crop, once for the wide desktop crop —
+ * and owns the slot state so it can build the multipart payload.
+ */
+function BannerImageField({
+  variant,
+  title,
+  description,
+  emptyHint,
+  cropLabel,
+  isEdit,
+  existingUrl,
+  slot,
+  update,
+  onCropRequest,
+}: {
+  variant: BannerImageVariant;
+  title: string;
+  description: string;
+  emptyHint: string;
+  cropLabel: string;
+  isEdit: boolean;
+  existingUrl?: string | null;
+  slot: BannerImageSlot;
+  update: (patch: Partial<BannerImageSlot>) => void;
+  onCropRequest: (req: CropRequest) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const isWeb = variant === 'web';
+  const showExisting = !!isEdit && !!existingUrl && !slot.cleared;
+  const previewSrc = slot.preview || slot.manualUrl || (showExisting ? existingUrl : null);
+  const showPicker = !showExisting;
+
+  function handleFileSelect(file: File) {
+    if (file.size > 5 * 1024 * 1024) {
+      update({ error: 'File exceeds 5 MB limit' });
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      update({ error: 'Only JPG, PNG, or WebP files accepted' });
+      return;
+    }
+    // Hand the local file to the cropper; nothing is uploaded until Save.
+    const reader = new FileReader();
+    reader.onload = (e) =>
+      onCropRequest({ src: e.target?.result as string, useServerCrop: false, variant });
+    reader.readAsDataURL(file);
+  }
+
+  function validateUrl() {
+    if (!slot.manualUrl) {
+      update({ urlValid: null });
+      return;
+    }
+    const img = new window.Image();
+    img.onload = () => update({ urlValid: true });
+    img.onerror = () => update({ urlValid: false });
+    img.src = slot.manualUrl;
+  }
+
+  function requestCrop(src: string, useServerCrop: boolean) {
+    onCropRequest({ src, useServerCrop, variant });
+  }
+
+  const replaceExisting = () =>
+    update({ cleared: true, file: null, preview: null, fromFile: false, manualUrl: '' });
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span
+          className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
+            isWeb ? 'bg-sky-100 text-sky-700' : 'bg-violet-100 text-violet-700'
+          }`}
+        >
+          {isWeb ? 'Web' : 'Mobile'}
+        </span>
+        <p className="text-xs font-semibold text-gray-700">{title}</p>
+      </div>
+      <p className="text-[11px] text-gray-500">{description}</p>
+
+      {showExisting && (
+        <div className="relative rounded-lg overflow-hidden border group">
+          <img
+            src={previewSrc || existingUrl || ''}
+            alt={`Current ${variant} banner`}
+            className={`w-full object-cover ${isWeb ? 'h-28' : 'h-32'}`}
+          />
+          <div className="hidden sm:flex absolute inset-0 bg-black/40 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-2">
+            <button
+              type="button"
+              onClick={replaceExisting}
+              className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold hover:bg-red-700 transition"
+            >
+              Replace
+            </button>
+            <button
+              type="button"
+              onClick={() => requestCrop(existingUrl as string, true)}
+              className="px-3 py-1.5 bg-primary text-white rounded text-xs font-semibold hover:bg-primary/95 transition flex items-center gap-1"
+            >
+              <Crop size={14} /> Crop
+            </button>
+          </div>
+          <div className="sm:hidden absolute bottom-2 left-2 right-2 flex gap-2">
+            <button
+              type="button"
+              onClick={replaceExisting}
+              className="flex-1 px-3 py-1.5 bg-red-600/90 backdrop-blur-sm text-white rounded text-xs font-semibold active:bg-red-700 transition shadow-lg"
+            >
+              Replace
+            </button>
+            <button
+              type="button"
+              onClick={() => requestCrop(existingUrl as string, true)}
+              className="flex-1 px-3 py-1.5 bg-primary/90 backdrop-blur-sm text-white rounded text-xs font-semibold active:bg-primary transition flex items-center justify-center gap-1 shadow-lg"
+            >
+              <Crop size={14} /> Crop
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showPicker && (
+        <>
+          <div className="flex gap-4 text-xs font-semibold text-gray-600">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name={`imageMode-${variant}`}
+                checked={!slot.manualUrl}
+                onChange={() => update({ manualUrl: '', urlValid: null })}
+              />
+              Upload File
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name={`imageMode-${variant}`}
+                checked={!!slot.manualUrl}
+                onChange={() => update({ file: null, preview: null, fromFile: false })}
+              />
+              Use Web URL
+            </label>
+          </div>
+
+          {!slot.manualUrl ? (
+            <div>
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+              >
+                {slot.preview ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative w-full group">
+                      <img
+                        src={slot.preview}
+                        alt="Preview"
+                        className="max-h-32 mx-auto object-contain rounded"
+                      />
+                      <div className="hidden sm:flex absolute inset-0 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            requestCrop(slot.preview as string, !slot.fromFile);
+                          }}
+                          className="px-4 py-2 bg-primary/90 backdrop-blur-sm text-white rounded-lg hover:bg-primary transition flex items-center gap-1.5 text-xs font-semibold shadow-lg"
+                        >
+                          <Crop size={14} /> Edit Crop
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        requestCrop(slot.preview as string, !slot.fromFile);
+                      }}
+                      className="px-4 py-2 bg-primary text-white rounded-lg active:bg-primary/90 transition shadow-md text-xs font-semibold flex items-center gap-1"
+                    >
+                      <Crop size={14} /> {cropLabel}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-gray-400">
+                    <ImageIcon size={28} className="mx-auto mb-2" />
+                    <p className="text-xs font-semibold text-gray-700">
+                      Upload {isWeb ? 'Web' : 'Mobile'} Image
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{emptyHint}</p>
+                  </div>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileSelect(file);
+                  e.target.value = '';
+                }}
+              />
+              {slot.error && <p className="text-xs text-red-500 mt-1">{slot.error}</p>}
+            </div>
+          ) : (
+            <div>
+              <input
+                type="url"
+                value={slot.manualUrl}
+                onChange={(e) => update({ manualUrl: e.target.value, urlValid: null })}
+                onBlur={validateUrl}
+                placeholder="e.g. https://images.unsplash.com/..."
+                className={inputClass}
+              />
+              {slot.urlValid === true && (
+                <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                  <CheckCircle size={12} /> Image URL loaded successfully
+                </p>
+              )}
+              {slot.urlValid === false && (
+                <p className="text-xs text-red-500 mt-1">
+                  Could not verify image. Double check the address.
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Sortable row ───────────────────────────────────────────────────────────
 
 function SortableBannerRow({
@@ -184,6 +452,12 @@ function SortableBannerRow({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: banner.id });
+
+  const rowThumbnail =
+    (banner.placement === 'hero' || banner.placement === 'trending') &&
+    banner.image_url_web
+      ? banner.image_url_web
+      : null;
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -205,15 +479,23 @@ function SortableBannerRow({
         <GripVertical size={18} />
       </button>
 
-      {banner.image_url ? (
-        <img
-          src={banner.image_url}
-          alt=""
-          className="w-16 h-10 object-cover rounded-lg shrink-0 bg-gray-50 border border-gray-100"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none';
-          }}
-        />
+      {/* Admin runs on desktop, so carousels show their web crop here when set. */}
+      {(rowThumbnail || banner.image_url) ? (
+        <div className="relative shrink-0">
+          <img
+            src={rowThumbnail || banner.image_url}
+            alt=""
+            className="w-16 h-10 object-cover rounded-lg bg-gray-50 border border-gray-100"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+          {rowThumbnail && (
+            <span className="absolute -bottom-1 -right-1 px-1 rounded bg-sky-600 text-[8px] font-bold text-white leading-tight">
+              WEB
+            </span>
+          )}
+        </div>
       ) : (
         <div className="w-16 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 border border-gray-100">
           <ImageIcon size={16} className="text-gray-300" />
@@ -546,19 +828,15 @@ function BannerDrawer({
   const categoryOptions = flattenCategoryOptions(categories);
 
   const [submitting, setSubmitting] = useState(false);
-  const [imageMode, setImageMode] = useState<'upload' | 'url'>('upload');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string | null>(null);
-  const [manualUrl, setManualUrl] = useState('');
-  const [urlValid, setUrlValid] = useState<boolean | null>(null);
-  const [imageCleared, setImageCleared] = useState(false);
-  const [fileError, setFileError] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Phone crop (`image_url`) and the optional wide desktop crop (`image_url_web`).
+  const [mobileImage, setMobileImage] = useState<BannerImageSlot>(emptyImageSlot);
+  const [webImage, setWebImage] = useState<BannerImageSlot>(emptyImageSlot);
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   // Every crop-modal trigger must set this explicitly so local previews use
   // client-side cropping and persisted banner images use the server crop API.
   const [useServerCrop, setUseServerCrop] = useState(false);
+  const [cropVariant, setCropVariant] = useState<BannerImageVariant>('mobile');
 
   // react-hook-form's `watch()` is a React-Compiler-incompatible library (cannot be
   // memoized safely); the live banner preview needs its reactive values, so the
@@ -582,61 +860,79 @@ function BannerDrawer({
     return PLACEMENTS.find((p) => p.key === watchedPlacement) || PLACEMENTS[0];
   }, [watchedPlacement]);
 
-  const previewImageSrc = useMemo(() => {
-    if (filePreview) return filePreview;
-    if (manualUrl) return manualUrl;
-    if (!imageCleared && banner?.image_url) return banner.image_url;
+  const slotPreview = (slot: BannerImageSlot, existingUrl?: string | null) => {
+    if (slot.preview) return slot.preview;
+    if (slot.manualUrl) return slot.manualUrl;
+    if (!slot.cleared && existingUrl) return existingUrl;
     return null;
-  }, [filePreview, manualUrl, imageCleared, banner?.image_url]);
+  };
 
-  function handleFileSelect(file: File) {
-    setFileError('');
-    if (file.size > 5 * 1024 * 1024) {
-      setFileError('File exceeds 5 MB limit');
-      return;
-    }
-    if (
-      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
-    ) {
-      setFileError('Only JPG, PNG, or WebP files accepted');
-      return;
-    }
-    // Open crop modal for local file - always client-side
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setCropImageSrc(e.target?.result as string);
-      setUseServerCrop(false);  // Local file, not on server yet
-      setCropModalOpen(true);
-    };
-    reader.readAsDataURL(file);
+  const previewImageSrc = useMemo(
+    () => slotPreview(mobileImage, banner?.image_url),
+    [mobileImage, banner?.image_url]
+  );
+
+  const webPreviewImageSrc = useMemo(
+    () => slotPreview(webImage, banner?.image_url_web),
+    [webImage, banner?.image_url_web]
+  );
+
+  // `hero` and `trending` are the two carousels, and the only placements wide
+  // enough on desktop for a phone crop to look wrong — so they get the extra
+  // web image slot.
+  const supportsWebImage = watchedPlacement === 'hero' || watchedPlacement === 'trending';
+
+  function requestCrop({ src, useServerCrop: server, variant }: CropRequest) {
+    setCropImageSrc(src);
+    setUseServerCrop(server);
+    setCropVariant(variant);
+    setCropModalOpen(true);
+  }
+
+  function applyCropToSlot(
+    variant: BannerImageVariant,
+    patch: Partial<BannerImageSlot>
+  ) {
+    const setter = variant === 'web' ? setWebImage : setMobileImage;
+    setter((s) => ({ ...s, ...patch }));
   }
 
   function handleCropComplete(croppedFile: File, preview: string) {
-    // Client-side crop for new banners: store file for upload
-    setSelectedFile(croppedFile);
-    setFilePreview(preview);
-    setImageCleared(false);
+    // Client-side crop for a not-yet-uploaded file: keep it for the payload.
+    applyCropToSlot(cropVariant, {
+      file: croppedFile,
+      preview,
+      fromFile: true,
+      cleared: false,
+      error: '',
+    });
   }
 
-  function handleServerCropComplete(newImageUrl: string) {
-    // Server-side crop for existing banners: already persisted, just update preview
-    setFilePreview(newImageUrl);
-    // Don't set selectedFile, manualUrl, or imageMode - no form field should re-submit the image
-    // The crop is already complete; if user clicks Save, it's for other field edits only
-    
-    // Trigger list refetch for immediate UI update
+  function handleServerCropComplete(
+    newImageUrl: string,
+    variant: BannerImageVariant
+  ) {
+    // Server-side crop is already persisted — only refresh the preview and
+    // refetch the list. Deliberately does not set `file`/`manualUrl`, so
+    // pressing Save afterwards submits nothing for this image.
+    applyCropToSlot(variant, { preview: newImageUrl, fromFile: false, error: '' });
     onSaved();
   }
 
-  function handleUrlBlur() {
-    if (!manualUrl) {
-      setUrlValid(null);
-      return;
+  function appendImageFields(
+    fd: FormData,
+    opts: { fileField: string; urlField: string; clearField: string; slot: BannerImageSlot }
+  ) {
+    const { fileField, urlField, clearField, slot } = opts;
+    if (slot.file) {
+      fd.append(fileField, slot.file);
+    } else if (slot.manualUrl) {
+      fd.append(urlField, slot.manualUrl);
+    } else if (slot.cleared) {
+      // An empty `urlField` value cannot express "remove this" — the multipart
+      // parser drops blank fields, so it would arrive as absent. Send the flag.
+      fd.append(clearField, 'true');
     }
-    const img = new window.Image();
-    img.onload = () => setUrlValid(true);
-    img.onerror = () => setUrlValid(false);
-    img.src = manualUrl;
   }
 
   async function onSubmit(data: BannerFormData) {
@@ -657,12 +953,19 @@ function BannerDrawer({
       if (data.valid_from) fd.append('valid_from', data.valid_from);
       if (data.valid_until) fd.append('valid_until', data.valid_until);
 
-      if (selectedFile) {
-        fd.append('image', selectedFile);
-      } else if (imageMode === 'url' && manualUrl) {
-        fd.append('image_url_manual', manualUrl);
-      } else if (imageCleared) {
-        fd.append('image_url_manual', '');
+      appendImageFields(fd, {
+        fileField: 'image',
+        urlField: 'image_url_manual',
+        clearField: 'clear_image',
+        slot: mobileImage,
+      });
+      if (supportsWebImage) {
+        appendImageFields(fd, {
+          fileField: 'image_web',
+          urlField: 'image_url_web_manual',
+          clearField: 'clear_image_web',
+          slot: webImage,
+        });
       }
 
       if (isEdit) {
@@ -980,7 +1283,7 @@ function BannerDrawer({
                         Trending banners require square images (1:1 ratio)
                       </p>
                       <p className="text-[11px] text-blue-700">
-                        Upload any image, then use the <strong>Crop</strong> button to adjust it to 600×600px. The preview below shows exactly how it will appear.
+                        Upload any image, then use the <strong>Crop</strong> button to adjust it to 600×600px. This applies to the mobile image — the optional web image below uses its own wide presets. The preview below shows exactly how it will appear.
                       </p>
                     </div>
                   </div>
@@ -1004,216 +1307,62 @@ function BannerDrawer({
                 </div>
               )}
 
-              {isEdit && banner?.image_url && !imageCleared && (
-                <div className="relative rounded-lg overflow-hidden border group">
-                  <img
-                    src={previewImageSrc || banner.image_url}
-                    alt="Current banner"
-                    className="w-full h-32 object-cover"
-                  />
-                  {/* Desktop hover overlay */}
-                  <div className="hidden sm:flex absolute inset-0 bg-black/40 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setImageCleared(true);
-                        setSelectedFile(null);
-                        setFilePreview(null);
-                      }}
-                      className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold hover:bg-red-700 transition"
-                    >
-                      Replace Image
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (banner?.image_url) {
-                          setCropImageSrc(banner.image_url);
-                          setUseServerCrop(true);  // Existing server image
-                          setCropModalOpen(true);
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-primary text-white rounded text-xs font-semibold hover:bg-primary/95 transition flex items-center gap-1"
-                    >
-                      <Crop size={14} /> Crop
-                    </button>
-                  </div>
-                  {/* Mobile always-visible buttons */}
-                  <div className="sm:hidden absolute bottom-2 left-2 right-2 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setImageCleared(true);
-                        setSelectedFile(null);
-                        setFilePreview(null);
-                      }}
-                      className="flex-1 px-3 py-1.5 bg-red-600/90 backdrop-blur-sm text-white rounded text-xs font-semibold active:bg-red-700 transition shadow-lg"
-                    >
-                      Replace
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (banner?.image_url) {
-                          setCropImageSrc(banner.image_url);
-                          setUseServerCrop(true);  // Existing server image
-                          setCropModalOpen(true);
-                        }
-                      }}
-                      className="flex-1 px-3 py-1.5 bg-primary/90 backdrop-blur-sm text-white rounded text-xs font-semibold active:bg-primary transition flex items-center justify-center gap-1 shadow-lg"
-                    >
-                      <Crop size={14} /> Crop
-                    </button>
-                  </div>
-                </div>
-              )}
+              <BannerImageField
+                variant="mobile"
+                title="Mobile Image"
+                description={
+                  supportsWebImage
+                    ? watchedPlacement === 'trending'
+                      ? 'Shown on phones, below the 640px breakpoint. Square 1:1.'
+                      : 'Shown on phones, below the 640px breakpoint. Portrait 4:5 works best.'
+                    : 'Shown on phones, below the 640px breakpoint.'
+                }
+                emptyHint={
+                  watchedPlacement === 'trending'
+                    ? "After upload, you'll crop to 600×600px"
+                    : 'Drag file or click to select'
+                }
+                cropLabel={
+                  watchedPlacement === 'trending'
+                    ? 'Crop to 600×600px (Required)'
+                    : 'Edit Crop'
+                }
+                isEdit={isEdit}
+                existingUrl={banner?.image_url}
+                slot={mobileImage}
+                update={(patch) => setMobileImage((s) => ({ ...s, ...patch }))}
+                onCropRequest={requestCrop}
+              />
 
-              {(!isEdit || imageCleared || !banner?.image_url) && (
+              {supportsWebImage && (
                 <>
-                  <div className="flex gap-4 text-xs font-semibold text-gray-600">
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="imageMode"
-                        checked={imageMode === 'upload'}
-                        onChange={() => setImageMode('upload')}
-                      />
-                      Upload File
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="imageMode"
-                        checked={imageMode === 'url'}
-                        onChange={() => setImageMode('url')}
-                      />
-                      Use Web URL
-                    </label>
+                  <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800">
+                    <Info size={14} className="shrink-0 mt-0.5 text-sky-600" />
+                    <div>
+                      <p className="font-semibold text-sky-900 mb-1">
+                        Separate web image (optional)
+                      </p>
+                      <p className="text-[11px] text-sky-700">
+                        The carousel is much wider on desktop, so a phone crop gets
+                        cut off. Upload a wide image here and it replaces the mobile
+                        one from 640px upwards. Leave it empty and the mobile image is
+                        used everywhere, as before.
+                      </p>
+                    </div>
                   </div>
 
-                  {imageMode === 'upload' ? (
-                    <div>
-                      <div
-                        onClick={() => fileInputRef.current?.click()}
-                        className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                      >
-                        {filePreview ? (
-                          <div className="flex flex-col items-center gap-3">
-                            <div className="relative w-full group">
-                              <img
-                                src={filePreview}
-                                alt="Preview"
-                                className="max-h-32 mx-auto object-contain rounded"
-                              />
-                              {/* Desktop hover crop button */}
-                              <div className="hidden sm:flex absolute inset-0 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setCropImageSrc(filePreview);
-                                    setUseServerCrop(false);  // Local file preview
-                                    setCropModalOpen(true);
-                                  }}
-                                  className="px-4 py-2 bg-primary/90 backdrop-blur-sm text-white rounded-lg hover:bg-primary transition flex items-center gap-1.5 text-xs font-semibold shadow-lg"
-                                >
-                                  <Crop size={14} /> Edit Crop
-                                </button>
-                              </div>
-                            </div>
-                            {/* Mobile always-visible crop button */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCropImageSrc(filePreview);
-                                setUseServerCrop(false);  // Local file preview
-                                setCropModalOpen(true);
-                              }}
-                              className={`sm:hidden text-xs font-semibold flex items-center gap-1 ${
-                                watchedPlacement === 'trending'
-                                  ? 'px-4 py-2 bg-primary text-white rounded-lg active:bg-primary/90 transition shadow-md'
-                                  : 'text-primary active:text-primary/80 px-3 py-1.5'
-                              }`}
-                            >
-                              <Crop size={14} /> {watchedPlacement === 'trending' ? 'Crop to 600×600px (Required)' : 'Edit Crop'}
-                            </button>
-                            {/* Desktop crop button below image */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCropImageSrc(filePreview);
-                                setUseServerCrop(false);  // Local file preview
-                                setCropModalOpen(true);
-                              }}
-                              className={`hidden sm:flex text-xs font-semibold items-center gap-1 ${
-                                watchedPlacement === 'trending'
-                                  ? 'px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition'
-                                  : 'text-primary hover:text-primary/80'
-                              }`}
-                            >
-                              <Crop size={14} /> {watchedPlacement === 'trending' ? 'Crop to 600×600px (Required)' : 'Edit Crop'}
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="text-gray-400">
-                            <ImageIcon
-                              size={28}
-                              className="mx-auto mb-2"
-                            />
-                            <p className="text-xs font-semibold text-gray-700">
-                              Upload Banner Image
-                            </p>
-                            <p className="text-[10px] text-gray-400 mt-0.5">
-                              {watchedPlacement === 'trending' 
-                                ? 'After upload, you\'ll crop to 600×600px'
-                                : 'Drag file or click to select'}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileSelect(file);
-                        }}
-                      />
-                      {fileError && (
-                        <p className="text-xs text-red-500 mt-1">
-                          {fileError}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div>
-                      <input
-                        type="url"
-                        value={manualUrl}
-                        onChange={(e) => {
-                          setManualUrl(e.target.value);
-                          setUrlValid(null);
-                        }}
-                        onBlur={handleUrlBlur}
-                        placeholder="e.g. https://images.unsplash.com/..."
-                        className={inputClass}
-                      />
-                      {urlValid === true && (
-                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                          <CheckCircle size={12} /> Image URL loaded successfully
-                        </p>
-                      )}
-                      {urlValid === false && (
-                        <p className="text-xs text-red-500 mt-1">
-                          Could not verify image. Double check the address.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  <BannerImageField
+                    variant="web"
+                    title="Web Image"
+                    description="Shown on desktop and tablet, 640px and up."
+                    emptyHint="Wide image, e.g. 1920×824px"
+                    cropLabel="Crop Web Image"
+                    isEdit={isEdit}
+                    existingUrl={banner?.image_url_web}
+                    slot={webImage}
+                    update={(patch) => setWebImage((s) => ({ ...s, ...patch }))}
+                    onCropRequest={requestCrop}
+                  />
                 </>
               )}
             </div>
@@ -1240,6 +1389,39 @@ function BannerDrawer({
               ctaText={watchedCtaText || ''}
               imageSrc={previewImageSrc}
             />
+          )}
+
+          {/* Desktop mockup — shows which image desktop visitors will actually get */}
+          {supportsWebImage && (
+            <div className="mt-4 p-4 border rounded-xl bg-gray-50">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Desktop Preview (640px and up)
+                </p>
+                <div className="text-[10px] text-gray-500 bg-white px-2 py-1 rounded border">
+                  {webPreviewImageSrc ? 'Using web image' : 'Falling back to mobile image'}
+                </div>
+              </div>
+              <div
+                className="relative w-full aspect-[21/9] overflow-hidden rounded-xl border-2 border-gray-300 shadow-lg"
+                style={{ backgroundColor: watchedBgColor }}
+              >
+                {webPreviewImageSrc ? (
+                  <img
+                    src={webPreviewImageSrc}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
+                    No web image — desktop shows the mobile image
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {watchedPlacement === 'highlight' && (
@@ -1375,6 +1557,7 @@ function BannerDrawer({
         placement={watchedPlacement}
         useServerCrop={useServerCrop}
         bannerId={banner?.id}
+        variant={cropVariant}
         onCropComplete={handleCropComplete}
         onServerCropComplete={handleServerCropComplete}
         onClose={() => {

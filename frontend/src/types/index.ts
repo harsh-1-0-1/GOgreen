@@ -401,6 +401,8 @@ export interface Banner {
   cta_text?: string;
   cta_link?: string;
   image_url?: string;
+  /** Wide desktop image. Falls back to `image_url` when not uploaded. */
+  image_url_web?: string | null;
   badge_text?: string;
   bg_color: string;
   text_color: string;

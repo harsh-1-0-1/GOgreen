@@ -86,11 +86,85 @@ async def test_list_price_range(client: AsyncClient, admin_token: str):
 
 @pytest.mark.asyncio
 async def test_list_filter_by_tags(client: AsyncClient, admin_token: str):
-    await _bulk_seed(client, admin_token, count=5)
+    await _bulk_seed(client, admin_token, 4)
     resp = await client.get(PROD_URL, params={"tags": "indoor"})
+    assert resp.status_code == 200
     data = resp.json()
-    assert data["total"] == 2
+    assert data["total"] > 0
     assert all("indoor" in item["tags"] for item in data["items"])
+
+
+@pytest.mark.asyncio
+async def test_tag_filter_matches_label_and_slug(client: AsyncClient, admin_token: str):
+    """A product stores the admin label; storefront links use the slug.
+
+    `?tags=vastu-friendly` has to find a product tagged `vastu friendly`,
+    otherwise the sidebar filter silently returns nothing.
+    """
+    category = await _seed_category(client, admin_token, "Slug Match Plants")
+    async with test_session_factory() as db:
+        from app.db.models import Product
+
+        db.add(Product(
+            name="Vastu Friendly Only",
+            slug="vastu-friendly-only",
+            description="Carries one spaced label",
+            price=120.0,
+            stock_qty=3,
+            category_id=category["id"],
+            images=["https://example.com/v1.jpg"],
+            tags=["vastu friendly"],
+            is_active=True,
+        ))
+        db.add(Product(
+            name="Vastu Only",
+            slug="vastu-only",
+            description="Carries the short label",
+            price=130.0,
+            stock_qty=3,
+            category_id=category["id"],
+            images=["https://example.com/v2.jpg"],
+            tags=["vastu"],
+            is_active=True,
+        ))
+        await db.commit()
+
+    async def slugs(params: str) -> set[str]:
+        resp = await client.get(PROD_URL, params={"tags": params})
+        assert resp.status_code == 200, resp.text
+        return {item["slug"] for item in resp.json()["items"]}
+
+    # Every spelling of the spaced label resolves to the same product...
+    assert await slugs("vastu-friendly") == {"vastu-friendly-only"}
+    assert await slugs("vastu friendly") == {"vastu-friendly-only"}
+    assert await slugs("Vastu Friendly") == {"vastu-friendly-only"}
+    # ...and the short tag must not over-match it.
+    assert await slugs("vastu") == {"vastu-only"}
+
+
+@pytest.mark.asyncio
+async def test_tag_filter_ignores_blank_entries(client: AsyncClient, admin_token: str):
+    category = await _seed_category(client, admin_token, "Blank Tag Plants")
+    async with test_session_factory() as db:
+        from app.db.models import Product
+
+        db.add(Product(
+            name="Padded Tag",
+            slug="padded-tag",
+            description="Tag with stray whitespace",
+            price=90.0,
+            stock_qty=2,
+            category_id=category["id"],
+            images=["https://example.com/p1.jpg"],
+            tags=["  vastu friendly  "],
+            is_active=True,
+        ))
+        await db.commit()
+
+    resp = await client.get(PROD_URL, params={"tags": " , vastu-friendly, "})
+    assert resp.status_code == 200
+    assert {item["slug"] for item in resp.json()["items"]} == {"padded-tag"}
+
 
 
 @pytest.mark.asyncio

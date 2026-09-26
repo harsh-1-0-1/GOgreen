@@ -1,17 +1,9 @@
-import re
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Tag
 from app.schemas.tag import TagCreate, TagUpdate
-
-
-def _slugify(text: str) -> str:
-    slug = text.lower().strip()
-    slug = re.sub(r"[^\w\s-]", "", slug)
-    slug = re.sub(r"[\s_]+", "-", slug)
-    return re.sub(r"-+", "-", slug).strip("-")
+from app.utils.slugs import slugify as _slugify
 
 
 async def _unique_slug(db: AsyncSession, base: str, exclude_id: int | None = None) -> str:

@@ -1,6 +1,8 @@
 // Utilities extracted from ProductTagBadges.tsx so that file can export
 // only components (required for React Fast Refresh / HMR).
 
+import { toTagKey } from '@/lib/tagKey';
+
 export interface TagConfig {
   label: string;
   bg: string;
@@ -90,8 +92,8 @@ export function resolveTagStyles(
   for (const raw of tags) {
     const value = (raw || '').trim();
     if (!value) continue;
-    const key = value.toLowerCase().replace(/\s+/g, '-');
-    const customColor = tagColors?.[value] || tagColors?.[key] || '';
+    const key = toTagKey(value);
+    const customColor = tagColors?.[key] || '';
 
     if (!customColor) continue;
 

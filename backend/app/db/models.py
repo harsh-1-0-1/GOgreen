@@ -335,6 +335,11 @@ class Banner(Base):
     cta_link: Mapped[str | None] = mapped_column(String(255), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     image_public_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Wide desktop variant of `image_url`. `image_url` is the phone-sized crop;
+    # the storefront shows this one from the `sm` breakpoint up and falls back to
+    # `image_url` when no web image has been uploaded.
+    image_url_web: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    image_public_id_web: Mapped[str | None] = mapped_column(String(255), nullable=True)
     badge_text: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bg_color: Mapped[str] = mapped_column(String(20), default="#F5F0E8")
     text_color: Mapped[str] = mapped_column(String(20), default="#1B4332")

@@ -16,7 +16,10 @@ TAGS_TTL = 600
 
 @router.get("", response_model=list[TagResponse])
 async def list_tags(response: Response, db: AsyncSession = Depends(get_db)):
-    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=60"
+    # `no-cache`, not `max-age=300`: the admin tag editor recolours and deletes
+    # tags, and a browser-cached copy would keep showing the old colours for
+    # minutes after a write. The Redis cache below already absorbs the load.
+    response.headers["Cache-Control"] = "no-cache"
     cached = await cache_get(TAGS_ALL_KEY)
     if cached:
         return cached

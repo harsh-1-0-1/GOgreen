@@ -107,21 +107,93 @@ const CROP_PRESETS: Record<string, CropPreset> = {
   },
 };
 
+// Desktop-only presets. Banners keep their phone crop in `image_url` and get a
+// separate wide image in `image_url_web`, so the web list is deliberately all
+// landscape ratios — a portrait phone crop pasted into a desktop slot is what
+// caused the cropped/letterboxed hero.
+const WEB_CROP_PRESETS: Record<string, CropPreset> = {
+  web_hero: {
+    label: '🖥️ Web Hero (21:9)',
+    aspect: 21 / 9,
+    width: 1920,
+    height: 824,
+    hint: '1920×824px — Homepage hero on desktop. Shown from the 640px breakpoint up.',
+  },
+  web_wide: {
+    label: '🖥️ Web Wide (16:9)',
+    aspect: 16 / 9,
+    width: 1920,
+    height: 1080,
+    hint: '1920×1080px — Standard desktop banner, safe default for most placements.',
+  },
+  web_strip: {
+    label: '🖥️ Web Letterbox (16:5)',
+    aspect: 16 / 5,
+    width: 1920,
+    height: 600,
+    hint: '1920×600px — Extra-wide desktop banner for short, shallow slots.',
+  },
+  custom: CROP_PRESETS.custom,
+};
+
+// Phone presets for the placements that ship a separate desktop crop. These used
+// to fall through to CROP_PRESETS, which offered the same landscape ratios as
+// the web list — the phone slot needs portrait/square ratios instead.
+const PHONE_CROP_PRESETS: Record<string, CropPreset> = {
+  hero: {
+    label: '📱 Phone Hero (4:5)',
+    aspect: 4 / 5,
+    width: 800,
+    height: 1000,
+    hint: '800×1000px — Homepage hero on phones. Shown below the 640px breakpoint.',
+  },
+  trending: {
+    label: '📱 Phone Square (1:1)',
+    aspect: 1,
+    width: 600,
+    height: 600,
+    hint: '600×600px — Trending carousel slide on phones. Required square ratio.',
+  },
+  phone_wide: {
+    label: '📱 Phone Wide (16:9)',
+    aspect: 16 / 9,
+    width: 1080,
+    height: 608,
+    hint: '1080×608px — Landscape phone banner, for art that reads better wide.',
+  },
+  phone_tall: {
+    label: '📱 Phone Tall (9:16)',
+    aspect: 9 / 16,
+    width: 1080,
+    height: 1920,
+    hint: '1080×1920px — Full-height phone creative. Very tall; crops hard on desktop, so pair it with a web image.',
+  },
+  custom: CROP_PRESETS.custom,
+};
+
+// Placements whose admin form exposes a second, wide "web image" slot. Their
+// phone list must be phone-shaped rather than the wide desktop ratios.
+const SPLIT_IMAGE_PLACEMENTS = new Set(['hero', 'trending']);
+
 interface ImageCropModalProps {
   isOpen: boolean;
   imageSrc: string;
   placement: string;
   useServerCrop: boolean;  // Explicit: is this image already on server?
   bannerId?: number;       // Only for server-side crop API call
+  // Which banner image is being cropped. "mobile" edits `image_url` (the phone
+  // crop), "web" edits the separate wide `image_url_web`.
+  variant?: 'mobile' | 'web';
   // Distinct callbacks for different crop paths - no ambiguity
   onCropComplete: (croppedFile: File, preview: string) => void;      // New banner: client-side crop
-  onServerCropComplete: (newImageUrl: string) => void;                // Existing banner: server-side crop
+  onServerCropComplete: (newImageUrl: string, variant: 'mobile' | 'web') => void; // Existing banner: server-side crop
   onClose: () => void;
 }
 
 /**
  * ImageCropModal provides an interactive crop interface for banner admins.
- * - Shows preset crop dimensions based on banner placement
+ * - Shows preset crop dimensions based on banner placement (and on whether the
+ *   mobile or the web image is being cropped)
  * - Allows custom width/height for flexibility
  * - Displays crop area dimensions in real-time
  * - Exports a cropped image File and data URL for preview
@@ -132,6 +204,7 @@ export default function ImageCropModal({
   placement,
   useServerCrop,
   bannerId,
+  variant = 'mobile',
   onCropComplete,
   onServerCropComplete,
   onClose,
@@ -139,24 +212,52 @@ export default function ImageCropModal({
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
-  const [selectedPreset, setSelectedPreset] = useState<string>(
-    CROP_PRESETS[placement] ? placement : 'custom'
-  );
+
+  const usesSplitPresets = SPLIT_IMAGE_PLACEMENTS.has(placement);
+  const presets =
+    variant === 'web'
+      ? WEB_CROP_PRESETS
+      : usesSplitPresets
+        ? PHONE_CROP_PRESETS
+        : CROP_PRESETS;
+
+  const defaultPreset =
+    variant === 'web'
+      ? placement === 'hero'
+        ? 'web_hero'
+        : 'web_wide'
+      : usesSplitPresets
+        ? placement
+        : CROP_PRESETS[placement]
+          ? placement
+          : 'custom';
+
+  const [selectedPreset, setSelectedPreset] = useState<string>(defaultPreset);
   const [customWidth, setCustomWidth] = useState(1000);
   const [customHeight, setCustomHeight] = useState(1000);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Switching between the mobile and web image — or between placements with
+  // different preset lists — invalidates the current selection, so re-seed it.
+  // Guarded render-time adjustment (no setState effect).
+  const [lastPresetScope, setLastPresetScope] = useState(`${variant}:${placement}`);
+  const presetScope = `${variant}:${placement}`;
+  if (lastPresetScope !== presetScope) {
+    setLastPresetScope(presetScope);
+    setSelectedPreset(defaultPreset);
+  }
+
   const preset = useMemo(() => {
     if (selectedPreset === 'custom') {
       return {
-        ...CROP_PRESETS.custom,
+        ...presets.custom,
         width: customWidth,
         height: customHeight,
         aspect: customWidth / customHeight,
       };
     }
-    return CROP_PRESETS[selectedPreset] || CROP_PRESETS.custom;
-  }, [selectedPreset, customWidth, customHeight]);
+    return presets[selectedPreset] || presets.custom;
+  }, [presets, selectedPreset, customWidth, customHeight]);
 
   const onCropAreaChange = useCallback(
     (croppedArea: Area, croppedAreaPixels: Area) => {
@@ -181,10 +282,15 @@ export default function ImageCropModal({
           y: Math.round(croppedAreaPixels.y),
           width: Math.round(croppedAreaPixels.width),
           height: Math.round(croppedAreaPixels.height),
+          variant,
         });
 
-        onServerCropComplete(updatedBanner.image_url);  // Distinct callback for server-side crop
-        toast.success('Image cropped successfully!');
+        const croppedUrl =
+          variant === 'web' ? updatedBanner.image_url_web : updatedBanner.image_url;
+        onServerCropComplete(croppedUrl, variant);  // Distinct callback for server-side crop
+        toast.success(
+          variant === 'web' ? 'Web image cropped!' : 'Mobile image cropped!'
+        );
         onClose();
       } else {
         // Client-side crop: imageSrc is local blob:/data: URL from file input
@@ -258,10 +364,12 @@ export default function ImageCropModal({
           <div className="flex items-center justify-between p-3 sm:p-4 md:p-6 border-b bg-gradient-to-r from-primary/5 to-primary/2 shrink-0">
             <div>
               <h2 className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
-                Crop Banner Image
+                Crop {variant === 'web' ? 'Web' : 'Mobile'} Banner Image
               </h2>
               <p className="text-[10px] sm:text-xs md:text-sm text-gray-500 mt-0.5">
-                Adjust the crop area to fit your banner perfectly
+                {variant === 'web'
+                  ? 'Desktop crop — shown from the 640px breakpoint up'
+                  : 'Phone crop — shown below the 640px breakpoint'}
               </p>
             </div>
             <button
@@ -346,7 +454,7 @@ export default function ImageCropModal({
                   Crop Presets
                 </p>
                 <div className="space-y-1 max-h-48 sm:max-h-64 overflow-y-auto scrollbar-thin">
-                  {Object.entries(CROP_PRESETS).map(([key, p]) => (
+                  {Object.entries(presets).map(([key, p]) => (
                     <button
                       key={key}
                       onClick={() => {

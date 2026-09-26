@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 
 import { useBanners } from '@/hooks/useBanners';
+import ResponsiveBannerImage from '@/components/banner/ResponsiveBannerImage';
 
 function SlidesSkeleton() {
   return (
@@ -106,24 +107,7 @@ export default function HeroBanner() {
         }}
       >
         {slides.map((slide, i) => {
-          const slideInner = (
-            <>
-              {slide.image_url && (
-                <img
-                  src={slide.image_url}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover"
-                  loading={i === 0 ? 'eager' : 'lazy'}
-                  onLoad={handleImageLoad}
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-              )}
-
-
-            </>
-          );
+          const slideInner = <ResponsiveBannerImage banner={slide} loading={i === 0 ? 'eager' : 'lazy'} onLoad={handleImageLoad} onError={(e) => { e.currentTarget.style.display = 'none'; }} />;
 
           const slideStyle = { backgroundColor: slide.bg_color };
 

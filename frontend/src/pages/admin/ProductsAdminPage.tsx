@@ -19,14 +19,15 @@ import {
 import toast from 'react-hot-toast';
 import { useProduct, useProductRaw, useProducts, useAdminAllProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
-import { useTags, useUpsertTag } from '@/hooks/useTags';
+import { useAdminTags, useDeleteTag, useTags, useUpsertTag } from '@/hooks/useTags';
 import { useAdminDisplaySections } from '@/hooks/useDisplaySections';
 import { useDeleteProduct } from '@/hooks/useAdmin';
 import api from '@/lib/api';
 import { getApiErrorDetail } from '@/lib/apiError';
+import { toTagKey } from '@/lib/tagKey';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import type { FAQItem, Product, ProductListResponse, ProductVariants, VariantGroup, VariantOption } from '@/types';
+import type { CatalogTag, FAQItem, Product, ProductListResponse, ProductVariants, VariantGroup, VariantOption } from '@/types';
 
 type ProductFormData = z.infer<typeof productSchema>;
 
@@ -137,7 +138,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const globalTagColors = useMemo(() => {
     const map: Record<string, string> = {};
     globalTags.forEach((t) => {
-      if (t.color) map[t.slug] = t.color;
+      if (t.color) map[toTagKey(t.name)] = t.color;
     });
     return map;
   }, [globalTags]);
@@ -146,8 +147,19 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const upsertTag = useUpsertTag();
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const [showNewTagForm, setShowNewTagForm] = useState(false);
+  const [showManageTags, setShowManageTags] = useState(false);
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#1B4332');
+  // `/tags/admin` also returns inactive tags, so hidden ones stay deletable.
+  const { data: allTags = [] } = useAdminTags();
+  const deleteTag = useDeleteTag();
+  const matchingSavedTag = useMemo(
+    () =>
+      allTags.find(
+        (t) => newTagName.trim().toLowerCase() === t.name.trim().toLowerCase()
+      ) ?? null,
+    [allTags, newTagName]
+  );
   const [formInitialized, setFormInitialized] = useState(!isEdit);
 
   // Form Collapsible Sections
@@ -308,13 +320,49 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     const name = newTagName.trim();
     if (!name) return;
     try {
-      await upsertTag.mutateAsync({ name, color: newTagColor });
+      // Re-submitting an existing name must recolour that tag, not append a
+      // duplicate row. The service de-duplicates slugs with a `-2` suffix, so a
+      // blind POST would create `vastu-friendly-2` and leave the badge — which
+      // resolves by the original slug — stuck on the old colour.
+      const existing = matchingSavedTag;
+      if (existing) {
+        await upsertTag.mutateAsync({ id: existing.id, name, color: newTagColor });
+      } else {
+        await upsertTag.mutateAsync({ name, color: newTagColor });
+      }
       addTagByName(name);
       setNewTagName('');
       setNewTagColor('#1B4332');
-      toast.success(`Tag "${name}" saved`);
+      toast.success(
+        existing ? `Tag "${name}" updated` : `Tag "${name}" saved`
+      );
     } catch (err) {
       toast.error(getApiErrorDetail(err, 'Could not create tag'));
+    }
+  };
+
+  const recolorTag = async (tag: CatalogTag, color: string) => {
+    try {
+      await upsertTag.mutateAsync({ id: tag.id, name: tag.name, color });
+      toast.success(`Tag "${tag.name}" recoloured`);
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Could not update tag colour'));
+    }
+  };
+
+  const deleteSavedTag = async (tag: CatalogTag) => {
+    if (
+      !window.confirm(
+        `Delete the saved tag "${tag.name}"?\n\nProducts already using it will simply stop showing the badge.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteTag.mutateAsync(tag.id);
+      toast.success(`Tag "${tag.name}" deleted`);
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Could not delete tag'));
     }
   };
 
@@ -1076,50 +1124,131 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
                     {/* Create a new tag (saved to the table automatically) */}
                     {showNewTagForm && (
-                      <div className="flex flex-wrap items-center gap-2 bg-primary-light/5 border border-primary/10 rounded-lg p-2.5">
-                        <input
-                          value={newTagName}
-                          onChange={(e) => setNewTagName(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && createNewTag()}
-                          placeholder="Type a tag name"
-                          autoFocus
-                          className="w-40 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        />
-                        {/* Full-width swatch: the native picker anchors to this wide box, so it never goes off-screen */}
-                        <label
-                          className="relative flex-1 min-w-[160px] h-8 rounded-lg border border-gray-200 overflow-hidden cursor-pointer block"
-                          title="Tag colour (used everywhere in the catalog)"
-                        >
-                          <span
-                            className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white/90"
-                            style={{ backgroundColor: newTagColor, textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
-                          >
-                            colour
-                          </span>
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2 bg-primary-light/5 border border-primary/10 rounded-lg p-2.5">
                           <input
-                            type="color"
-                            value={newTagColor}
-                            onChange={(e) => setNewTagColor(e.target.value)}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            value={newTagName}
+                            onChange={(e) => setNewTagName(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && createNewTag()}
+                            placeholder="Type a tag name"
+                            autoFocus
+                            className="w-40 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                           />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={createNewTag}
-                          disabled={upsertTag.isPending || !newTagName.trim()}
-                          className="px-2.5 py-1.5 text-xs bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
-                        >
-                          {upsertTag.isPending ? 'Saving…' : 'Add tag'}
-                        </button>
+                          {/* Full-width swatch: the native picker anchors to this wide box, so it never goes off-screen */}
+                          <label
+                            className="relative flex-1 min-w-[160px] h-8 rounded-lg border border-gray-200 overflow-hidden cursor-pointer block"
+                            title="Tag colour (used everywhere in the catalog)"
+                          >
+                            <span
+                              className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white/90"
+                              style={{ backgroundColor: newTagColor, textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
+                            >
+                              colour
+                            </span>
+                            <input
+                              type="color"
+                              value={newTagColor}
+                              onChange={(e) => setNewTagColor(e.target.value)}
+                              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={createNewTag}
+                            disabled={upsertTag.isPending || !newTagName.trim()}
+                            className="px-2.5 py-1.5 text-xs bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
+                          >
+                            {upsertTag.isPending
+                              ? 'Saving…'
+                              : matchingSavedTag
+                                ? 'Update tag'
+                                : 'Add tag'}
+                          </button>
+                        </div>
+
+                        {matchingSavedTag && (
+                          <p className="flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                            <span
+                              className="shrink-0 w-3 h-3 rounded-full border border-gray-300"
+                              style={{ backgroundColor: matchingSavedTag.color || '#E5E7EB' }}
+                            />
+                            <span>
+                              “{matchingSavedTag.name}” already exists — saving will change its
+                              colour, not create a second tag.
+                            </span>
+                          </p>
+                        )}
                       </div>
                     )}
+
+                    {/* Saved tag manager: recolour or delete any tag */}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setShowManageTags((v) => !v)}
+                        className="px-2.5 py-1.5 text-xs text-gray-600 font-medium hover:bg-gray-100 border border-gray-200 rounded transition"
+                      >
+                        {showManageTags ? 'Hide saved tags' : `Manage saved tags${allTags.length ? ` (${allTags.length})` : ''}`}
+                      </button>
+
+                      {showManageTags && (
+                        <div className="mt-2 space-y-1.5 border border-gray-200 rounded-lg bg-white p-2">
+                          {allTags.length === 0 ? (
+                            <p className="px-2 py-2 text-xs text-gray-400">
+                              No saved tags yet — create one above.
+                            </p>
+                          ) : (
+                            allTags.map((t) => (
+                              <div
+                                key={t.id}
+                                className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50"
+                              >
+                                <label
+                                  className="relative shrink-0 w-8 h-8 rounded-lg border border-gray-200 overflow-hidden cursor-pointer block"
+                                  title={`Change colour of "${t.name}"`}
+                                >
+                                  <span
+                                    className="absolute inset-0"
+                                    style={{ backgroundColor: t.color || '#E5E7EB' }}
+                                  />
+                                  <input
+                                    type="color"
+                                    value={t.color || '#E5E7EB'}
+                                    onChange={(e) => recolorTag(t, e.target.value)}
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                  />
+                                </label>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-medium text-gray-700 truncate">
+                                    {t.name}
+                                  </p>
+                                  <p className="text-[10px] text-gray-400 truncate">
+                                    {t.color || 'no colour'} · {t.slug}
+                                    {!t.is_active && ' · hidden'}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteSavedTag(t)}
+                                  disabled={deleteTag.isPending}
+                                  className="shrink-0 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                  title={`Delete "${t.name}"`}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
 
                     {/* Added tags appear as buttons below, one after another */}
                     <div className="flex flex-wrap gap-2">
                       {tagFields.map((f, i) => {
                         // Live colour preview from the global tag definition (slugified key)
                         const previewColor =
-                          globalTagColors[((watch(`tags.${i}.value`) ?? '').toLowerCase().trim().replace(/\s+/g, '-'))] || '#E5E7EB';
+                          globalTagColors[toTagKey(watch(`tags.${i}.value`) ?? '')] || '#E5E7EB';
                         return (
                           <span key={f.id} className="inline-flex items-center gap-1.5 border rounded-full bg-gray-50 px-2.5 py-1">
                             <span
