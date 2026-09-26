@@ -2,6 +2,7 @@ import json
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,7 @@ from app.utils.image_upload import (
     resolve_image_url,
     upload_image_file,
 )
+from app.utils.pot_price_migration import PotPriceConflictError, project_or_raise
 from app.utils.redis import cache_get, cache_set
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -191,6 +193,72 @@ async def get_product_raw(
     }
 
 
+class PotPriceProjectionRequest(BaseModel):
+    """§5.8 migration request: project the product's stored price_map onto a subset grid.
+
+    The admin sends the axes it wants to keep priced; the backend derives the cells. Doing
+    this server-side is deliberate: a client-side copy of the projection rules would be a
+    second implementation of the same decision, and the two would drift — the exact class
+    of bug that makes a card advertise one price while checkout charges another.
+    """
+
+    group_ids: list[str] = Field(min_length=1)
+
+
+@router.post("/{product_id}/pot-price/projection")
+async def project_pot_price(
+    product_id: int,
+    payload: PotPriceProjectionRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Preview the subset grid implied by this product's existing price_map.
+
+    Read-only. A conflicting projection is a 422 rather than a best guess: silently picking
+    one of the disagreeing values would hide a live pricing error, and the merchant is the
+    only one who can say which is right. The admin resolves each conflict in the UI, then
+    saves the grid and `price_map: null` together in one request.
+    """
+    product = await product_service.get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    variants = product.variants if isinstance(product.variants, dict) else {}
+    price_map = variants.get("price_map")
+    if not isinstance(price_map, dict) or not price_map:
+        raise HTTPException(
+            status_code=400,
+            detail="This product has no per-combination price table to project from.",
+        )
+    groups = variants.get("variant_groups") or []
+    known = {g.get("id") for g in groups if isinstance(g, dict)}
+    unknown = [g for g in payload.group_ids if g not in known]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown variant type(s): {', '.join(unknown)}",
+        )
+
+    try:
+        grid = project_or_raise(price_map, payload.group_ids, groups)
+    except PotPriceConflictError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"{len(exc.conflicts)} cell(s) have conflicting values in the existing "
+                    "price table. Choose which to keep for each."
+                ),
+                "conflicts": [
+                    {"key": key, "values": values}
+                    for key, values in exc.conflicts.items()
+                ],
+            },
+        ) from exc
+
+    return {"group_ids": payload.group_ids, "map": grid, "conflicts": {}}
+
+
 @router.get("/admin/all", response_model=ProductListResponse)
 async def admin_get_all_products(
     db: AsyncSession = Depends(get_db),
@@ -356,6 +424,11 @@ async def create_product(
         orig = str(exc.orig) if exc.orig else str(exc)
         detail = orig.split("\n")[0] if "unique" in orig.lower() else "Could not save product due to a data conflict."
         raise HTTPException(status_code=409, detail=detail) from exc
+    except product_service.PotPriceAmbiguityError as e:
+        # 422, not 400: the request is well-formed but semantically unprocessable. Kept
+        # distinct from 409 so the admin UI can tell "this grid would misprice" apart from
+        # "a slug collided".
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -388,6 +461,8 @@ async def update_product(
         orig = str(exc.orig) if exc.orig else str(exc)
         detail = orig.split("\n")[0] if "unique" in orig.lower() else "Could not save product due to a data conflict."
         raise HTTPException(status_code=409, detail=detail) from exc
+    except product_service.PotPriceAmbiguityError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

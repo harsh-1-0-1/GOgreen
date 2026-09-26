@@ -417,17 +417,22 @@ class _MockProduct:
 
 
 def test_variant_groups_price_sums_all_required_groups():
-    """red(100) + krish(100) + 4inch(1000) = 1200."""
+    """base 450 + red 100 + krish 100 + 4inch 1000 = 1650.
+
+    The option prices are SURCHARGES on top of `product.price`, not the product's price, so
+    the base is included. This test used to expect 1200 — the bare delta sum — which quietly
+    ignored the ₹450 base for every variant product in the catalogue.
+    """
     p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
     d = calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"])
-    assert d["unit_price"] == 1200.0, f"Expected 1200.0, got {d['unit_price']}"
+    assert d["unit_price"] == 1650.0, f"Expected 1650.0, got {d['unit_price']}"
 
 
 def test_variant_groups_price_second_combo():
-    """red(100) + type1(1000) + 8inch(1600) = 2700."""
+    """base 450 + red 100 + type1 1000 + 8inch 1600 = 3150."""
     p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
     d = calculate_variant_price(p, ["opt_red", "opt_type1", "opt_8inch"])
-    assert d["unit_price"] == 2700.0, f"Expected 2700.0, got {d['unit_price']}"
+    assert d["unit_price"] == 3150.0, f"Expected 3150.0, got {d['unit_price']}"
 
 
 def test_variant_groups_price_map_overrides_sum_per_combo():
@@ -480,7 +485,7 @@ def test_variant_groups_price_map_overrides_sum_per_combo():
 
 
 def test_variant_groups_price_map_absent_row_falls_back_to_sum():
-    """Sparse/missing price_map rows fall back to the summed per-option price."""
+    """Sparse/missing price_map rows fall back to base + summed per-option surcharges."""
     price_map = {"opt_red__opt_krish__opt_4inch": 777.0}
     variants = {
         "variant_groups": [dict(g, options=list(g["options"])) for g in LEAF_GROUPS],
@@ -490,10 +495,11 @@ def test_variant_groups_price_map_absent_row_falls_back_to_sum():
         "price_map": price_map,
     }
     p = _MockProduct(price=450.0, stock_qty=50, variants=variants)
-    # Present row → override wins (red=100 + krish=100 + 4inch=1000 normally = 1200).
+    # Present row → override wins (base 450 + red 100 + krish 100 + 4inch 1000 = 1650).
     assert calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"])["unit_price"] == 777.0
-    # Absent row → original sum.
-    assert calculate_variant_price(p, ["opt_red", "opt_krish", "opt_6inch"])["unit_price"] == 1700.0
+    # Absent row → base + surcharges: 450 + red 100 + krish 100 + 6inch 1500 = 2150.
+    # Was 1700 (deltas only, base dropped).
+    assert calculate_variant_price(p, ["opt_red", "opt_krish", "opt_6inch"])["unit_price"] == 2150.0
 
 
 def test_build_dense_price_map_sums_options_and_applies_overrides():

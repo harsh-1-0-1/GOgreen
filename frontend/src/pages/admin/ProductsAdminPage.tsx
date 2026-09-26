@@ -25,6 +25,7 @@ import { useDeleteProduct } from '@/hooks/useAdmin';
 import api from '@/lib/api';
 import { getApiErrorDetail } from '@/lib/apiError';
 import { toTagKey } from '@/lib/tagKey';
+import PotPriceEditor, { type PotPriceDraft } from '@/components/admin/PotPriceEditor';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import type { CatalogTag, FAQItem, Product, ProductListResponse, ProductVariants, VariantGroup, VariantOption } from '@/types';
@@ -225,8 +226,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // Per-combination price: keyed by combo_key (same space as comboImageKeys). When a row
   // has a value it overrides the per-option sum, letting each combination carry its own
   // price (e.g. Small/Krish ₹300 vs Medium/Krish ₹350). Dense on save.
-  const [comboPrice, setComboPrice] = useState<Record<string, number>>({});
   const [uploadingComboKey, setUploadingComboKey] = useState<string | null>(null);
+  // pot_price: the N-axis grid, and the ONLY place a variant product's price is authored.
+  const [potPriceDraft, setPotPriceDraft] = useState<PotPriceDraft | null>(null);
   // Plantoga Promise banner — per-product image replacing the four hardcoded cards
   // promiseBannerKey: relative key stored in DB. promiseBannerUrl: resolved URL for preview only.
   const [promiseBannerKey, setPromiseBannerKey] = useState('');
@@ -412,7 +414,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setComboImageKeys({});
     setComboImageUrls({});
     setComboStock({});
-    setComboPrice({});
     setVariantError(null);
     // Promise banner URL comes pre-resolved from the public API response.
     // The raw key is seeded separately from rawProduct in the useEffect below.
@@ -437,6 +438,17 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       setRawProductSeededId(incomingId);
 
       const v: ProductVariants = rawProduct.variants ?? { variant_groups: [] };
+      // Seed the pot_price grid. A product with no pot_price starts with no axes ticked
+      // rather than a default one, so existing products are not silently repriced.
+      if (v.pot_price) {
+        setPotPriceDraft({
+          group_ids: [...(v.pot_price.group_ids ?? [])],
+          independent_group_ids: [...(v.pot_price.independent_group_ids ?? [])],
+          map: { ...(v.pot_price.map ?? {}) },
+        });
+      } else {
+        setPotPriceDraft(null);
+      }
       // Seed default image relative key
       setDefaultImageKey(v.default_image || '');
       setDefaultImageUrl(resolveImageUrl(v.default_image));
@@ -464,23 +476,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         });
         setComboStock(seedStock);
       }
-
-      // Seed per-combination price from raw price_map; else default each combo row to its
-      // per-option sum (the current computed price) as an editable starting point.
-      const seedPrice: Record<string, number> = {};
-      if (v.price_map && typeof v.price_map === 'object') {
-        Object.entries(v.price_map).forEach(([key, val]) => {
-          const n = Number(val);
-          seedPrice[key] = Number.isFinite(n) && n >= 0 ? n : 0;
-        });
-      } else {
-        // eslint-disable-next-line no-use-before-define -- function declarations hoist; helpers defined below
-        for (const row of buildComboRows(variantGroups)) {
-          // eslint-disable-next-line no-use-before-define -- function declarations hoist; helpers defined below
-          seedPrice[row.key] = comboSumForRow(row.key, variantGroups);
-        }
-      }
-      setComboPrice(seedPrice);
 
       // Seed per-option image keys from raw variant_groups
       if (Array.isArray(v.variant_groups)) {
@@ -550,22 +545,33 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
   // ─── Cartesian product helper ────────────────────────────────────────────
   // Returns rows of { key: "optId1__optId2__...", label: "Name1 / Name2 / ..." }
-  // Only includes named, named options. Capped at COMBO_CAP rows.
+  //
+  // The label is built purely from the option names the admin typed, joined in group order —
+  // nothing about it is hardcoded, so renaming a variant type or option relabels the table.
+  //
+  // Keys are built over EVERY group, including ones that are not fully named yet. The
+  // backend's build_combo_key also walks all variant_groups, so dropping an unnamed group
+  // here would produce a short key that the backend can never match — stock and images
+  // would be written to a key nothing reads, and the product would look out of stock with no
+  // error anywhere. Unnamed groups mark their rows `ready: false` so the table can explain
+  // itself instead of silently omitting them.
   const COMBO_CAP = 50;
-  function buildComboRows(groups: VariantGroupDraft[]): { key: string; label: string }[] {
-    const namedGroups = groups
-      .map(g => ({ ...g, options: g.options.filter(o => o.name.trim()) }))
-      .filter(g => g.label.trim() && g.options.length > 0);
-    if (namedGroups.length === 0) return [];
+  function buildComboRows(groups: VariantGroupDraft[]): { key: string; label: string; ready: boolean }[] {
+    if (groups.length === 0) return [];
     // Cartesian product
-    let rows: { key: string; label: string }[] = [{ key: '', label: '' }];
-    for (const group of namedGroups) {
-      const next: { key: string; label: string }[] = [];
+    let rows: { key: string; label: string; ready: boolean }[] = [{ key: '', label: '', ready: true }];
+    for (const group of groups) {
+      const next: { key: string; label: string; ready: boolean }[] = [];
+      const groupNamed = !!group.label.trim();
       for (const row of rows) {
         for (const opt of group.options) {
+          const optNamed = !!opt.name.trim();
           next.push({
             key: row.key ? `${row.key}__${opt.id}` : opt.id,
+            // Names only, no group prefixes — a group prefix would be a second, differently
+            // formatted copy of the same information in the same cell.
             label: row.label ? `${row.label} / ${opt.name}` : opt.name,
+            ready: row.ready && groupNamed && optNamed,
           });
         }
       }
@@ -588,33 +594,6 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       const qty = comboStockMap[row.key] ?? existing?.[row.key] ?? 0;
       const n = Number(qty);
       map[row.key] = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
-    }
-    return map;
-  }
-
-  // Sum of the option prices a combo row references (the default/fallback combo price).
-  function comboSumForRow(key: string, groups: VariantGroupDraft[]): number {
-    const priceById: Record<string, number> = {};
-    for (const g of groups) {
-      for (const o of g.options) priceById[o.id] = Number(o.price || 0);
-    }
-    return key.split('__').reduce((sum, id) => sum + (priceById[id] ?? 0), 0);
-  }
-
-  // Full dense price_map (no COMBO_CAP) for the save payload. Every cartesian combo gets
-  // a row. Editable rows come from comboPrice; overflow rows fall back to existing
-  // price_map, then to the summed per-option price.
-  function buildDensePriceMap(
-    groups: VariantGroupDraft[],
-    comboPriceMap: Record<string, number>,
-    existing: Record<string, number> | null | undefined,
-  ): Record<string, number> {
-    const rows = buildComboRows(groups);
-    const map: Record<string, number> = {};
-    for (const row of rows) {
-      const price = comboPriceMap[row.key] ?? existing?.[row.key] ?? comboSumForRow(row.key, groups);
-      const n = Number(price);
-      map[row.key] = Number.isFinite(n) && n >= 0 ? n : 0;
     }
     return map;
   }
@@ -659,12 +638,20 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           ? buildDenseStockMap(cleanGroups, comboStock, existingStockMap)
           : null;
 
-        // Build dense price_map over every cartesian combo (comboPrice state, falling
-        // back to the existing price_map, then to the summed per-option price).
-        const existingPriceMap = rawProduct?.variants?.price_map;
-        const priceMap = cleanGroups.length
-          ? buildDensePriceMap(cleanGroups, comboPrice, existingPriceMap)
-          : null;
+        // price_map is RETIRED, not rebuilt.
+        //
+        // There is no longer a second place to type a price: the grid above is the only
+        // pricing surface, so a per-combination table is a second source of truth that can
+        // only ever disagree with it. It is also the one entry in the resolver that overrides
+        // the grid outright, so a stale map left in the DB would silently keep winning while
+        // the admin believed the grid was live.
+        //
+        // `null` (not omission) is what clears the stored value — the column is part of a
+        // whole-object replace, so leaving the key out would preserve the old map.
+        //
+        // The safety net is that calculate_variant_price now always adds `product.price` as a
+        // floor. That matters here: this save also zeroes every per-option delta, so without
+        // the floor a product left with no grid would fall to the delta sum and be ₹0.
 
         variants = {
           variant_groups: cleanGroups.map(group => ({
@@ -676,7 +663,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
               .map(o => ({
                 id: o.id,
                 name: o.name.trim(),
-                price: Number(o.price || 0),
+                // Retired with the price inputs: any delta still in the draft is stale data
+                // from before the grid, and re-saving it would keep a second pricing source
+                // alive behind the admin's back. Surcharges belong in the grid now.
+                price: 0,
                 // Per-option images — used as colour fallback on product page
                 ...(o.image_keys.length ? { images: o.image_keys } : {}),
                 ...(o.color_hex.trim() ? { color_hex: o.color_hex.trim() } : {}),
@@ -684,7 +674,16 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           })),
           ...(Object.keys(imageMap).length ? { image_map: imageMap } : {}),
           ...(stockMap ? { stock_map: stockMap } : {}),
-          ...(priceMap ? { price_map: priceMap } : {}),
+          ...(cleanGroups.length ? { price_map: null } : {}),
+          ...(potPriceDraft && (potPriceDraft.group_ids?.length ?? 0) > 0
+            ? {
+                pot_price: {
+                  group_ids: potPriceDraft.group_ids,
+                  independent_group_ids: potPriceDraft.independent_group_ids ?? [],
+                  map: potPriceDraft.map ?? {},
+                },
+              }
+            : {}),
           default_image: defaultImageKey || undefined,
         };
       }
@@ -1824,25 +1823,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                               </button>
                             </div>
 
-                            {/* Row 2: price + stock + (colour: image upload) */}
+                            {/* Row 2: stock + (colour: image upload) */}
                             <div className="flex gap-2 items-center flex-wrap pl-12">
-                              {/* Price */}
-                              <div className="flex items-center gap-1 shrink-0">
-                                <span className="text-xs text-gray-500">₹</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={opt.price}
-                                  onChange={(e) => {
-                                    const v = Number(e.target.value);
-                                    setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
-                                      ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, price: v }),
-                                    }));
-                                  }}
-                                  placeholder="Price"
-                                  className="w-24 px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                                />
-                              </div>
+                              {/* No per-option price input: pricing lives in exactly one place —
+                                  the Pot Price grid below. Two editable price fields for the
+                                  same product is how they drift apart. */}
 
                               {/* Colour variants: quick add-photo button (full management in table below) */}
                               {isColourGroup && (
@@ -1894,12 +1879,41 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                   Add Variant Type
                 </button>
 
+                {/* ── Pot Price Grid (N-axis) ──────────────────────────────────── */}
+                {variantGroups.length > 0 && (
+                  <div className="mt-4 border-t pt-4 space-y-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-800">Pot Price</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        A price that can depend on more than one choice — e.g. the pot costing
+                        more for a bigger plant. Set it here once, instead of retuning a price on
+                        every combination row.
+                      </p>
+                    </div>
+                    <PotPriceEditor
+                      productId={editProduct?.id ?? null}
+                      groups={variantGroups}
+                      draft={potPriceDraft}
+                      onChange={setPotPriceDraft}
+                      existingPriceMap={rawProduct?.variants?.price_map ?? null}
+                      priceMapActive={
+                        !!(rawProduct?.variants?.price_map && Object.keys(rawProduct.variants.price_map).length)
+                      }
+                    />
+                  </div>
+                )}
+
                 {/* ── Variant Combinations Image Table ────────────────────────────── */}
                 {(() => {
                   const comboRows = buildComboRows(variantGroups);
                   if (comboRows.length === 0) return null;
-                  const overCap = comboRows.length > COMBO_CAP;
-                  const visibleRows = overCap ? comboRows.slice(0, COMBO_CAP) : comboRows;
+                  // Only rows whose every group and option is named can be labelled, so only
+                  // those get a row. The rest are counted and explained rather than dropped
+                  // silently — an unlabelled row looks identical to a product with no stock.
+                  const namedRows = comboRows.filter(r => r.ready);
+                  const unnamedCount = comboRows.length - namedRows.length;
+                  const overCap = namedRows.length > COMBO_CAP;
+                  const visibleRows = overCap ? namedRows.slice(0, COMBO_CAP) : namedRows;
                   const hasAnyComboImage = Object.values(comboImageUrls).some(a => a.length > 0);
                   return (
                     <div className="border-t pt-4 space-y-2">
@@ -1933,19 +1947,35 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                         <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 flex gap-2 items-start text-xs text-amber-800">
                           <AlertTriangle size={13} className="shrink-0 mt-0.5" />
                           <span>
-                            {comboRows.length} combinations total — showing first {COMBO_CAP}. Reduce options or groups to see all combinations.
+                            {namedRows.length} combinations total — showing first {COMBO_CAP}. Reduce options or groups to see all combinations.
                           </span>
                         </div>
                       )}
+
+                      {unnamedCount > 0 && (
+                        <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 flex gap-2 items-start text-xs text-amber-800">
+                          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                          <span>
+                            {unnamedCount} combination{unnamedCount > 1 ? 's are' : ' is'} hidden
+                            because a variant type or one of its options has no name yet. Name{' '}
+                            {unnamedCount > 1 ? 'them' : 'it'} above to set stock and images.
+                          </span>
+                        </div>
+                      )}
+
+                      {namedRows.length === 0 && unnamedCount > 0 ? (
+                        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
+                          Name every variant type and option to list its combinations here.
+                        </div>
+                      ) : (
 
                       <div className="overflow-x-auto border rounded-lg bg-gray-50/50">
                         <table className="w-full text-xs text-left">
                           <thead className="bg-gray-100 text-gray-600 border-b">
                             <tr>
-                              <th className="p-3 font-medium">Combination</th>
                               <th className="p-3 font-medium">
-                                Price (₹)
-                                <span className="font-normal text-gray-400 ml-1">(overrides per-option sum)</span>
+                                Combination
+                                <span className="font-normal text-gray-400 ml-1">(the option names for this pick)</span>
                               </th>
                               <th className="p-3 font-medium">
                                 Stock
@@ -1961,27 +1991,16 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                             {visibleRows.map((row) => {
                               const imgs = comboImageUrls[row.key] || [];
                               const keys = comboImageKeys[row.key] || [];
-                              const rowPrice = comboPrice[row.key] ?? comboSumForRow(row.key, variantGroups);
                               return (
                                 <tr key={row.key} className="border-b last:border-0 bg-white">
-                                  <td className="p-3 font-semibold text-gray-800 whitespace-nowrap align-top pt-4">
-                                    {row.label}
-                                  </td>
-                                  <td className="p-3 align-top pt-3.5">
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      step={1}
-                                      value={rowPrice}
-                                      onChange={(e) => {
-                                        const n = Number(e.target.value);
-                                        setComboPrice(prev => ({
-                                          ...prev,
-                                          [row.key]: Number.isFinite(n) && n >= 0 ? n : 0,
-                                        }));
-                                      }}
-                                      className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-800 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
-                                    />
+                                  <td
+                                    className="p-3 font-semibold text-gray-800 align-top pt-4 min-w-[180px]"
+                                    title={row.label}
+                                  >
+                                    {/* Wraps rather than nowrap: with several variant types the
+                                        names get long, and a clipped name cannot be told apart
+                                        from the wrong name. */}
+                                    <span className="break-words">{row.label}</span>
                                   </td>
                                   <td className="p-3 align-top pt-3.5">
                                     <input
@@ -2045,6 +2064,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                           </tbody>
                         </table>
                       </div>
+                      )}
                     </div>
                   );
                 })()}

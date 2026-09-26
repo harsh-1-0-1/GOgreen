@@ -4,11 +4,86 @@ CRITICAL: All price calculations MUST use stored variant_groups data.
 Never trust client-provided prices - always re-calculate server-side.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 from app.db.models import Product
+from app.schemas.product import COMBO_KEY_SEP
 
 STOCK_MAP_MISSING = "STOCK_MAP_MISSING"
+
+
+class PotPriceResolution(NamedTuple):
+    """A resolved grid cell. `exact` is min == max, so callers render one number."""
+    min: float
+    max: float
+    exact: bool
+
+
+def resolve_pot_price(
+    group_ids: List[str],
+    price_map: Optional[Dict[str, float]],
+    selected: Dict[str, str],
+) -> Optional[PotPriceResolution]:
+    """Resolve the component grid to one value or a range.
+
+    N-axis: nothing here knows how many groups there are or what they are called. Scans every
+    cell consistent with whatever IS selected, so a partial selection yields the range the
+    customer could pay rather than a guess. Returns None when nothing matches — callers MUST
+    treat that as "unknown" and fall through, never as zero.
+
+    Mirrors frontend/src/lib/potPrice.ts::resolvePotPrice. The two are hand-written
+    implementations of one rule with no shared test, so a divergence means the storefront
+    advertises one price and checkout charges another. Change both together.
+    """
+    if not group_ids or not price_map:
+        return None
+    active_idx = [i for i, gid in enumerate(group_ids) if selected.get(gid)]
+    if not active_idx:
+        return None
+
+    lo, hi = float("inf"), float("-inf")
+    for key, raw in price_map.items():
+        parts = key.split(COMBO_KEY_SEP)
+        # Defensive: a full-combo price_map/stock_map key has the wrong length and can never
+        # resolve here. Ignoring is correct — those keys mean something else entirely.
+        if len(parts) != len(group_ids):
+            continue
+        if not all(parts[i] == selected[group_ids[i]] for i in active_idx):
+            continue
+        try:
+            n = float(raw)
+        except (TypeError, ValueError):
+            continue
+        lo, hi = min(lo, n), max(hi, n)
+    if lo == float("inf"):
+        return None
+    return PotPriceResolution(min=lo, max=hi, exact=lo == hi)
+
+
+def exact_pot_price(
+    group_ids: List[str],
+    price_map: Optional[Dict[str, float]],
+    selected: Dict[str, str],
+) -> Optional[float]:
+    """The grid value as a number, or None when it is not exactly determined.
+
+    Under `additive` a RANGED value must never be charged — silently taking min would
+    under-charge the expensive pots — so anything needing a number uses this and handles
+    None by falling through.
+    """
+    r = resolve_pot_price(group_ids, price_map, selected)
+    if r is None or not r.exact:
+        return None
+    return r.min
+
+
+def pot_price_group_ids(variants: dict) -> List[str]:
+    """Axis IDs this product's grid prices, in canonical order. Empty when unconfigured."""
+    pp = (variants or {}).get("pot_price")
+    if not isinstance(pp, dict):
+        return []
+    gids = pp.get("group_ids")
+    return list(gids) if isinstance(gids, list) and gids else []
 
 
 class StockMapMissingError(ValueError):
@@ -172,11 +247,13 @@ def calculate_variant_price(
     
     # Build selection by group
     selection_by_group = {}
+    selected_by_group_id = {}
     for opt_id in selected_options:
         group_id, group_label, option_data = option_map[opt_id]
         if group_id in selection_by_group:
             raise ValueError(f"Multiple options selected for group '{group_label}'")
         selection_by_group[group_id] = (group_label, option_data)
+        selected_by_group_id[group_id] = opt_id
     
     # Per-combination stock requires a full combo key: EVERY group must contribute
     # exactly one selection, required or not. `required` is retained in the schema as
@@ -186,29 +263,42 @@ def calculate_variant_price(
         if group_id not in selection_by_group:
             raise ValueError(f"Please select an option for '{group_data['label']}'")
     
-    # Calculate total price by summing selected option prices
-    total_price = 0.0
+    # Deltas split by MEMBERSHIP of the pot grid, not by value. A group the grid prices
+    # already has its amount in the matrix, so adding its own `options[].price` on top
+    # would double-charge it — the exact defect the §5.5a save gate exists to prevent.
+    # Excluding by membership (rather than skipping zero values) means a ₹0 delta in a
+    # grid group is still excluded.
+    grid_gids = pot_price_group_ids(variants)
+    grid_gid_set = set(grid_gids)
+
+    # Per-option deltas from groups the grid does not price. NOTE: deltas are increments on
+    # top of `product.price`, never a product total. Summing only deltas was once the final
+    # fallback, which silently undercharged every variant product: a ₹249 plant whose only
+    # surcharge was ₹150 was charged ₹150, and a product with no surcharges was free. The
+    # base price is added explicitly on every branch below.
+    non_grid_delta_total = 0.0
     variant_snapshot = []  # For order denormalization
     selected_option_images = []
-    
+
     for group_id, (group_label, option_data) in selection_by_group.items():
         option_price = float(option_data.get("price", 0))
         option_name = option_data.get("name", "")
         option_images = option_data.get("images", [])
-        
-        total_price += option_price
-        
+
+        if group_id not in grid_gid_set:
+            non_grid_delta_total += option_price
+
         # Build snapshot for order denormalization
         variant_snapshot.append({
             "label": group_label,
             "name": option_name,
             "price": option_price,
         })
-        
+
         # Collect images from selected options
         if option_images:
             selected_option_images.extend(option_images)
-    
+
     # Canonical combo key for per-combination stock lookup.
     # Every variant_groups product must carry a dense stock_map (migration is a
     # mandatory pre-deploy step). No fallback: a missing map/key is a bug and fails
@@ -219,7 +309,7 @@ def calculate_variant_price(
         raise StockMapMissingError(
             f"Stock map missing for product '{product.name}' (id={product.id}, combo_key={combo_key!r})"
         )
-    
+
     available_stock = int(stock_map.get(combo_key, 0) or 0)
     if validate_stock:
         if available_stock <= 0:
@@ -232,7 +322,59 @@ def calculate_variant_price(
     # prices so products that haven't been migrated keep their existing behavior.
     price_map = variants.get("price_map")
     explicit_price = price_map.get(combo_key) if isinstance(price_map, dict) else None
-    combo_price = float(explicit_price) if explicit_price is not None else total_price
+
+    # The component grid, resolved for this exact selection. None means unknown (partial
+    # selection, unfilled cell, or unconfigured) and is NOT zero.
+    pot_price_cfg = variants.get("pot_price") if isinstance(variants.get("pot_price"), dict) else {}
+    pot_map = pot_price_cfg.get("map") if isinstance(pot_price_cfg.get("map"), dict) else None
+    pot_value = exact_pot_price(grid_gids, pot_map, selected_by_group_id)
+
+    # §5.4 chain, in order. price_map is an ABSOLUTE override and wins outright — which is
+    # why retiring it is inseparable from switching `additive` on (see VARIANT_PRICE_PLAN §5.8):
+    # remove it first and the total falls through to the delta sum; leave it after and it
+    # keeps winning, so the grid silently does nothing.
+    grid_charged = False
+
+    if explicit_price is not None:
+        combo_price = float(explicit_price)
+    elif pot_value is not None:
+        # Base plant price + deltas from groups the grid does NOT price + the grid cell.
+        # A ranged grid value yields None above and is never charged, rather than
+        # under-charging by silently taking the minimum.
+        combo_price = float(product.price or 0) + non_grid_delta_total + pot_value
+        grid_charged = True
+    else:
+        # No price grid on this product at all, so the base price IS the price. This branch
+        # used to bill `total_price` (the bare sum of option deltas), which is not a product
+        # total: deltas are increments on top of `product.price`, so the base was silently
+        # dropped. A ₹249 plant whose only surcharge was ₹150 was charged ₹150, and a
+        # product with no surcharges at all was free. With per-option prices retired in the
+        # admin, the delta sum is always ₹0, so this branch is the difference between a
+        # product being priced and being given away.
+        combo_price = float(product.price or 0) + non_grid_delta_total
+
+    # Order records must reconcile with the amount actually charged, or an internally
+    # inconsistent order is impossible to audit later.
+    #
+    # Two things the per-option deltas alone do not capture:
+    #   1. the base plant price — deltas are increments on top of it, and summing only
+    #      deltas leaves the snapshot short by exactly `product.price`;
+    #   2. the resolved grid cell.
+    # Both are appended ONLY when the grid is what decided the price. If `price_map`
+    # overrode the total, the grid amount was never billed, and recording it would
+    # overstate the order by the full pot price.
+    if grid_charged:
+        variant_snapshot.insert(0, {
+            "label": "Plant",
+            "name": getattr(product, "name", None) or "Base price",
+            "price": float(product.price or 0),
+        })
+        if pot_value and pot_value > 0:
+            variant_snapshot.append({
+                "label": pot_price_cfg.get("label") or "Pot price",
+                "name": pot_price_cfg.get("name") or "Component charge",
+                "price": pot_value,
+            })
     
     # Determine image to display
     resolved_image = (

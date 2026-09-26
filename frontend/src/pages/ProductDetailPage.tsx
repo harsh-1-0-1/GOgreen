@@ -24,6 +24,11 @@ import type { Banner, Category, VariantGroup, VariantOption } from '@/types';
 import { useStories } from '@/hooks/useStories';
 import { StoriesCarousel } from '@/components/stories/StoriesCarousel';
 import { getApiErrorDetail } from '@/lib/apiError';
+import { formatPotPrice, potPriceForOption, exactPotPrice, gridGroupIds } from '@/lib/potPrice';
+
+/** Shown when an option genuinely costs nothing. Data-driven rather than a hardcoded
+ *  English literal in the render tree, so it can be changed or localised in one place. */
+const NO_PRICE_LABEL = 'No charge';
 
 
 function findCategoryName(categories: Category[] | undefined, categoryId: number): string {
@@ -601,6 +606,10 @@ export default function ProductDetailPage() {
   const variantGroups = product.variants?.variant_groups ?? [];
   const hasGroups = variantGroups.length > 0;
 
+  // Axis IDs the pot grid prices. Read straight off the product — no group is named,
+  // counted or special-cased here, so a two-axis or four-axis grid runs the same code.
+  const gridAxes = gridGroupIds(product.variants?.pot_price);
+
   // Build option lookup: optionId → option data
   const optionById: Record<string, VariantOption> = {};
   for (const group of variantGroups) {
@@ -629,17 +638,42 @@ export default function ProductDetailPage() {
   // NOTE: do NOT use `> 0` as the guard — a legitimately free option/combination (price=0)
   // would incorrectly fall through to product.price.
   const hasAnySelection = Object.keys(selectedOptions).length > 0;
-  const selectedOptionsPrice = Object.values(selectedOptions).reduce((sum, optId) => {
+  // Deltas from groups the grid does NOT price. Counting a grid group's own `options[].price`
+  // on top of its matrix cell would double-charge it — the exact defect the server-side
+  // gate exists to prevent. Excluded BY MEMBERSHIP, not by value, so a ₹0 delta in a grid
+  // group is still excluded.
+  const nonGridOptionDeltas = Object.entries(selectedOptions).reduce((sum, [gid, optId]) => {
+    if (gridAxes.includes(gid)) return sum;
     return sum + Number(optionById[optId]?.price ?? 0);
   }, 0);
   const priceMap: Record<string, number> | null = hasGroups
     ? product.variants?.price_map ?? null
     : null;
   const comboPrice = comboKey && priceMap ? Number(priceMap[comboKey]) : null;
+  const hasComboPrice = comboPrice !== null && Number.isFinite(comboPrice);
+  const gridPotPrice = exactPotPrice(
+    gridAxes,
+    product.variants?.pot_price?.map,
+    selectedOptions,
+  );
+  // ONE total, mirroring calculate_variant_price exactly. A legacy `price_map` row wins
+  // outright; otherwise it is the base price plus the non-grid deltas plus the grid cell.
+  //
+  // When the cell is blank (`gridPotPrice` is null — an unfilled cell, or a RANGED value
+  // across pots where the exact price is not yet determined) the pot simply drops out and
+  // the customer sees the base price. That is intentional on both sides: a ranged value must
+  // never be charged, since silently taking the minimum under-charges the expensive pots.
+  //
+  // There is deliberately no second formula here. A `total_mode: display_only` branch used
+  // to price this card without charging the cell, so the page could advertise "+₹300" on an
+  // order it then billed ₹0. The backend has one chain and so does this page.
+  //
+  // The `+` in the card label is load-bearing: it marks a component, so a bare ₹200 under a
+  // pot name can never be misread as the total.
   const displayPrice = hasGroups && hasAnySelection
-    ? comboPrice !== null && Number.isFinite(comboPrice)
+    ? hasComboPrice
       ? comboPrice
-      : selectedOptionsPrice
+      : Number(product.price ?? 0) + nonGridOptionDeltas + (gridPotPrice ?? 0)
     : product.price;
   const basePrice = Number(product.price ?? 0);
   const baseOriginalPrice = Number(product.original_price ?? 0);
@@ -964,7 +998,21 @@ export default function ProductDetailPage() {
                         <div className="flex flex-wrap gap-2">
                           {visibleOptions.map((opt) => {
                             const isSelected = selectedOptions[group.id] === opt.id;
+                            // Grid groups show the resolved pot price (exact or ranged); every
+                            // other group falls back to its own delta. The `+` marks a
+                            // component, so it can never be misread as the total.
+                            const potLabel = formatPotPrice(
+                              potPriceForOption(
+                                gridAxes,
+                                product.variants?.pot_price?.map,
+                                selectedOptions,
+                                group.id,
+                                opt.id,
+                              ),
+                            );
                             const priceDelta = Number(opt.price ?? 0);
+                            const priceLabel =
+                              potLabel ?? (priceDelta > 0 ? `+₹${priceDelta}` : NO_PRICE_LABEL);
                             return (
                               <button
                                 key={opt.id}
@@ -997,14 +1045,9 @@ export default function ProductDetailPage() {
                                 <span className={`text-[11px] font-semibold text-center leading-tight line-clamp-2 ${isSelected ? 'text-primary' : 'text-gray-800'}`}>
                                   {opt.name}
                                 </span>
-                                {priceDelta > 0 && (
-                                  <span className={`text-[10px] mt-0.5 font-medium ${isSelected ? 'text-primary/80' : 'text-gray-400'}`}>
-                                    +₹{priceDelta}
-                                  </span>
-                                )}
-                                {priceDelta === 0 && (
-                                  <span className={`text-[10px] mt-0.5 font-medium ${isSelected ? 'text-primary/80' : 'text-gray-400'}`}>
-                                    Included
+                                {priceLabel && (
+                                  <span className={`text-[10px] mt-0.5 font-medium text-center leading-tight ${isSelected ? 'text-primary/80' : 'text-gray-400'}`}>
+                                    {priceLabel}
                                   </span>
                                 )}
                               </button>
@@ -1018,7 +1061,20 @@ export default function ProductDetailPage() {
                         <div className="flex flex-wrap gap-2">
                           {visibleOptions.map((opt) => {
                             const isSelected = selectedOptions[group.id] === opt.id;
+                            const potLabel = formatPotPrice(
+                              potPriceForOption(
+                                gridAxes,
+                                product.variants?.pot_price?.map,
+                                selectedOptions,
+                                group.id,
+                                opt.id,
+                              ),
+                            );
                             const priceDelta = Number(opt.price ?? 0);
+                            // A ₹0 pill must not render as a bare chip — that reads as
+                            // "free / included" with nothing to back it up.
+                            const priceLabel =
+                              potLabel ?? (priceDelta > 0 ? `+₹${priceDelta}` : NO_PRICE_LABEL);
                             return (
                               <button
                                 key={opt.id}
@@ -1031,9 +1087,9 @@ export default function ProductDetailPage() {
                                   }`}
                               >
                                 {opt.name}
-                                {priceDelta > 0 && (
+                                {priceLabel && (
                                   <span className={`ml-1.5 text-xs font-normal ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
-                                    +₹{priceDelta}
+                                    {priceLabel}
                                   </span>
                                 )}
                               </button>

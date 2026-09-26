@@ -1,8 +1,13 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Dict, Optional, List
 import uuid
 
-from pydantic import BaseModel, Field, field_serializer, field_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
+
+# Joiner shared by every variant key space: image_map, stock_map, price_map, pot_price.map.
+# Kept in one place because the storefront has an identical constant and the two key spaces
+# must never be interchanged.
+COMBO_KEY_SEP = "__"
 
 
 class VariantOption(BaseModel):
@@ -56,6 +61,74 @@ class VariantGroup(BaseModel):
         return v
 
 
+class PotPrice(BaseModel):
+    """Component price grid over a SUBSET of the product's variant groups.
+
+    Distinct from `price_map`, which is an ABSOLUTE total per FULL combination. Values here are
+    ADDENDS, and the keys are shorter — one option id per `group_ids` entry, joined by
+    COMBO_KEY_SEP — because they live in a different key space. A `price_map` key can never
+    resolve here and must never be written into `map`.
+    """
+    # The groups this grid prices, in canonical product-group order. Their options' own
+    # `price` deltas are EXCLUDED from the additive total, because the grid already prices
+    # them — that exclusion is the whole point, and misconfiguring it double-charges.
+    group_ids: List[str] = Field(min_length=1)
+    # Groups NOT in `group_ids` that the admin has declared as separate charges, so their
+    # deltas are added normally. A priced group left undeclared is a 422, not a warning.
+    independent_group_ids: List[str] = Field(default_factory=list)
+    # Sparse: absent = unknown, and the resolver falls through rather than assuming zero.
+    map: Dict[str, float] = Field(default_factory=dict)
+
+    model_config = {"extra": "allow"}
+
+    @field_validator("map")
+    @classmethod
+    def validate_map(cls, v: Dict[str, float]) -> Dict[str, float]:
+        for key, val in v.items():
+            if val < 0:
+                raise ValueError(f"Price for '{key}' cannot be negative")
+        return v
+
+    @model_validator(mode="after")
+    def validate_key_space(self) -> "PotPrice":
+        """Cross-field checks the `map` validator cannot do on its own.
+
+        Key arity is the important one. `map` keys are a DIFFERENT key space from `price_map`:
+        one option id per `group_ids` entry, not one per product group. A 3-segment key here
+        (a `price_map` key, copied over by mistake) can never resolve, so every affected cell
+        would silently bill as unpriced. Catching it at save is the only place it is visible.
+        """
+        if len(set(self.group_ids)) != len(self.group_ids):
+            dupes = sorted({g for g in self.group_ids if self.group_ids.count(g) > 1})
+            raise ValueError(f"Duplicate group in group_ids: {', '.join(dupes)}")
+
+        overlap = [g for g in self.independent_group_ids if g in self.group_ids]
+        if overlap:
+            # A group cannot be both excluded from the delta sum and included in it. The
+            # second declaration is what an admin means by "also charge this", so honouring
+            # it would double-charge every order.
+            raise ValueError(
+                "independent_group_ids must not overlap group_ids: "
+                + ", ".join(sorted(overlap))
+            )
+
+        expected = len(self.group_ids)
+        for key in self.map:
+            parts = key.split(COMBO_KEY_SEP)
+            if len(parts) != expected:
+                raise ValueError(
+                    f"Price key '{key}' has {len(parts)} segments but this grid prices "
+                    f"{expected} group(s); keys must be "
+                    + COMBO_KEY_SEP.join(f"<{g}>" for g in self.group_ids)
+                )
+            if any(not p for p in parts):
+                raise ValueError(f"Price key '{key}' has an empty segment")
+        return self
+
+    def axis_count(self) -> int:
+        return len(self.group_ids)
+
+
 class ProductVariantsNew(BaseModel):
     """New flexible variant structure - replaces old colors/pot_types/sizes."""
     variant_groups: List[VariantGroup] = []
@@ -73,6 +146,10 @@ class ProductVariantsNew(BaseModel):
     # default), allowing each combination to carry its own price (e.g. Small/Krish ₹300
     # vs Medium/Krish ₹350). Absent rows fall back to summing option prices.
     price_map: Optional[dict] = None
+    # Component price grid (e.g. pot price across size × pot style). N-axis: `group_ids` is
+    # admin-selected and the key order follows the product's own variant_groups order, so
+    # reordering the admin pickers cannot silently rewrite the map. See PotPrice.
+    pot_price: Optional[PotPrice] = None
 
     model_config = {"extra": "allow"}
 

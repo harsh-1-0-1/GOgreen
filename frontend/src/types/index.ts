@@ -105,10 +105,38 @@ export interface ProductVariants {
   default_image?: string;
   /** Per-combination stock, keyed by combo_key (option IDs joined by "__"). Dense: every combo has a row, 0 = out of stock. */
   stock_map?: Record<string, number>;
-  /** Per-combination price, keyed by combo_key. When present, wins over the summed per-option price. */
-  price_map?: Record<string, number>;
+  /**
+   * Per-combination price, keyed by combo_key. When present, wins over the summed per-option price.
+   * Explicitly nullable: retiring the map in favour of a `pot_price` grid sends `null` so the
+   * key is cleared rather than left holding stale overrides.
+   */
+  price_map?: Record<string, number> | null;
   /** Per-combination images, keyed by combo_key (admin combinations table). */
   image_map?: Record<string, string[]>;
+  /**
+   * Component price grid over a SUBSET of `variant_groups` — e.g. pot price across
+   * size × pot style. Distinct from `price_map`, which is an ABSOLUTE total per full
+   * combination: `pot_price` values are ADDENDS, and its keys are shorter (one option id
+   * per `group_ids` entry, joined by "__") because they live in a different key space.
+   * Never index one with the other's keys.
+   */
+  pot_price?: PotPrice;
+}
+
+/**
+ * Admin-managed price grid whose values are components (addends), not totals.
+ * N-axis: `group_ids` is admin-selected membership, in canonical product-group order.
+ */
+export interface PotPrice {
+  /** Groups this grid prices, in key order. Also the required key length. Their
+   *  `options[].price` deltas are EXCLUDED from the additive total — the grid prices them. */
+  group_ids: string[];
+  /** Groups NOT in `group_ids` that the admin declared as separate charges, so their
+   *  deltas are added normally. Enforced server-side; a priced group left undeclared is a
+   *  422, not a warning. */
+  independent_group_ids?: string[];
+  /** Sparse: one option id per `group_ids` entry, joined by "__". Absent = unknown. */
+  map?: Record<string, number>;
 }
 
 // Old variant types - kept for backward compatibility during migration

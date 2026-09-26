@@ -63,6 +63,105 @@ def _assert_relative_keys(variants: dict | None) -> None:
         raise ValueError(f"variants contains invalid image value(s), expected relative keys or http(s) URLs: {bad}")
 
 
+class PotPriceAmbiguityError(ValueError):
+    """The component price grid cannot produce an unambiguous total (§5.5a).
+
+    A distinct type so the API layer can return 422 — the request is well-formed but
+    semantically unprocessable — instead of lumping it in with generic 400s. The admin UI
+    keys its "this grid would misprice" messaging off the status code.
+    """
+
+
+def _assert_pot_price_unambiguous(variants: dict) -> None:
+    """Server-side gate for the component price grid (§5.5a). Raises ValueError -> HTTP 422.
+
+    A hard block, not a warning, and deliberately so. The person harmed is the MERCHANT, not
+    the customer: an admin who types ₹50 into a pot's price box while the grid also prices
+    that pot will believe ₹50 is charged, and it will not be. That is lost revenue plus a
+    support ticket, and it is silent — nothing errors, the total just comes out lower than
+    intended.
+
+    Two failure modes, both unresolvable by the backend on the merchant's behalf:
+
+    1. A group inside `group_ids` carries non-zero option deltas. The chain excludes those
+       groups entirely, so the delta is *definitely* ignored every time — not "possibly".
+    2. A group OUTSIDE `group_ids` carries non-zero deltas and is not declared in
+       `independent_group_ids`. Whether such a group is a separate charge or an oversight is a
+       pricing decision, and guessing either way silently misprices every order.
+    """
+    pot_price = variants.get("pot_price")
+    if not isinstance(pot_price, dict):
+        return
+
+    group_ids = pot_price.get("group_ids") or []
+    if not isinstance(group_ids, list) or not group_ids:
+        return
+
+    groups = variants.get("variant_groups") or []
+    declared = set(pot_price.get("independent_group_ids") or [])
+
+    problems: list[str] = []
+
+    # ── Structural checks ──
+    #
+    # A grid saved with axes out of product order, or pointing at a deleted group, silently
+    # fails to resolve — the pot shows no price and is never charged, so the product just
+    # looks like it forgot its pot prices. Nothing about the money is wrong, which is exactly
+    # why this would otherwise sail past a billing-only gate unnoticed.
+    product_order = [g.get("id") for g in groups if g.get("id")]
+    known = set(product_order)
+    missing = [g for g in group_ids if g not in known]
+    if missing:
+        problems.append(
+            "The grid prices "
+            + ", ".join(f"'{m}'" for m in missing)
+            + ", which is not a variant type on this product. Remove it from the grid."
+        )
+    if not missing and group_ids != [g for g in product_order if g in set(group_ids)]:
+        expected_order = " → ".join(g for g in product_order if g in set(group_ids))
+        problems.append(
+            "The grid's axes are out of order ("
+            + " → ".join(group_ids)
+            + "). They must follow the product's variant order ("
+            + expected_order
+            + ") or the saved keys will not match."
+        )
+    if problems:
+        raise PotPriceAmbiguityError(
+            "This price grid is set up incorrectly: " + " ".join(problems)
+        )
+
+    # ── Billing checks: a priced group whose options still carry deltas. ──
+    for group in groups:
+        gid = group.get("id")
+        label = group.get("label") or gid
+        priced = [
+            {"name": o.get("name", ""), "price": float(o.get("price", 0) or 0)}
+            for o in (group.get("options") or [])
+            if float(o.get("price", 0) or 0) != 0
+        ]
+        if not priced:
+            continue
+        if gid in group_ids:
+            summary = ", ".join(f"{p['name']} ₹{p['price']:g}" for p in priced)
+            problems.append(
+                f"'{label}' has its own price ({summary}), but this grid already prices it, "
+                f"so that amount is not being charged. Move it into the grid, or clear it."
+            )
+        elif gid not in declared:
+            summary = ", ".join(f"{p['name']} ₹{p['price']:g}" for p in priced)
+            problems.append(
+                f"'{label}' has its own price ({summary}) and is not in this grid. Confirm it "
+                f"is a separate charge, or move it into the grid."
+            )
+
+    if problems:
+        raise PotPriceAmbiguityError(
+            "This price grid is ambiguous, so the total could be wrong: "
+            + " ".join(problems)
+        )
+
+
 def _clean_and_validate_variants(variants: dict | None) -> dict | None:
     if not variants:
         return variants
@@ -94,8 +193,11 @@ def _clean_and_validate_variants(variants: dict | None) -> dict | None:
             else:
                 raise ValueError(f"Invalid image format for combination {k}")
         cleaned["image_map"] = new_image_map
-        
+
     _assert_relative_keys(cleaned)
+    # The §5.5a gate lives inside the cleaner so BOTH the create and update paths enforce it —
+    # there is no save route that can bypass it, and no second call site to forget.
+    _assert_pot_price_unambiguous(cleaned)
     return cleaned
 
 
