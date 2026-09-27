@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { X, LogIn } from 'lucide-react';
-import { LOGO_PATH } from '@/lib/branding';
+import { LOGO_PATH_WHITE } from '@/lib/branding';
 import { useAuthStore } from '@/store/authStore';
 import { useCategories } from '@/hooks/useCategories';
 import { categoryLink, sortByMenuOrder } from '@/components/layout/Navbar/navData';
@@ -176,7 +176,7 @@ export default function Footer() {
             {/* Logo column */}
             <div className="col-span-2 lg:col-span-1 mb-2 lg:mb-0">
               <Link to="/" onClick={scrollTop} className="flex items-center gap-2 mb-3">
-                <img src={LOGO_PATH} alt="Plantoga" className="h-12 sm:h-14 object-contain" />
+                <img src={LOGO_PATH_WHITE} alt="Plantoga" className="h-12 sm:h-14 object-contain" />
               </Link>
               <p className="text-white/60 text-sm leading-relaxed mb-5">
                 Where every leaf begins a new story.
