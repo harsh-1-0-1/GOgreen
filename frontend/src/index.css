@@ -1,7 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
 @import "tailwindcss";
 
 @theme {
+  --font-sans: 'Poppins', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+
   --color-primary: #2D6A4F;
   --color-primary-light: #52B788;
   --color-secondary: #16A34A;
@@ -16,7 +18,7 @@ html {
 
 body {
   @apply bg-bg text-text antialiased;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Poppins', system-ui, -apple-system, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
 

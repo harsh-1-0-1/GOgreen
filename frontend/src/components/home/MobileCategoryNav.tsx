@@ -45,7 +45,7 @@ export default function MobileCategoryNav() {
             <Link
               key={cat.slug}
               to={categoryLink(cat)}
-              className="flex flex-col items-center gap-1.5 sm:gap-2 group flex-shrink-0 w-[68px] sm:w-[76px] lg:w-[84px]"
+              className="flex flex-col items-center gap-1.5 sm:gap-2 group flex-shrink-0 w-max min-w-[68px] sm:min-w-[76px] lg:min-w-[84px]"
             >
               <div className="w-[60px] h-[60px] sm:w-[68px] sm:h-[68px] lg:w-[76px] lg:h-[76px] rounded-full overflow-hidden bg-gray-50 border-2 border-transparent group-hover:border-[#16A34A] transition-colors p-0.5">
                 {cat.mobile_image_url || cat.image_url ? (
@@ -59,7 +59,7 @@ export default function MobileCategoryNav() {
                   <div className="w-full h-full bg-gray-100 rounded-full" />
                 )}
               </div>
-              <span className="text-[10px] sm:text-xs lg:text-sm font-medium text-center text-gray-700 leading-tight">
+              <span className="text-xs sm:text-sm lg:text-base font-medium text-center text-gray-700 leading-tight whitespace-nowrap">
                 {cat.name}
               </span>
             </Link>
