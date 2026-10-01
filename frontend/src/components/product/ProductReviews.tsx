@@ -212,7 +212,7 @@ export default function ProductReviews({ productId }: { productId: number }) {
   }
 
   return (
-    <section id="customer-reviews" className="mt-10 border-t border-gray-100 pt-10 sm:mt-16 sm:pt-12">
+    <section id="customer-reviews" className="mt-8 sm:mt-10 border-t border-gray-100 pt-8 sm:pt-10">
       <div className="mx-auto w-full max-w-5xl px-0 text-center">
         <div className="mx-auto max-w-2xl">
           <h2 className="text-2xl font-bold tracking-normal text-gray-950 sm:text-3xl">Customer Reviews</h2>

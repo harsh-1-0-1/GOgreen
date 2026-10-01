@@ -22,7 +22,7 @@ export default function HappyPlanters({ fallbackImages }: { fallbackImages: stri
   }
 
   return (
-    <section className="mt-10 sm:mt-14" aria-labelledby="happy-planters-title">
+    <section className="mt-8 sm:mt-10" aria-labelledby="happy-planters-title">
       <div className="mb-4 flex items-end justify-between gap-4">
         <div>
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Growing together</p>

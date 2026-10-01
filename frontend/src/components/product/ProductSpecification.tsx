@@ -10,7 +10,7 @@ export default function ProductSpecification({ specs }: { specs: ProductSpecRow[
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="mt-6 sm:mt-8 border border-gray-200 rounded-xl overflow-hidden bg-white">
+    <div className="mt-8 sm:mt-10 border border-gray-200 rounded-xl overflow-hidden bg-white">
       <button
         type="button"
         onClick={() => setOpen(!open)}

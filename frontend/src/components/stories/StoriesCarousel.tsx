@@ -88,7 +88,7 @@ export function StoriesCarousel({ stories }: StoriesCarouselProps) {
   if (!stories || stories.length === 0) return null;
 
   return (
-    <div className="mt-12 mb-8">
+    <div className="mt-8 sm:mt-10">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-serif text-green-900">Stories Across India.</h2>
       </div>

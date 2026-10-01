@@ -29,7 +29,7 @@ const PROMISES = [
 export default function PlantogaPromise({ bannerImage }: { bannerImage?: string | null }) {
   if (bannerImage) {
     return (
-      <section className="mt-6 sm:mt-8 rounded-2xl overflow-hidden">
+      <section className="mt-8 sm:mt-10 rounded-2xl overflow-hidden">
         <img
           src={bannerImage}
           alt="The Plantoga Promise"
@@ -41,7 +41,7 @@ export default function PlantogaPromise({ bannerImage }: { bannerImage?: string 
 
   return (
     <section
-      className="mt-6 sm:mt-8 rounded-2xl overflow-hidden"
+      className="mt-8 sm:mt-10 rounded-2xl overflow-hidden"
       style={{ backgroundColor: '#1B4332' }}
     >
       <div className="px-4 sm:px-8 py-6 sm:py-10">

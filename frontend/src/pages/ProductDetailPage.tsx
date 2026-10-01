@@ -12,6 +12,7 @@ import ProductReviews, { ProductRatingInline } from '@/components/product/Produc
 import PlantCareCard from '@/components/product/PlantCareCard';
 import PlantogaPromise from '@/components/product/PlantogaPromise';
 import HowToGuide from '@/components/product/HowToGuide';
+import CareEssentials from '@/components/product/CareEssentials';
 import ProductSpecification from '@/components/product/ProductSpecification';
 import WhyPlantoga from '@/components/product/WhyPlantoga';
 import HappyPlanters from '@/components/product/HappyPlanters';
@@ -487,47 +488,7 @@ function CareTips({ tips }: { tips: string[] }) {
   );
 }
 
-function InlineBanner({ banner: b, fallbackImg, naturalSize = false }: {
-  banner: Banner;
-  fallbackImg: string;
-  naturalSize?: boolean;
-}) {
-  const inner = (
-    <>
-      <img
-        src={fallbackImg}
-        alt=""
-        className={
-          naturalSize
-            ? 'block mx-auto max-w-full h-auto'
-            : 'block w-full aspect-square object-cover'
-        }
-        loading="lazy"
-      />
-    </>
-  );
 
-  if (b.cta_link) {
-    return (
-      <Link
-        to={b.cta_link}
-        className="mt-10 sm:mt-14 rounded-2xl overflow-hidden relative block"
-        style={{ backgroundColor: b.bg_color || '#1B4332' }}
-      >
-        {inner}
-      </Link>
-    );
-  }
-
-  return (
-    <div
-      className="mt-10 sm:mt-14 rounded-2xl overflow-hidden relative"
-      style={{ backgroundColor: b.bg_color || '#1B4332' }}
-    >
-      {inner}
-    </div>
-  );
-}
 
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -867,11 +828,6 @@ export default function ProductDetailPage() {
     { label: 'Manufactured by', value: STORE_LEGAL.manufacturedBy },
   ];
 
-  function renderInlineBannerItem(banner: Banner | null) {
-    if (!banner || !banner.image_url) return null;
-    return <InlineBanner banner={banner} fallbackImg={banner.image_url} naturalSize />;
-  }
-
   return (
     <div ref={galleryRef} className="pb-20 md:pb-0 scroll-mt-[100px] sm:scroll-mt-[110px] lg:scroll-mt-[120px]">
       {/* Mobile image gallery */}
@@ -895,7 +851,7 @@ export default function ProductDetailPage() {
             <DesktopGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} />
           </div>
 
-          <div className="space-y-4 sm:space-y-6">
+          <div className="space-y-3.5 sm:space-y-4">
             <h1 className="text-2xl sm:text-3xl font-bold">{product.name}</h1>
 
             <ProductTagBadges
@@ -1193,7 +1149,37 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            <ProductDescription description={product.description} />
+            {/* Care essentials + how-to guide — dense, always-visible content that
+                fills the buy-box column alongside the gallery so the two columns end
+                at roughly the same height on desktop. */}
+            <CareEssentials sunlight={product.sunlight} watering={product.watering} />
+
+            <HowToGuide product={product} />
+
+            {/* Spec / promotional banner — in-column card, shown below the care guide.
+                Capped height so a square upload can't turn into a full-column slab. */}
+            {productSpecBanner?.image_url && (
+              <div className="rounded-xl overflow-hidden">
+                {productSpecBanner.cta_link ? (
+                  <Link to={productSpecBanner.cta_link} className="block" style={{ backgroundColor: productSpecBanner.bg_color || '#F5F0E8' }}>
+                    <img src={productSpecBanner.image_url} alt={productSpecBanner.title} className="w-full max-h-[380px] object-cover" loading="lazy" />
+                  </Link>
+                ) : (
+                  <div style={{ backgroundColor: productSpecBanner.bg_color || '#F5F0E8' }}>
+                    <img src={productSpecBanner.image_url} alt={productSpecBanner.title} className="w-full max-h-[380px] object-cover" loading="lazy" />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {product.description?.trim() && (
+              <div>
+                <h2 className="mb-2 text-base font-bold text-gray-900 sm:text-lg" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
+                  Description
+                </h2>
+                <ProductDescription description={product.description} />
+              </div>
+            )}
 
             <CareTips tips={product.care_tips || []} />
           </div>
@@ -1202,10 +1188,6 @@ export default function ProductDetailPage() {
         <PlantCareCard careCardImage={product.care_card_image} />
 
         <PlantogaPromise bannerImage={product.promise_banner_image} />
-
-        <HowToGuide product={product} />
-
-        {renderInlineBannerItem(productSpecBanner)}
 
         <ProductSpecification specs={productSpecs} />
 
@@ -1216,7 +1198,7 @@ export default function ProductDetailPage() {
         {/* Similar products */}
         {similarProducts.length > 0 && (
           <ErrorBoundary>
-            <section className="mt-10 sm:mt-16">
+            <section className="mt-8 sm:mt-10">
               <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">You May Also Like</h2>
               <div className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-hide snap-x-mandatory pb-4 -mx-3 sm:-mx-4 px-3 sm:px-4 md:grid md:grid-cols-4 md:overflow-visible md:mx-0 md:px-0">
                 {similarProducts.map((p) => (
@@ -1233,10 +1215,49 @@ export default function ProductDetailPage() {
 
         <ProductReviews productId={product.id} />
 
-        {/* Product detail page ad banner — admin controlled via Banners › Product Detail Page Banner */}
-        {renderInlineBannerItem(productDetailBanner)}
-
-        <ProductFaq faqs={product.faqs} />
+        {/* FAQ + detail banner — FAQ takes the wide left column, banner sits in a
+            narrower right rail that sticks while the FAQ list scrolls (admin controlled
+            via Banners › Product Detail Page Banner). Banner is optional; without one
+            the FAQ simply takes the full width. */}
+        {productDetailBanner?.image_url ? (
+          <div className="mt-8 sm:mt-10 flex flex-col gap-6 lg:gap-10 md:flex-row md:items-start">
+            <div className="min-w-0 flex-1">
+              <ProductFaq faqs={product.faqs} embedded />
+            </div>
+            <div className="md:w-[340px] lg:w-[400px] md:shrink-0 md:sticky md:top-24">
+              {productDetailBanner.cta_link ? (
+                <Link
+                  to={productDetailBanner.cta_link}
+                  className="block rounded-2xl overflow-hidden"
+                  style={{ backgroundColor: productDetailBanner.bg_color || '#1B4332' }}
+                >
+                  <img
+                    src={productDetailBanner.image_url}
+                    alt={productDetailBanner.title}
+                    className="w-full h-auto object-cover"
+                    loading="lazy"
+                  />
+                </Link>
+              ) : (
+                <div
+                  className="rounded-2xl overflow-hidden"
+                  style={{ backgroundColor: productDetailBanner.bg_color || '#1B4332' }}
+                >
+                  <img
+                    src={productDetailBanner.image_url}
+                    alt={productDetailBanner.title}
+                    className="w-full h-auto object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-8 sm:mt-10">
+            <ProductFaq faqs={product.faqs} />
+          </div>
+        )}
       </div>
 
     </div>

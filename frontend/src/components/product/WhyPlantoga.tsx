@@ -87,7 +87,7 @@ function ValueCell({ value, featured = false }: { value: ComparisonValue; featur
 export default function WhyPlantoga({ bannerImage }: { bannerImage?: string | null }) {
   if (bannerImage) {
     return (
-      <section className="mt-8 sm:mt-12">
+      <section className="mt-8 sm:mt-10">
         <img
           src={bannerImage}
           alt="Plantoga vs the rest"
@@ -98,7 +98,7 @@ export default function WhyPlantoga({ bannerImage }: { bannerImage?: string | nu
   }
 
   return (
-    <section className="mt-8 sm:mt-12" aria-labelledby="why-plantoga-title">
+    <section className="mt-8 sm:mt-10" aria-labelledby="why-plantoga-title">
       <div className="mb-5 text-center">
         <span className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-primary">
           <Leaf size={13} aria-hidden="true" />
