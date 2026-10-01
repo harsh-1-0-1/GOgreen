@@ -180,6 +180,11 @@ class ProductCreate(BaseModel):
     care_card_image: str | None = None  # relative storage key
     faqs: Optional[List[FAQItem]] = None
     related_product_ids: Optional[List[int]] = None
+    # ── Image overlay badge controls ──────────────────────────────────────
+    is_bestseller: bool = False
+    bestseller_badge_color: str | None = None  # hex colour e.g. "#F59E0B"
+    discount_badge_color: str | None = None
+    rating_badge_color: str | None = None
 
     @field_validator("variants")
     @classmethod
@@ -211,6 +216,11 @@ class ProductUpdate(BaseModel):
     care_card_image: str | None = None  # relative key; null clears, omit to preserve
     faqs: Optional[List[FAQItem]] = None
     related_product_ids: Optional[List[int]] = None
+    # ── Image overlay badge controls ──────────────────────────────────────
+    is_bestseller: bool | None = None
+    bestseller_badge_color: str | None = None
+    discount_badge_color: str | None = None
+    rating_badge_color: str | None = None
 
     @field_validator("variants")
     @classmethod
@@ -242,6 +252,14 @@ class ProductResponse(BaseModel):
     care_card_image: str | None = None
     faqs: Optional[List[dict]] = None
     related_product_ids: Optional[List[int]] = None
+    # ── Image overlay badge controls ──────────────────────────────────────
+    is_bestseller: bool = False
+    bestseller_badge_color: str | None = None
+    discount_badge_color: str | None = None
+    rating_badge_color: str | None = None
+    # ── Aggregated review data (computed at query time) ───────────────────
+    avg_rating: float | None = None
+    review_count: int = 0
     # ⚠️ NOTE on variants field image storage:
     # Despite field names like "image_url", variants store RELATIVE KEYS in the database
     # (e.g. "plantoga/product-variants/42/abc.webp"), NOT full URLs.

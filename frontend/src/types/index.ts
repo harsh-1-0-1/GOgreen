@@ -59,6 +59,18 @@ export interface Product {
   care_card_image?: string | null;
   faqs?: FAQItem[] | null;
   related_product_ids?: number[];
+  // ── Image overlay badge controls ──────────────────────────────────────
+  /** When true the BESTSELLER label is shown on the product card image. */
+  is_bestseller?: boolean;
+  /** Background hex colour for the BESTSELLER badge (e.g. "#F59E0B"). Falls back to a default if null. */
+  bestseller_badge_color?: string | null;
+  /** Background hex colour for the % OFF discount badge. Falls back to a default if null. */
+  discount_badge_color?: string | null;
+  /** Background hex colour for the star/rating badge. Falls back to a default if null. */
+  rating_badge_color?: string | null;
+  // ── Aggregated review data (computed by API) ──────────────────────────
+  avg_rating?: number | null;
+  review_count?: number;
 }
 
 // New flexible variant system types

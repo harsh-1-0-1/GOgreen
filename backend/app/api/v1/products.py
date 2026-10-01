@@ -189,6 +189,10 @@ async def get_product_raw(
         "care_card_image": product.care_card_image,  # raw relative key
         "faqs": product.faqs,  # raw list of {question, answer}
         "related_product_ids": product.related_product_ids or [],  # list of product IDs
+        "is_bestseller": product.is_bestseller,
+        "bestseller_badge_color": product.bestseller_badge_color,
+        "discount_badge_color": product.discount_badge_color,
+        "rating_badge_color": product.rating_badge_color,
         "created_at": product.created_at.isoformat() if product.created_at else None,
     }
 
@@ -304,6 +308,7 @@ async def get_products_by_ids(
         select(Product).where(Product.id.in_(id_list), Product.is_active == True)  # noqa: E712
     )
     products = list(result.scalars().all())
+    await product_service.attach_review_stats(db, products)
     # Preserve the admin-specified order
     id_to_product = {p.id: p for p in products}
     return [ProductResponse.model_validate(id_to_product[i]) for i in id_list if i in id_to_product]

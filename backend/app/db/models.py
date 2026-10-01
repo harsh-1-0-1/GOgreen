@@ -105,6 +105,12 @@ class Product(Base):
     faqs: Mapped[list | None] = mapped_column(JSON, nullable=True)
     display_section: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     related_product_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # ── Image overlay badge controls ──────────────────────────────────────
+    # Admin can toggle and colour three badges shown directly on the product card image.
+    is_bestseller: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    bestseller_badge_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    discount_badge_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    rating_badge_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     category: Mapped["Category"] = relationship(back_populates="products")
     reviews: Mapped[list["ProductReview"]] = relationship(back_populates="product", cascade="all, delete-orphan")

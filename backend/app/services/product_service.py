@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Category, Product
+from app.db.models import Category, Product, ProductReview, ReviewStatus
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.utils.redis import cache_delete, cache_delete_pattern
 
@@ -262,6 +262,39 @@ def _tag_filter(db: AsyncSession, tag: str):
     )
 
 
+async def attach_review_stats(db: AsyncSession, products: list[Product]) -> None:
+    """Attach avg_rating and review_count as transient attributes to each product.
+
+    Uses a single GROUP BY query over published reviews, so there is no N+1
+    regardless of list size. Attributes are set directly on the ORM instance;
+    ProductResponse reads them via from_attributes / model_validate.
+    """
+    if not products:
+        return
+    product_ids = [p.id for p in products]
+    rows = await db.execute(
+        select(
+            ProductReview.product_id,
+            func.avg(ProductReview.rating).label("avg_rating"),
+            func.count(ProductReview.id).label("review_count"),
+        )
+        .where(
+            ProductReview.product_id.in_(product_ids),
+            ProductReview.status == ReviewStatus.PUBLISHED,
+        )
+        .group_by(ProductReview.product_id)
+    )
+    stats: dict[int, tuple[float, int]] = {
+        row.product_id: (float(row.avg_rating), int(row.review_count))
+        for row in rows
+    }
+    for product in products:
+        avg, cnt = stats.get(product.id, (None, 0))
+        # Round to one decimal place for display
+        product.avg_rating = round(avg, 1) if avg is not None else None  # type: ignore[attr-defined]
+        product.review_count = cnt  # type: ignore[attr-defined]
+
+
 async def list_products(
     db: AsyncSession,
     *,
@@ -345,17 +378,25 @@ async def list_products(
     pages = max(1, math.ceil(total / limit))
     query = query.offset((page - 1) * limit).limit(limit)
     result = await db.execute(query)
-    return list(result.scalars().all()), total, pages
+    products = list(result.scalars().all())
+    await attach_review_stats(db, products)
+    return products, total, pages
 
 
 async def get_product_by_slug(db: AsyncSession, slug: str) -> Product | None:
     result = await db.execute(select(Product).where(Product.slug == slug))
-    return result.scalar_one_or_none()
+    product = result.scalar_one_or_none()
+    if product:
+        await attach_review_stats(db, [product])
+    return product
 
 
 async def get_product_by_id(db: AsyncSession, product_id: int) -> Product | None:
     result = await db.execute(select(Product).where(Product.id == product_id))
-    return result.scalar_one_or_none()
+    product = result.scalar_one_or_none()
+    if product:
+        await attach_review_stats(db, [product])
+    return product
 
 
 async def _unique_slug(db: AsyncSession, base_slug: str, exclude_id: int | None = None) -> str:

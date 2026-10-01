@@ -173,6 +173,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     variants: false,
     seo: false,
     related: false,
+    badges: false,
   });
 
   const toggleSection = (section: string) => {
@@ -244,6 +245,12 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const [careCardImageKey, setCareCardImageKey] = useState('');
   const [careCardImageUrl, setCareCardImageUrl] = useState('');
   const [uploadingCareCardImage, setUploadingCareCardImage] = useState(false);
+
+  // Per-product image overlay badge controls
+  const [isBestseller, setIsBestseller] = useState(false);
+  const [bestsellerBadgeColor, setBestsellerBadgeColor] = useState('#F59E0B');
+  const [discountBadgeColor, setDiscountBadgeColor] = useState('#1B4332');
+  const [ratingBadgeColor, setRatingBadgeColor] = useState('#1B4332');
 
   // Per-product FAQ entries
   const [faqItems, setFaqItems] = useState<{ question: string; answer: string }[]>([]);
@@ -425,6 +432,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setCareCardImageKey('');  // will be overwritten by rawProduct effect
     setFaqItems(p.faqs || []);
     setRelatedProductIds(p.related_product_ids || []);
+    // Reset badge controls (will be overwritten by rawProduct effect on edit)
+    setIsBestseller(Boolean(p.is_bestseller));
+    setBestsellerBadgeColor(p.bestseller_badge_color || '#F59E0B');
+    setDiscountBadgeColor(p.discount_badge_color || '#1B4332');
+    setRatingBadgeColor(p.rating_badge_color || '#1B4332');
   };
   // Seed default_image from the raw admin endpoint (relative key, not resolved URL).
   // Must wait for formInitialized so that variantGroups is already populated before
@@ -526,6 +538,12 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       if (Array.isArray(rawRelatedIds)) {
         setRelatedProductIds(rawRelatedIds);
       }
+
+      // Seed badge controls from raw product
+      setIsBestseller(Boolean(rawProduct.is_bestseller));
+      setBestsellerBadgeColor(rawProduct.bestseller_badge_color || '#F59E0B');
+      setDiscountBadgeColor(rawProduct.discount_badge_color || '#1B4332');
+      setRatingBadgeColor(rawProduct.rating_badge_color || '#1B4332');
     }
   }
 
@@ -747,6 +765,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           care_card_image: careCardImageKey || null,
           faqs: faqItems.filter(f => f.question.trim() && f.answer.trim()),
           related_product_ids: relatedProductIds.length > 0 ? relatedProductIds : null,
+          is_bestseller: isBestseller,
+          bestseller_badge_color: bestsellerBadgeColor || null,
+          discount_badge_color: discountBadgeColor || null,
+          rating_badge_color: ratingBadgeColor || null,
         };
         const { data: updatedProduct } = await api.put<Product>(`/products/${editProduct.id}`, updatePayload);
         toast.success('Product updated successfully!');
@@ -812,6 +834,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         const cleanFaqs = faqItems.filter(f => f.question.trim() && f.answer.trim());
         if (cleanFaqs.length) fd.append('faqs', JSON.stringify(cleanFaqs));
         if (relatedProductIds.length) fd.append('related_product_ids', JSON.stringify(relatedProductIds));
+        fd.append('is_bestseller', String(isBestseller));
+        if (discountBadgeColor) fd.append('discount_badge_color', discountBadgeColor);
+        if (bestsellerBadgeColor) fd.append('bestseller_badge_color', bestsellerBadgeColor);
+        if (ratingBadgeColor) fd.append('rating_badge_color', ratingBadgeColor);
         fd.append('image_urls', JSON.stringify(productImages));
 
         // Add file uploads
@@ -2155,7 +2181,168 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             )}
           </div>
 
-          {/* Section 8: Related Products (You May Also Like) */}
+          {/* Section 8: Image Badge Controls */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleSection('badges')}
+              className="w-full flex items-center justify-between px-5 py-4 font-semibold text-sm text-gray-800 hover:bg-gray-50 text-left"
+            >
+              <span className="flex items-center gap-2">🏷️ <span>Image Badges</span></span>
+              {openSections.badges ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {openSections.badges && (
+              <div className="p-5 border-t border-gray-100 space-y-5 bg-white">
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Control the three overlay badges shown directly on the product card image.
+                  Colours default to the store theme when left unset.
+                </p>
+
+                {/* BESTSELLER badge */}
+                <div className="rounded-xl border border-gray-200 bg-gray-50/40 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-700">BESTSELLER badge</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">Shown in the top-right corner of the product image.</p>
+                    </div>
+                    {/* Live preview pill */}
+                    <span
+                      className="text-white text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-sm"
+                      style={{ backgroundColor: bestsellerBadgeColor }}
+                    >
+                      BESTSELLER
+                    </span>
+                  </div>
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isBestseller}
+                      onChange={(e) => setIsBestseller(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span className="text-xs text-gray-700">Show BESTSELLER badge on product image</span>
+                  </label>
+                  {isBestseller && (
+                    <div className="flex items-center gap-3">
+                      <label className="text-xs text-gray-600 shrink-0">Badge colour</label>
+                      <label
+                        className="relative flex-1 h-8 rounded-lg border border-gray-200 overflow-hidden cursor-pointer block"
+                        title="BESTSELLER badge background colour"
+                      >
+                        <span
+                          className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white/90"
+                          style={{ backgroundColor: bestsellerBadgeColor, textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
+                        >
+                          {bestsellerBadgeColor}
+                        </span>
+                        <input
+                          type="color"
+                          value={bestsellerBadgeColor}
+                          onChange={(e) => setBestsellerBadgeColor(e.target.value)}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setBestsellerBadgeColor('#F59E0B')}
+                        className="text-[10px] text-gray-400 hover:text-gray-600 underline shrink-0"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* % OFF discount badge */}
+                <div className="rounded-xl border border-gray-200 bg-gray-50/40 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-700">% OFF badge</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">Shown in the top-left corner when a discount exists (Original Price &gt; Selling Price).</p>
+                    </div>
+                    <span
+                      className="text-white text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-sm"
+                      style={{ backgroundColor: discountBadgeColor }}
+                    >
+                      15% OFF
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs text-gray-600 shrink-0">Badge colour</label>
+                    <label
+                      className="relative flex-1 h-8 rounded-lg border border-gray-200 overflow-hidden cursor-pointer block"
+                      title="% OFF badge background colour"
+                    >
+                      <span
+                        className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white/90"
+                        style={{ backgroundColor: discountBadgeColor, textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
+                      >
+                        {discountBadgeColor}
+                      </span>
+                      <input
+                        type="color"
+                        value={discountBadgeColor}
+                        onChange={(e) => setDiscountBadgeColor(e.target.value)}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setDiscountBadgeColor('#1B4332')}
+                      className="text-[10px] text-gray-400 hover:text-gray-600 underline shrink-0"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                {/* Rating badge */}
+                <div className="rounded-xl border border-gray-200 bg-gray-50/40 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-700">⭐ Rating badge</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">Shown in the bottom-left corner when the product has reviews.</p>
+                    </div>
+                    <span
+                      className="text-white text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1"
+                      style={{ backgroundColor: ratingBadgeColor }}
+                    >
+                      ★ 4.8 <span className="opacity-75">| 440</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs text-gray-600 shrink-0">Badge colour</label>
+                    <label
+                      className="relative flex-1 h-8 rounded-lg border border-gray-200 overflow-hidden cursor-pointer block"
+                      title="Rating badge background colour"
+                    >
+                      <span
+                        className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white/90"
+                        style={{ backgroundColor: ratingBadgeColor, textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
+                      >
+                        {ratingBadgeColor}
+                      </span>
+                      <input
+                        type="color"
+                        value={ratingBadgeColor}
+                        onChange={(e) => setRatingBadgeColor(e.target.value)}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setRatingBadgeColor('#1B4332')}
+                      className="text-[10px] text-gray-400 hover:text-gray-600 underline shrink-0"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 9: Related Products (You May Also Like) */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <button
               type="button"
