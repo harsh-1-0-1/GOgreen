@@ -28,6 +28,7 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import DashboardPage from '@/pages/admin/DashboardPage';
 import ProductsAdminPage from '@/pages/admin/ProductsAdminPage';
 import CategoriesAdminPage from '@/pages/admin/CategoriesAdminPage';
+import ImageBadgesAdminPage from '@/pages/admin/ImageBadgesAdminPage';
 import OrdersAdminPage from '@/pages/admin/OrdersAdminPage';
 import UsersAdminPage from '@/pages/admin/UsersAdminPage';
 import BannersAdminPage from '@/pages/admin/BannersAdminPage';
@@ -121,6 +122,7 @@ export default function App() {
                 <Route index element={<DashboardPage />} />
                 <Route path="products" element={<ProductsAdminPage />} />
                 <Route path="categories" element={<CategoriesAdminPage />} />
+                <Route path="badges" element={<ImageBadgesAdminPage />} />
                 <Route path="orders" element={<OrdersAdminPage />} />
                 <Route path="users" element={<UsersAdminPage />} />
                 <Route path="banners" element={<BannersAdminPage />} />

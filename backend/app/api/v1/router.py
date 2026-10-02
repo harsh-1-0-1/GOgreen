@@ -4,6 +4,7 @@ from app.api.v1 import (
     addresses,
     admin,
     auth,
+    badge_configs,
     banners,
     blog,
     cart,
@@ -46,3 +47,4 @@ api_router.include_router(settings.router)
 api_router.include_router(display_sections.router)
 api_router.include_router(menu_items.router)
 api_router.include_router(tags.router)
+api_router.include_router(badge_configs.router)

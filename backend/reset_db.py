@@ -63,6 +63,7 @@ from app.db.models import (
     Cart,
     CartItem,
     Category,
+    CategoryBadgeConfig,
     CorporateInquiry,
     DamageClaim,
     DoNotForgetProduct,
@@ -76,6 +77,7 @@ from app.db.models import (
     Story,
     User,
     WebhookEvent,
+    product_categories,
 )
 
 # Every table, imported above, used both for the delete order (sqlite path)
@@ -94,7 +96,11 @@ ALL_TABLES = [
     Story,
     BlogPost,
     Banner,
+    # Join rows first: they reference both products and categories.
+    product_categories,
     Product,
+    # 1:1 with the category, so it goes when categories go.
+    CategoryBadgeConfig,
     Category,
     CorporateInquiry,
     MenuItem,
@@ -145,11 +151,16 @@ def _ask_password() -> str:
         return pw
 
 
+def _table_name(entry) -> str:
+    """Table name for either a mapped class or a bare Table (join tables)."""
+    return getattr(entry, "__tablename__", None) or entry.name
+
+
 def _confirm_wipe() -> None:
     print()
     print("This will DELETE ALL DATA in the database:")
     for model in ALL_TABLES:
-        print(f"  - {model.__tablename__}")
+        print(f"  - {_table_name(model)}")
     print()
     answer = input('Type "CONFIRM_RESE" to continue, anything else to abort: ')
     if answer.strip() != "CONFIRM_RESE":
@@ -174,7 +185,7 @@ async def reset_and_create_admin(email: str, password: str) -> None:
             await conn.execute(
                 text(
                     "TRUNCATE "
-                    + ", ".join(f'"{m.__tablename__}"' for m in ALL_TABLES)
+                    + ", ".join(f'"{_table_name(m)}"' for m in ALL_TABLES)
                     + " RESTART IDENTITY CASCADE"
                 )
             )
@@ -182,7 +193,7 @@ async def reset_and_create_admin(email: str, password: str) -> None:
             # sqlite has no TRUNCATE; delete children before parents using
             # the FK-sorted table order.
             for model in ALL_TABLES:
-                await conn.execute(text(f'DELETE FROM "{model.__tablename__}"'))
+                await conn.execute(text(f'DELETE FROM "{_table_name(model)}"'))
 
     async with session_factory() as db:
         admin = User(

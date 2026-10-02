@@ -1,0 +1,70 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Home, LayoutGrid, TrendingUp, UserCircle } from 'lucide-react';
+import { useAuthStore } from '@/store/authStore';
+const TRENDING_HREF = `/products?display_section=trending&collection_title=${encodeURIComponent('Trending Now')}`;
+const NAV_ITEMS = [
+    { to: '/', icon: Home, label: 'Home' },
+    { to: '/products', icon: LayoutGrid, label: 'Collections' },
+    { to: TRENDING_HREF, icon: TrendingUp, label: 'Trending' },
+    { to: '/account', icon: UserCircle, label: 'Account' },
+];
+export default function BottomNav() {
+    const { pathname, search } = useLocation();
+    const { user, openAuthModal } = useAuthStore();
+    const [keyboardOpen, setKeyboardOpen] = useState(false);
+    const [visible, setVisible] = useState(true);
+    const lastScrollY = useRef(0);
+    useEffect(() => {
+        const vv = window.visualViewport;
+        if (!vv)
+            return;
+        function onResize() {
+            setKeyboardOpen(vv.height < window.innerHeight * 0.75);
+        }
+        vv.addEventListener('resize', onResize);
+        return () => vv.removeEventListener('resize', onResize);
+    }, []);
+    const handleScroll = useCallback(() => {
+        const currentY = window.scrollY;
+        if (currentY < 100) {
+            setVisible(true);
+        }
+        else {
+            const diff = currentY - lastScrollY.current;
+            if (diff > 10)
+                setVisible(true);
+            else if (diff < -10)
+                setVisible(false);
+        }
+        lastScrollY.current = currentY;
+    }, []);
+    useEffect(() => {
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, [handleScroll]);
+    if (keyboardOpen)
+        return null;
+    if (pathname.startsWith('/admin'))
+        return null;
+    const fullPath = pathname + search;
+    function isActive(to) {
+        if (to === '/')
+            return pathname === '/';
+        if (to.includes('?'))
+            return fullPath === to;
+        if (to === '/products') {
+            return pathname === '/products' && !fullPath.includes('display_section=trending');
+        }
+        return pathname.startsWith(to);
+    }
+    return (_jsx("nav", { className: "md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 safe-bottom transition-transform duration-300", style: { transform: visible ? 'translateY(0)' : 'translateY(100%)' }, children: _jsx("div", { className: "flex h-[58px] items-center justify-around px-3", children: NAV_ITEMS.map((item) => {
+                const active = isActive(item.to);
+                const isAccount = item.to === '/account';
+                if (isAccount) {
+                    return (_jsxs("button", { onClick: () => user ? (window.location.href = '/orders') : openAuthModal(), className: "flex flex-1 flex-col items-center justify-center gap-0.5 touch-target", children: [_jsx(item.icon, { size: 22, strokeWidth: active ? 2.5 : 1.5, className: active ? 'text-secondary' : 'text-gray-400' }), _jsx("span", { className: `text-[10px] font-medium ${active ? 'text-secondary' : 'text-gray-400'}`, children: item.label })] }, item.to));
+                }
+                return (_jsxs(Link, { to: item.to, className: "flex flex-1 flex-col items-center justify-center gap-0.5 touch-target", children: [_jsx(item.icon, { size: 22, strokeWidth: active ? 2.5 : 1.5, className: active ? 'text-secondary' : 'text-gray-400' }), _jsx("span", { className: `text-[10px] font-medium ${active ? 'text-secondary' : 'text-gray-400'}`, children: item.label })] }, item.to));
+            }) }) }));
+}

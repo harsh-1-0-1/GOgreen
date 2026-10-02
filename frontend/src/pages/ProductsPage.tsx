@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ChevronDown, SlidersHorizontal, X } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
@@ -166,8 +166,8 @@ function TrendingPromoBanner({
 }
 
 function FiltersSidebar({
-  selectedCategory,
-  onCategoryChange,
+  selectedCategories,
+  onCategoryToggle,
   minPrice,
   maxPrice,
   onMinPriceChange,
@@ -176,8 +176,8 @@ function FiltersSidebar({
   onTagToggle,
   onReset,
 }: {
-  selectedCategory: string;
-  onCategoryChange: (slug: string) => void;
+  selectedCategories: string[];
+  onCategoryToggle: (slug: string) => void;
   minPrice: string;
   maxPrice: string;
   onMinPriceChange: (v: string) => void;
@@ -187,7 +187,34 @@ function FiltersSidebar({
   onReset: () => void;
 }) {
   const { data: categories } = useCategories();
-  const allCategories = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
+  const selectedCategorySet = new Set(selectedCategories);
+  // Slug → display name for the chips, including slugs that came from a link
+  // and no longer resolve to a live category (those fall back to the title-cased slug).
+  const categoryNames = useMemo(() => {
+    const map = new Map<string, string>();
+    (categories ?? []).forEach((c) => {
+      map.set(c.slug, c.name);
+      (c.children ?? []).forEach((child) => map.set(child.slug, child.name));
+    });
+    return map;
+  }, [categories]);
+  // Nested picker: one collapsible panel of categories, with subcategories
+  // revealed per parent. Selected categories surface as removable chips above
+  // the panel so nothing gets stranded inside a closed accordion.
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({});
+  const categoryRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!categoryOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      if (categoryRef.current && !categoryRef.current.contains(e.target as Node)) {
+        setCategoryOpen(false);
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [categoryOpen]);
   // Drive the filter from the admin-defined tags so newly created tags (and
   // their colours) show up here. The hardcoded list is only a fallback for an
   // install with no tags configured yet.
@@ -225,22 +252,134 @@ function FiltersSidebar({
       </div>
       <div>
         <h4 className="font-semibold text-sm mb-3">Category</h4>
-        <div className="space-y-1.5 max-h-52 overflow-y-auto">
+        <div ref={categoryRef}>
           <button
-            onClick={() => onCategoryChange('')}
-            className={`block w-full text-left text-sm px-3 py-2 rounded-lg transition touch-target ${!selectedCategory ? 'bg-primary-light/10 text-primary font-medium' : 'hover:bg-gray-50'}`}
+            type="button"
+            onClick={() => setCategoryOpen((o) => !o)}
+            aria-expanded={categoryOpen}
+            className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-sm border rounded-lg transition touch-target ${categoryOpen ? 'border-primary text-primary' : 'border-gray-200 hover:border-gray-400'}`}
           >
-            All
+            <span className="truncate">
+              {selectedCategories.length === 0
+                ? 'Select categories'
+                : `${selectedCategories.length} selected`}
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              {selectedCategories.length > 0 && (
+                <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-medium leading-none text-white">
+                  {selectedCategories.length}
+                </span>
+              )}
+              <ChevronDown
+                className={`h-4 w-4 text-gray-400 transition-transform ${categoryOpen ? 'rotate-180' : ''}`}
+              />
+            </span>
           </button>
-          {allCategories.map((c) => (
-            <button
-              key={c.slug}
-              onClick={() => onCategoryChange(c.slug)}
-              className={`block w-full text-left text-sm px-3 py-2 rounded-lg transition touch-target ${selectedCategory === c.slug ? 'bg-primary-light/10 text-primary font-medium' : 'hover:bg-gray-50'}`}
-            >
-              {c.parent_id ? `  ${c.name}` : c.name}
-            </button>
-          ))}
+
+          {selectedCategories.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {selectedCategories.map((slug) => {
+                const label = categoryNames.get(slug) ?? formatSlugTitle(slug);
+                return (
+                  <span
+                    key={slug}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary-light/10 py-1 pl-2.5 pr-1 text-xs font-medium text-primary"
+                  >
+                    <span className="max-w-[9rem] truncate">{label}</span>
+                    <button
+                      type="button"
+                      onClick={() => onCategoryToggle(slug)}
+                      aria-label={`Remove ${label} filter`}
+                      className="rounded-full p-0.5 transition hover:bg-primary/20"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {categoryOpen && (
+            <div className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-gray-200 p-1">
+              {(categories ?? []).map((c) => {
+                const children = c.children ?? [];
+                const parentSelected = selectedCategorySet.has(c.slug);
+                // A parent starts open when one of its subcategories is selected, so a
+                // category arriving from a nav link lands on a visible ticked row.
+                const isOpen =
+                  expandedParents[c.slug] ??
+                  children.some((child) => selectedCategorySet.has(child.slug));
+                return (
+                  <div key={c.slug}>
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onCategoryToggle(c.slug);
+                          if (children.length) {
+                            setExpandedParents((prev) => ({ ...prev, [c.slug]: true }));
+                          }
+                        }}
+                        aria-pressed={parentSelected}
+                        className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition touch-target ${parentSelected ? 'bg-primary-light/10 font-medium text-primary' : 'hover:bg-gray-50'}`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px] leading-none ${parentSelected ? 'border-primary bg-primary text-white' : 'border-gray-300 bg-white'}`}
+                        >
+                          {parentSelected ? '✓' : ''}
+                        </span>
+                        <span className="truncate">{c.name}</span>
+                      </button>
+                      {children.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedParents((prev) => ({ ...prev, [c.slug]: !isOpen }))
+                          }
+                          aria-expanded={isOpen}
+                          aria-label={`${isOpen ? 'Hide' : 'Show'} subcategories of ${c.name}`}
+                          className="rounded-md p-2 text-gray-400 transition hover:bg-gray-50 hover:text-gray-600"
+                        >
+                          <ChevronRight
+                            className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                          />
+                        </button>
+                      )}
+                    </div>
+                    {isOpen && children.length > 0 && (
+                      <div className="ml-3 border-l border-gray-200 pl-2">
+                        {children.map((child) => {
+                          const childSelected = selectedCategorySet.has(child.slug);
+                          return (
+                            <button
+                              key={child.slug}
+                              type="button"
+                              onClick={() => onCategoryToggle(child.slug)}
+                              aria-pressed={childSelected}
+                              className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition touch-target ${childSelected ? 'bg-primary-light/10 font-medium text-primary' : 'text-gray-600 hover:bg-gray-50'}`}
+                            >
+                              <span
+                                aria-hidden="true"
+                                className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px] leading-none ${childSelected ? 'border-primary bg-primary text-white' : 'border-gray-300 bg-white'}`}
+                              >
+                                {childSelected ? '✓' : ''}
+                              </span>
+                              <span className="truncate">{child.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {(categories ?? []).length === 0 && (
+                <p className="px-2 py-3 text-center text-xs text-gray-400">No categories yet.</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <div>
@@ -298,7 +437,15 @@ export default function ProductsPage() {
 
   useBodyScrollLock(mobileFiltersOpen);
 
-  const category = searchParams.get('category') || searchParams.get('subcategory') || '';
+  // `category` is the single-category param every nav/banner link uses; `categories`
+  // is the multi-select facet. Both are folded into one selection so an old
+  // `?category=xl-plants` link lands with that category ticked, not silently lost.
+  const categoryParam = searchParams.get('category') || searchParams.get('subcategory') || '';
+  const categoryListParam = searchParams.get('categories') || '';
+  const selectedCategories = useMemo(() => {
+    const slugs = [...categoryListParam.split(','), categoryParam];
+    return Array.from(new Set(slugs.map((s) => s.trim()).filter(Boolean)));
+  }, [categoryListParam, categoryParam]);
   const search = searchParams.get('search') || '';
   const collectionTitle = searchParams.get('collection_title') || '';
   const sort = searchParams.get('sort_by') || '';
@@ -327,6 +474,22 @@ export default function ProductsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  function handleCategoryToggle(slug: string) {
+    const next = selectedCategories.includes(slug)
+      ? selectedCategories.filter((c) => c !== slug)
+      : [...selectedCategories, slug];
+    // Collapse both params into `categories` so the sidebar stays the single source
+    // of truth once the shopper starts clicking (otherwise a stale `category`
+    // param would re-add its slug on every render).
+    const params = new URLSearchParams(searchParams);
+    params.delete('category');
+    params.delete('subcategory');
+    if (next.length) params.set('categories', next.join(','));
+    else params.delete('categories');
+    params.delete('page');
+    setSearchParams(params);
+  }
+
   function handleTagToggle(tag: string) {
     const next = selectedTags.includes(tag) ? selectedTags.filter((t) => t !== tag) : [...selectedTags, tag];
     updateParams({ tags: next.join(',') });
@@ -338,7 +501,7 @@ export default function ProductsPage() {
   }
 
   const { data, isLoading } = useProducts({
-    category_slug: category || undefined,
+    categories: selectedCategories.length ? selectedCategories.join(',') : undefined,
     search: search || undefined,
     sort_by: sort || undefined,
     display_section: displaySection || undefined,
@@ -354,20 +517,26 @@ export default function ProductsPage() {
   const isTrendingPage =
     (sort === 'popular' || displaySection === 'trending') &&
     !search &&
-    !category &&
+    selectedCategories.length === 0 &&
     !minPrice &&
     !maxPrice &&
     selectedTags.length === 0;
   const isNewestPage =
     sort === 'newest' &&
     !search &&
-    !category &&
+    selectedCategories.length === 0 &&
     !minPrice &&
     !maxPrice &&
     selectedTags.length === 0;
   const trendingBannerImages =
     data?.items.flatMap((product) => product.images ?? []).filter(Boolean) ??
     [];
+  const categoryTitle =
+    selectedCategories.length === 1
+      ? formatSlugTitle(selectedCategories[0])
+      : selectedCategories.length > 1
+        ? selectedCategories.map(formatSlugTitle).join(' + ')
+        : '';
   const pageTitle = search
     ? `Results for "${search}"`
     : collectionTitle
@@ -376,8 +545,8 @@ export default function ProductsPage() {
       ? 'Price Drop!'
       : isNewestPage
         ? 'New Arrivals'
-        : category
-          ? formatSlugTitle(category)
+        : categoryTitle
+          ? categoryTitle
           : selectedTags.length === 1
             ? formatSlugTitle(selectedTags[0])
             : selectedTags.length > 1
@@ -386,8 +555,8 @@ export default function ProductsPage() {
 
   const sidebar = (
     <FiltersSidebar
-      selectedCategory={category}
-      onCategoryChange={(slug) => updateParams({ category: slug })}
+      selectedCategories={selectedCategories}
+      onCategoryToggle={handleCategoryToggle}
       minPrice={minPrice}
       maxPrice={maxPrice}
       onMinPriceChange={(v) => { setMinPrice(v); updateParams({ min_price: v }); }}
@@ -424,7 +593,7 @@ export default function ProductsPage() {
         >
           <SlidersHorizontal size={18} className="text-primary" /> 
           Filters
-          {(selectedTags.length > 0 || category || minPrice || maxPrice) && (
+          {(selectedTags.length > 0 || selectedCategories.length > 0 || minPrice || maxPrice) && (
             <span className="w-2 h-2 rounded-full bg-accent ml-1" />
           )}
         </button>

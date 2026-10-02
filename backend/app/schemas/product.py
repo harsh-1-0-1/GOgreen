@@ -4,6 +4,8 @@ import uuid
 
 from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
 
+from app.schemas.category import CategoryBrief
+
 # Joiner shared by every variant key space: image_map, stock_map, price_map, pot_price.map.
 # Kept in one place because the storefront has an identical constant and the two key spaces
 # must never be interchanged.
@@ -167,6 +169,9 @@ class ProductCreate(BaseModel):
     original_price: float | None = None
     stock_qty: int = 0
     category_id: int
+    # Extra categories beyond the primary one. The primary is repeated here if you
+    # want it to appear twice in a rendered list; the service de-duplicates.
+    additional_category_ids: list[int] = []
     tags: list[str] = []
     care_tips: list[str] = []
     how_to_guide: str | None = None
@@ -180,11 +185,10 @@ class ProductCreate(BaseModel):
     care_card_image: str | None = None  # relative storage key
     faqs: Optional[List[FAQItem]] = None
     related_product_ids: Optional[List[int]] = None
-    # ── Image overlay badge controls ──────────────────────────────────────
+    # ── Image overlay badges ──────────────────────────────────────────────
+    # Only the per-product flag lives here. Wording/colour are category-wide —
+    # see CategoryBadgeConfig.
     is_bestseller: bool = False
-    bestseller_badge_color: str | None = None  # hex colour e.g. "#F59E0B"
-    discount_badge_color: str | None = None
-    rating_badge_color: str | None = None
 
     @field_validator("variants")
     @classmethod
@@ -199,6 +203,10 @@ class ProductUpdate(BaseModel):
     original_price: float | None = None
     stock_qty: int | None = None
     category_id: int | None = None
+    # null  → leave the additional categories untouched.
+    # []    → clear them (product belongs only to its primary category).
+    # [ids] → replace the whole set.
+    additional_category_ids: list[int] | None = None
     images: list[str] | None = None
     tags: list[str] | None = None
     care_tips: list[str] | None = None
@@ -216,11 +224,8 @@ class ProductUpdate(BaseModel):
     care_card_image: str | None = None  # relative key; null clears, omit to preserve
     faqs: Optional[List[FAQItem]] = None
     related_product_ids: Optional[List[int]] = None
-    # ── Image overlay badge controls ──────────────────────────────────────
+    # ── Image overlay badges ──────────────────────────────────────────────
     is_bestseller: bool | None = None
-    bestseller_badge_color: str | None = None
-    discount_badge_color: str | None = None
-    rating_badge_color: str | None = None
 
     @field_validator("variants")
     @classmethod
@@ -237,6 +242,14 @@ class ProductResponse(BaseModel):
     original_price: float | None
     stock_qty: int
     category_id: int
+    # Every category the product sits in, primary first. `category_id` above stays
+    # the primary one so older clients (and the admin's primary picker) keep working.
+    #
+    # These three are transient attributes computed by
+    # product_service.attach_category_briefs(), not ORM columns.
+    category_ids: list[int] = []
+    categories: list[CategoryBrief] = []
+    additional_category_ids: list[int] = []
     images: list[str]
     tags: list[str]
     care_tips: list[str]
@@ -252,11 +265,8 @@ class ProductResponse(BaseModel):
     care_card_image: str | None = None
     faqs: Optional[List[dict]] = None
     related_product_ids: Optional[List[int]] = None
-    # ── Image overlay badge controls ──────────────────────────────────────
+    # ── Image overlay badges ──────────────────────────────────────────────
     is_bestseller: bool = False
-    bestseller_badge_color: str | None = None
-    discount_badge_color: str | None = None
-    rating_badge_color: str | None = None
     # ── Aggregated review data (computed at query time) ───────────────────
     avg_rating: float | None = None
     review_count: int = 0

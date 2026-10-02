@@ -39,6 +39,7 @@ async def list_products(
     response: Response,
     db: AsyncSession = Depends(get_db),
     category_slug: str | None = None,
+    categories: str | None = None,
     search: str | None = None,
     min_price: float | None = None,
     max_price: float | None = None,
@@ -48,9 +49,17 @@ async def list_products(
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ):
+    """List active products.
+
+    `category_slug` filters by one category; `categories` takes a comma-separated
+    list of slugs and matches products in ANY of them (a product can sit in several
+    categories, so the storefront's category facet is a multi-select). Both are
+    combined, and a parent category also matches its children.
+    """
     response.headers["Cache-Control"] = "no-cache"
     cache_key = product_service.make_list_cache_key(
-        category_slug, search, min_price, max_price, tags, sort_by, display_section, page, limit,
+        category_slug, categories, search, min_price, max_price, tags, sort_by,
+        display_section, page, limit,
     )
     cached = await cache_get(cache_key)
     if cached:
@@ -59,6 +68,7 @@ async def list_products(
     items, total, pages = await product_service.list_products(
         db,
         category_slug=category_slug,
+        categories=categories,
         search=search,
         min_price=min_price,
         max_price=max_price,
@@ -175,6 +185,9 @@ async def get_product_raw(
         "original_price": product.original_price,
         "stock_qty": product.stock_qty,
         "category_id": product.category_id,
+        "category_ids": product.category_ids,
+        "categories": product.categories,
+        "additional_category_ids": product.additional_category_ids,
         "images": product.images or [],  # relative keys, not resolved URLs
         "tags": product.tags or [],
         "care_tips": product.care_tips or [],
@@ -190,9 +203,6 @@ async def get_product_raw(
         "faqs": product.faqs,  # raw list of {question, answer}
         "related_product_ids": product.related_product_ids or [],  # list of product IDs
         "is_bestseller": product.is_bestseller,
-        "bestseller_badge_color": product.bestseller_badge_color,
-        "discount_badge_color": product.discount_badge_color,
-        "rating_badge_color": product.rating_badge_color,
         "created_at": product.created_at.isoformat() if product.created_at else None,
     }
 
@@ -309,6 +319,7 @@ async def get_products_by_ids(
     )
     products = list(result.scalars().all())
     await product_service.attach_review_stats(db, products)
+    await product_service.attach_category_briefs(db, products)
     # Preserve the admin-specified order
     id_to_product = {p.id: p for p in products}
     return [ProductResponse.model_validate(id_to_product[i]) for i in id_list if i in id_to_product]
@@ -341,6 +352,8 @@ async def create_product(
     stock_qty: Annotated[int, Form()] = 0,
     tags: Annotated[str, Form()] = "[]",
     care_tips: Annotated[str, Form()] = "[]",
+    # JSON string: [category_id, ...] — categories beyond the primary one.
+    additional_category_ids: Annotated[str | None, Form()] = None,
     display_section: Annotated[str | None, Form()] = None,
     how_to_guide: Annotated[str | None, Form()] = None,
     sunlight: Annotated[str | None, Form()] = None,
@@ -382,6 +395,19 @@ async def create_product(
                 detail="Each product image must be 5MB or smaller",
             )
 
+    try:
+        submitted_extra_category_ids = json.loads(additional_category_ids or "[]")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400, detail="Additional category ids must be a valid JSON list"
+        ) from exc
+    if not isinstance(submitted_extra_category_ids, list) or not all(
+        isinstance(cid, int) for cid in submitted_extra_category_ids
+    ):
+        raise HTTPException(
+            status_code=400, detail="Additional category ids must be a list of integers"
+        )
+
     payload = ProductCreate(
         name=name,
         description=description,
@@ -389,6 +415,7 @@ async def create_product(
         original_price=original_price,
         stock_qty=stock_qty,
         category_id=category_id,
+        additional_category_ids=submitted_extra_category_ids,
         tags=json.loads(tags),
         care_tips=json.loads(care_tips),
         display_section=display_section or None,

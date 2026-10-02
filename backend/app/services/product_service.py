@@ -6,14 +6,25 @@ from sqlalchemy import Select, cast, exists, func, or_, select  # func used in l
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.db.models import Category, Product, ProductReview, ReviewStatus
+from app.db.models import (
+    Category,
+    Product,
+    ProductReview,
+    ReviewStatus,
+    product_categories,
+)
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.utils.redis import cache_delete, cache_delete_pattern
 
 # Maximum number of times to retry a slug-collision IntegrityError before giving up.
 # In practice this only fires under concurrent writes; 3 retries is more than enough.
 _SLUG_RETRY_LIMIT = 3
+
+# Distinguishes "the caller never sent this field" from "the caller sent null",
+# which `model_dump(exclude_unset=True)` cannot express on its own.
+_UNSET = object()
 
 
 def _slugify(text: str) -> str:
@@ -203,6 +214,7 @@ def _clean_and_validate_variants(variants: dict | None) -> dict | None:
 
 def make_list_cache_key(
     category_slug: str | None,
+    categories: str | None,
     search: str | None,
     min_price: float | None,
     max_price: float | None,
@@ -212,9 +224,54 @@ def make_list_cache_key(
     page: int,
     limit: int,
 ) -> str:
-    raw = f"{category_slug}:{search}:{min_price}:{max_price}:{tags}:{sort_by}:{display_section}:{page}:{limit}"
+    raw = (
+        f"{category_slug}:{categories}:{search}:{min_price}:{max_price}:{tags}"
+        f":{sort_by}:{display_section}:{page}:{limit}"
+    )
     h = hashlib.md5(raw.encode()).hexdigest()[:12]
     return f"products:{h}"
+
+
+def _split_slugs(*raw: str | None) -> list[str]:
+    """Flatten comma-separated slug params into a de-duplicated, ordered list."""
+    slugs: list[str] = []
+    for value in raw:
+        for part in (value or "").split(","):
+            slug = part.strip()
+            if slug and slug not in slugs:
+                slugs.append(slug)
+    return slugs
+
+
+def _category_filter(slugs: list[str]):
+    """Match products sitting in ANY of the given category slugs (OR, not AND).
+
+    A product qualifies if the category is either its PRIMARY category
+    (`products.category_id`) or one of its additional ones (`product_categories`).
+    Both sources are checked because the primary is a column and the extras are a
+    join table — see the `product_categories` definition in models.py.
+
+    Selecting a parent category also matches its children, and a child selection
+    matches the products that list the child *or any of its own children*
+    additionally. An unknown slug simply matches nothing rather than erroring: the
+    storefront links to categories that may since have been deleted.
+    """
+    if not slugs:
+        return None
+
+    target = select(Category.id).where(Category.slug.in_(slugs))
+    # Expand to direct children so "Cacti & Succulents" surfaces "Aloe Vera".
+    targets_and_children = select(Category.id).where(
+        or_(Category.id.in_(target), Category.parent_id.in_(target))
+    )
+
+    linked_products = select(product_categories.c.product_id).where(
+        product_categories.c.category_id.in_(targets_and_children)
+    )
+    return or_(
+        Product.category_id.in_(targets_and_children),
+        Product.id.in_(linked_products),
+    )
 
 
 def _tag_match_key(value: str) -> str:
@@ -295,10 +352,113 @@ async def attach_review_stats(db: AsyncSession, products: list[Product]) -> None
         product.review_count = cnt  # type: ignore[attr-defined]
 
 
+async def attach_category_briefs(db: AsyncSession, products: list[Product]) -> None:
+    """Attach the full category set to each product: primary first, then extras.
+
+    Sets three transient attributes per product — `category_ids`, `categories` and
+    `additional_category_ids` — which ProductResponse reads via from_attributes.
+
+    Both halves are read from columns rather than relationships: `category_id` is
+    the primary, and the extras come straight out of the `product_categories` table.
+    Touching `product.category` / `product.additional_categories` here would emit a
+    lazy load, which an AsyncSession cannot await (MissingGreenlet) — and these
+    attributes are read during response serialization, i.e. at the worst possible
+    moment for an exception. One extra query for the whole page, no N+1.
+    """
+    if not products:
+        return
+
+    rows = (
+        await db.execute(
+            select(
+                product_categories.c.product_id,
+                product_categories.c.category_id,
+            )
+            .where(
+                product_categories.c.product_id.in_([p.id for p in products if p.id is not None])
+            )
+            # Deterministic order so the response lists a product's categories the
+            # same way on every call (the cached list and a fresh one must match).
+            .order_by(product_categories.c.product_id, product_categories.c.category_id)
+        )
+    ).all()
+    extra_ids: dict[int, list[int]] = {}
+    for row in rows:
+        extra_ids.setdefault(row.product_id, []).append(row.category_id)
+
+    wanted: set[int] = {p.category_id for p in products}
+    for ids in extra_ids.values():
+        wanted.update(ids)
+
+    cats = (
+        await db.execute(
+            select(Category.id, Category.name, Category.slug, Category.parent_id)
+            .where(Category.id.in_(wanted))
+        )
+    ).all()
+    # Plain dicts, not ORM instances: these are handed straight to CategoryBrief
+    # and must not become session-attached objects.
+    briefs = {
+        cat.id: {
+            "id": cat.id,
+            "name": cat.name,
+            "slug": cat.slug,
+            "parent_id": cat.parent_id,
+        }
+        for cat in cats
+    }
+
+    for product in products:
+        extras = extra_ids.get(product.id, [])
+        ordered = [product.category_id, *extras]
+        product.category_ids = [cid for cid in ordered if cid in briefs]  # type: ignore[attr-defined]
+        product.categories = [briefs[cid] for cid in product.category_ids]  # type: ignore[attr-defined]
+        product.additional_category_ids = extras  # type: ignore[attr-defined]
+
+
+async def resolve_additional_categories(
+    db: AsyncSession, ids: list[int], primary_id: int | None
+) -> list[Category]:
+    """Look up the categories to link as ADDITIONAL ones, dropping the primary.
+
+    An unknown id is a 400 rather than a 500: the admin form sends this list, and a
+    category deleted in another tab would otherwise surface as a raw FK violation.
+    """
+    # De-duplicate while preserving the admin's pick order, and never store the
+    # primary in the join table — it is already the product's category_id.
+    wanted: list[int] = []
+    for cat_id in ids:
+        if cat_id == primary_id or cat_id in wanted:
+            continue
+        wanted.append(cat_id)
+    if not wanted:
+        return []
+
+    result = await db.execute(select(Category).where(Category.id.in_(wanted)))
+    found = {cat.id: cat for cat in result.scalars().all()}
+    missing = [cid for cid in wanted if cid not in found]
+    if missing:
+        raise ValueError(
+            "Unknown category id(s): " + ", ".join(str(cid) for cid in missing)
+        )
+    return [found[cid] for cid in wanted]
+
+
+async def current_additional_ids(db: AsyncSession, product_id: int) -> list[int]:
+    """Read a product's additional category ids without touching its relationship."""
+    rows = await db.execute(
+        select(product_categories.c.category_id)
+        .where(product_categories.c.product_id == product_id)
+        .order_by(product_categories.c.category_id)
+    )
+    return [row.category_id for row in rows]
+
+
 async def list_products(
     db: AsyncSession,
     *,
     category_slug: str | None = None,
+    categories: str | None = None,
     search: str | None = None,
     min_price: float | None = None,
     max_price: float | None = None,
@@ -308,30 +468,20 @@ async def list_products(
     page: int = 1,
     limit: int = 20,
 ) -> tuple[list[Product], int, int]:
-    """Return (items, total, pages)."""
+    """Return (items, total, pages).
+
+    `category_slug` is the legacy single-category filter; `categories` is a
+    comma-separated list of slugs backing the storefront's multi-select facet. The
+    two are merged, so a link built before multi-category support
+    (`/products?category=xl-plants`) keeps filtering exactly as it did.
+    """
     query: Select = select(Product).where(Product.is_active == True)  # noqa: E712
     count_q = select(func.count()).select_from(Product).where(Product.is_active == True)  # noqa: E712
 
-    if category_slug:
-        # Get the category that matches the slug
-        parent_cat_id = select(Category.id).where(Category.slug == category_slug).scalar_subquery()
-        # Get all products in this category or its children
-        query = query.where(
-            or_(
-                Product.category_id == parent_cat_id,
-                Product.category_id.in_(
-                    select(Category.id).where(Category.parent_id == parent_cat_id)
-                )
-            )
-        )
-        count_q = count_q.where(
-            or_(
-                Product.category_id == parent_cat_id,
-                Product.category_id.in_(
-                    select(Category.id).where(Category.parent_id == parent_cat_id)
-                )
-            )
-        )
+    category_filter = _category_filter(_split_slugs(category_slug, categories))
+    if category_filter is not None:
+        query = query.where(category_filter)
+        count_q = count_q.where(category_filter)
 
     if search:
         pattern = f"%{search}%"
@@ -380,6 +530,7 @@ async def list_products(
     result = await db.execute(query)
     products = list(result.scalars().all())
     await attach_review_stats(db, products)
+    await attach_category_briefs(db, products)
     return products, total, pages
 
 
@@ -388,14 +539,23 @@ async def get_product_by_slug(db: AsyncSession, slug: str) -> Product | None:
     product = result.scalar_one_or_none()
     if product:
         await attach_review_stats(db, [product])
+        await attach_category_briefs(db, [product])
     return product
 
 
 async def get_product_by_id(db: AsyncSession, product_id: int) -> Product | None:
-    result = await db.execute(select(Product).where(Product.id == product_id))
+    result = await db.execute(
+        select(Product)
+        .where(Product.id == product_id)
+        # Load the additional categories up front: update_product assigns to that
+        # collection, and replacing an unloaded one would trigger a lazy load an
+        # AsyncSession cannot await.
+        .options(selectinload(Product.additional_categories))
+    )
     product = result.scalar_one_or_none()
     if product:
         await attach_review_stats(db, [product])
+        await attach_category_briefs(db, [product])
     return product
 
 
@@ -432,12 +592,23 @@ async def create_product(
 ) -> Product:
     base_slug = _slugify(payload.name)
     data = payload.model_dump()
+    # additional_category_ids is not a column — it is applied to the relationship
+    # below, so it must not reach Product(**data).
+    extra_category_ids = data.pop("additional_category_ids", [])
     if data.get("variants"):
         data["variants"] = _clean_and_validate_variants(data["variants"])
+    extra_categories = await resolve_additional_categories(
+        db, extra_category_ids, data.get("category_id")
+    )
 
     for attempt in range(_SLUG_RETRY_LIMIT):
         slug = await _unique_slug(db, base_slug)
-        product = Product(**data, slug=slug, images=image_urls or [])
+        product = Product(
+            **data,
+            slug=slug,
+            images=image_urls or [],
+            additional_categories=extra_categories,
+        )
         db.add(product)
         try:
             await db.flush()
@@ -454,6 +625,7 @@ async def create_product(
         break
 
     await db.refresh(product)
+    await attach_category_briefs(db, [product])
     await _invalidate_product_cache(product.slug)
     return product
 
@@ -463,6 +635,9 @@ async def update_product(
 ) -> Product:
     old_slug = product.slug
     data = payload.model_dump(exclude_unset=True)
+    # Not a column: handled on the relationship, and re-applied on the slug-retry
+    # path below so a concurrent-save rollback cannot silently drop the admin's picks.
+    requested_extra = data.pop("additional_category_ids", _UNSET)
     if "name" in data and data["name"]:
         # Only regenerate the slug if the name actually changed
         new_slug_base = _slugify(data["name"])
@@ -481,10 +656,32 @@ async def update_product(
         else:
             data["variants"] = _clean_and_validate_variants(data["variants"])
 
+    # A category cannot be both the primary and an additional one. Promoting a
+    # category to primary therefore has to drop it from the additional list even
+    # when the caller never sent `additional_category_ids`.
+    primary_id = data.get("category_id", product.category_id)
+    if requested_extra is not _UNSET:
+        extra_ids = requested_extra or []
+    elif primary_id != product.category_id:
+        extra_ids = [
+            cid
+            for cid in await current_additional_ids(db, product.id)
+            if cid != primary_id
+        ]
+    else:
+        extra_ids = None  # nothing to change
+    if extra_ids is not None:
+        extra_categories = await resolve_additional_categories(db, extra_ids, primary_id)
+
+    def _apply_extra_cats() -> None:
+        if extra_ids is not None:
+            product.additional_categories = extra_categories
+
     # Full dict reassignment triggers SQLAlchemy dirty tracking for JSON columns.
     # Do NOT refactor to in-place mutation without calling flag_modified(product, "variants").
     for field, value in data.items():
         setattr(product, field, value)
+    _apply_extra_cats()
 
     for attempt in range(_SLUG_RETRY_LIMIT):
         try:
@@ -503,11 +700,13 @@ async def update_product(
                 data["slug"] = new_slug
                 for field, value in data.items():
                     setattr(product, field, value)
+                _apply_extra_cats()
                 continue
             raise
         break
 
     await db.refresh(product)
+    await attach_category_briefs(db, [product])
     await cache_delete(f"product:{old_slug}")
     await _invalidate_product_cache(product.slug)
     return product

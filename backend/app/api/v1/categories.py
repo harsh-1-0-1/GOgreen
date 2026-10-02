@@ -11,7 +11,7 @@ from app.schemas.category import (
 )
 from app.services import category_service
 from app.utils.image_upload import delete_image_file, extract_relative_key, upload_image_file
-from app.utils.redis import cache_delete, cache_get, cache_set
+from app.utils.redis import cache_delete, cache_delete_pattern, cache_get, cache_set
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -168,3 +168,6 @@ async def delete_category(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await cache_delete(CATS_ALL_KEY)
+    # Deleting a category drops it from any product that also listed it as an
+    # additional category, so every cached product payload can be stale.
+    await cache_delete_pattern("products:*")

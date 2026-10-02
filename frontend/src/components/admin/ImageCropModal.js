@@ -1,0 +1,305 @@
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+import { useCallback, useMemo, useState } from 'react';
+import Cropper from 'react-easy-crop';
+import { X, Info } from 'lucide-react';
+import toast from 'react-hot-toast';
+import api from '@/lib/api';
+const CROP_PRESETS = {
+    hero: {
+        label: '🏠 Home Hero (16:5)',
+        aspect: 16 / 5,
+        width: 1920,
+        height: 650,
+        hint: '1920×650px — Full-width hero banner for homepage',
+    },
+    page: {
+        label: '📄 Shop Listing (14:3)',
+        aspect: 14 / 3,
+        width: 1400,
+        height: 300,
+        hint: '1400×300px — Category-wide listing page banner',
+    },
+    trending: {
+        label: '🔥 Trending Square (1:1)',
+        aspect: 1,
+        width: 600,
+        height: 600,
+        hint: '600×600px — Square carousel banner',
+    },
+    highlight: {
+        label: '⭐ Highlight Card (3:4)',
+        aspect: 3 / 4,
+        width: 400,
+        height: 550,
+        hint: '400×550px — Vertical highlight card',
+    },
+    themed: {
+        label: '🎨 Seasonal (5:3)',
+        aspect: 5 / 3,
+        width: 800,
+        height: 480,
+        hint: '800×480px — Themed collection banner',
+    },
+    strip: {
+        label: '🏷️ Promotional Strip (3:4)',
+        aspect: 3 / 4,
+        width: 450,
+        height: 600,
+        hint: '450×600px — Homepage promo strip tile. The image fills the tile edge-to-edge; the label bar sits below the image.',
+    },
+    category_nav: {
+        label: '🔵 Category Circle (1:1)',
+        aspect: 1,
+        width: 300,
+        height: 300,
+        hint: '300×300px — Round category icon for the homepage circle row. The image is masked into a circle, so keep the subject centred.',
+    },
+    mobile_promo: {
+        label: '📱 Mobile Drawer (16:5)',
+        aspect: 16 / 5,
+        width: 640,
+        height: 200,
+        hint: '640×200px — Thin full-bleed strip in the mobile menu drawer. No text is overlaid, so bake any words into the image.',
+    },
+    corporate_gifting: {
+        label: '💼 Corporate (10:3)',
+        aspect: 10 / 3,
+        width: 1400,
+        height: 420,
+        hint: '1400×420px — Corporate gifting page banner',
+    },
+    happy_planters: {
+        label: '🖼️ Gallery Portrait (4:5)',
+        aspect: 4 / 5,
+        width: 800,
+        height: 1000,
+        hint: '800×1000px — Customer/plant gallery photo',
+    },
+    product_detail: {
+        label: '📦 Product Detail (4:1)',
+        aspect: 4 / 1,
+        width: 1400,
+        height: 350,
+        hint: '1400×350px — Product detail page banner',
+    },
+    product_spec: {
+        label: '📋 Product Spec (1:1)',
+        aspect: 1,
+        width: 600,
+        height: 600,
+        hint: '600×600px — Product specification banner',
+    },
+    product_strip: {
+        label: '🏷️ Product Strip (7:1)',
+        aspect: 7 / 1,
+        width: 1400,
+        height: 200,
+        hint: '1400×200px — Wide strip below Buy It Now button',
+    },
+    custom: {
+        label: 'Custom Size',
+        aspect: 1,
+        width: 1000,
+        height: 1000,
+        hint: 'Define your own dimensions',
+    },
+};
+// Desktop-only presets. Banners keep their phone crop in `image_url` and get a
+// separate wide image in `image_url_web`, so the web list is deliberately all
+// landscape ratios — a portrait phone crop pasted into a desktop slot is what
+// caused the cropped/letterboxed hero.
+const WEB_CROP_PRESETS = {
+    web_hero: {
+        label: '🖥️ Web Hero (21:9)',
+        aspect: 21 / 9,
+        width: 1920,
+        height: 824,
+        hint: '1920×824px — Homepage hero on desktop. Shown from the 640px breakpoint up.',
+    },
+    web_wide: {
+        label: '🖥️ Web Wide (16:9)',
+        aspect: 16 / 9,
+        width: 1920,
+        height: 1080,
+        hint: '1920×1080px — Standard desktop banner, safe default for most placements.',
+    },
+    web_strip: {
+        label: '🖥️ Web Letterbox (16:5)',
+        aspect: 16 / 5,
+        width: 1920,
+        height: 600,
+        hint: '1920×600px — Extra-wide desktop banner for short, shallow slots.',
+    },
+    custom: CROP_PRESETS.custom,
+};
+// Phone presets for the placements that ship a separate desktop crop. These used
+// to fall through to CROP_PRESETS, which offered the same landscape ratios as
+// the web list — the phone slot needs portrait/square ratios instead.
+const PHONE_CROP_PRESETS = {
+    hero: {
+        label: '📱 Phone Hero (4:5)',
+        aspect: 4 / 5,
+        width: 800,
+        height: 1000,
+        hint: '800×1000px — Homepage hero on phones. Shown below the 640px breakpoint.',
+    },
+    trending: {
+        label: '📱 Phone Square (1:1)',
+        aspect: 1,
+        width: 600,
+        height: 600,
+        hint: '600×600px — Trending carousel slide on phones. Required square ratio.',
+    },
+    phone_wide: {
+        label: '📱 Phone Wide (16:9)',
+        aspect: 16 / 9,
+        width: 1080,
+        height: 608,
+        hint: '1080×608px — Landscape phone banner, for art that reads better wide.',
+    },
+    phone_tall: {
+        label: '📱 Phone Tall (9:16)',
+        aspect: 9 / 16,
+        width: 1080,
+        height: 1920,
+        hint: '1080×1920px — Full-height phone creative. Very tall; crops hard on desktop, so pair it with a web image.',
+    },
+    custom: CROP_PRESETS.custom,
+};
+// Placements whose admin form exposes a second, wide "web image" slot. Their
+// phone list must be phone-shaped rather than the wide desktop ratios.
+const SPLIT_IMAGE_PLACEMENTS = new Set(['hero', 'trending']);
+/**
+ * ImageCropModal provides an interactive crop interface for banner admins.
+ * - Shows preset crop dimensions based on banner placement (and on whether the
+ *   mobile or the web image is being cropped)
+ * - Allows custom width/height for flexibility
+ * - Displays crop area dimensions in real-time
+ * - Exports a cropped image File and data URL for preview
+ */
+export default function ImageCropModal({ isOpen, imageSrc, placement, useServerCrop, bannerId, variant = 'mobile', onCropComplete, onServerCropComplete, onClose, }) {
+    const [crop, setCrop] = useState({ x: 0, y: 0 });
+    const [zoom, setZoom] = useState(1);
+    const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+    const usesSplitPresets = SPLIT_IMAGE_PLACEMENTS.has(placement);
+    const presets = variant === 'web'
+        ? WEB_CROP_PRESETS
+        : usesSplitPresets
+            ? PHONE_CROP_PRESETS
+            : CROP_PRESETS;
+    const defaultPreset = variant === 'web'
+        ? placement === 'hero'
+            ? 'web_hero'
+            : 'web_wide'
+        : usesSplitPresets
+            ? placement
+            : CROP_PRESETS[placement]
+                ? placement
+                : 'custom';
+    const [selectedPreset, setSelectedPreset] = useState(defaultPreset);
+    const [customWidth, setCustomWidth] = useState(1000);
+    const [customHeight, setCustomHeight] = useState(1000);
+    const [isProcessing, setIsProcessing] = useState(false);
+    // Switching between the mobile and web image — or between placements with
+    // different preset lists — invalidates the current selection, so re-seed it.
+    // Guarded render-time adjustment (no setState effect).
+    const [lastPresetScope, setLastPresetScope] = useState(`${variant}:${placement}`);
+    const presetScope = `${variant}:${placement}`;
+    if (lastPresetScope !== presetScope) {
+        setLastPresetScope(presetScope);
+        setSelectedPreset(defaultPreset);
+    }
+    const preset = useMemo(() => {
+        if (selectedPreset === 'custom') {
+            return {
+                ...presets.custom,
+                width: customWidth,
+                height: customHeight,
+                aspect: customWidth / customHeight,
+            };
+        }
+        return presets[selectedPreset] || presets.custom;
+    }, [presets, selectedPreset, customWidth, customHeight]);
+    const onCropAreaChange = useCallback((croppedArea, croppedAreaPixels) => {
+        setCroppedAreaPixels(croppedAreaPixels);
+    }, []);
+    async function generateCroppedImage() {
+        if (!croppedAreaPixels)
+            return;
+        setIsProcessing(true);
+        try {
+            if (useServerCrop) {
+                // Server-side crop: imageSrc is already on server, bannerId must exist
+                if (!bannerId) {
+                    throw new Error('Server-side crop requires banner ID');
+                }
+                const { data: updatedBanner } = await api.post(`/banners/admin/${bannerId}/crop`, {
+                    x: Math.round(croppedAreaPixels.x),
+                    y: Math.round(croppedAreaPixels.y),
+                    width: Math.round(croppedAreaPixels.width),
+                    height: Math.round(croppedAreaPixels.height),
+                    variant,
+                });
+                const croppedUrl = variant === 'web' ? updatedBanner.image_url_web : updatedBanner.image_url;
+                onServerCropComplete(croppedUrl, variant); // Distinct callback for server-side crop
+                toast.success(variant === 'web' ? 'Web image cropped!' : 'Mobile image cropped!');
+                onClose();
+            }
+            else {
+                // Client-side crop: imageSrc is local blob:/data: URL from file input
+                const response = await fetch(imageSrc);
+                const blob = await response.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                const image = new window.Image();
+                await new Promise((resolve, reject) => {
+                    image.onload = resolve;
+                    image.onerror = reject;
+                    image.src = blobUrl;
+                });
+                const canvas = document.createElement('canvas');
+                canvas.width = croppedAreaPixels.width;
+                canvas.height = croppedAreaPixels.height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx)
+                    throw new Error('Failed to get canvas context');
+                ctx.drawImage(image, croppedAreaPixels.x, croppedAreaPixels.y, croppedAreaPixels.width, croppedAreaPixels.height, 0, 0, croppedAreaPixels.width, croppedAreaPixels.height);
+                URL.revokeObjectURL(blobUrl);
+                // Await toBlob properly
+                const croppedBlob = await new Promise((resolve) => {
+                    canvas.toBlob(resolve, 'image/png');
+                });
+                if (!croppedBlob)
+                    throw new Error('Canvas conversion failed');
+                const file = new File([croppedBlob], `cropped-banner-${Date.now()}.png`, {
+                    type: 'image/png',
+                });
+                const preview = canvas.toDataURL('image/png');
+                onCropComplete(file, preview); // Distinct callback for client-side crop
+                toast.success('Image cropped successfully!');
+                onClose();
+            }
+        }
+        catch (err) {
+            console.error('Crop error:', err);
+            toast.error(`Failed to crop image: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+        finally {
+            setIsProcessing(false);
+        }
+    }
+    if (!isOpen)
+        return null;
+    return (_jsxs(_Fragment, { children: [_jsx("div", { className: "fixed inset-0 bg-black/60 z-50 transition-opacity", onClick: onClose }), _jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4", children: _jsxs("div", { className: "bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden", children: [_jsxs("div", { className: "flex items-center justify-between p-3 sm:p-4 md:p-6 border-b bg-gradient-to-r from-primary/5 to-primary/2 shrink-0", children: [_jsxs("div", { children: [_jsxs("h2", { className: "text-base sm:text-lg md:text-xl font-bold text-gray-900", children: ["Crop ", variant === 'web' ? 'Web' : 'Mobile', " Banner Image"] }), _jsx("p", { className: "text-[10px] sm:text-xs md:text-sm text-gray-500 mt-0.5", children: variant === 'web'
+                                                ? 'Desktop crop — shown from the 640px breakpoint up'
+                                                : 'Phone crop — shown below the 640px breakpoint' })] }), _jsxs("button", { onClick: onClose, className: "p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors", children: [_jsx(X, { size: 18, className: "sm:hidden" }), _jsx(X, { size: 20, className: "hidden sm:block" })] })] }), _jsxs("div", { className: "flex-1 overflow-y-auto flex flex-col lg:flex-row gap-3 sm:gap-4 p-3 sm:p-4 md:p-6", children: [_jsxs("div", { className: "flex-1 flex flex-col min-h-0", children: [_jsx("div", { className: "relative bg-gray-900 rounded-lg sm:rounded-xl overflow-hidden flex-1 mb-2 sm:mb-3 min-h-[250px] sm:min-h-[300px]", children: _jsx(Cropper, { image: imageSrc, crop: crop, zoom: zoom, aspect: preset.aspect, onCropChange: setCrop, onCropAreaChange: onCropAreaChange, onZoomChange: setZoom, cropShape: "rect", showGrid: true }) }), _jsxs("div", { className: "flex items-center gap-2 sm:gap-3", children: [_jsx("span", { className: "text-[10px] sm:text-xs font-semibold text-gray-600 whitespace-nowrap", children: "Zoom:" }), _jsx("input", { type: "range", min: 1, max: 3, step: 0.1, value: zoom, onChange: (e) => setZoom(Number(e.target.value)), className: "flex-1 h-1.5 sm:h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary" }), _jsxs("span", { className: "text-[10px] sm:text-xs font-semibold text-gray-600 w-8 sm:w-10 text-right", children: [zoom.toFixed(1), "x"] })] })] }), _jsxs("div", { className: "w-full lg:w-64 flex flex-col gap-3 sm:gap-4 pb-3 sm:pb-4 lg:pb-0", children: [croppedAreaPixels && (_jsxs("div", { className: "bg-blue-50 border border-blue-200 rounded-lg p-2.5 sm:p-3 space-y-1.5 sm:space-y-2", children: [_jsx("p", { className: "text-[10px] sm:text-xs font-semibold text-blue-900", children: "Crop Dimensions" }), _jsxs("div", { className: "grid grid-cols-2 gap-2 text-[10px] sm:text-xs text-blue-800", children: [_jsxs("div", { children: [_jsx("span", { className: "text-[9px] sm:text-[10px] text-blue-600 font-semibold", children: "Width" }), _jsxs("p", { className: "font-bold", children: [Math.round(croppedAreaPixels.width), "px"] })] }), _jsxs("div", { children: [_jsx("span", { className: "text-[9px] sm:text-[10px] text-blue-600 font-semibold", children: "Height" }), _jsxs("p", { className: "font-bold", children: [Math.round(croppedAreaPixels.height), "px"] })] })] })] })), _jsxs("div", { className: "space-y-1.5 sm:space-y-2", children: [_jsx("p", { className: "text-[10px] sm:text-xs font-semibold text-gray-700", children: "Crop Presets" }), _jsx("div", { className: "space-y-1 max-h-48 sm:max-h-64 overflow-y-auto scrollbar-thin", children: Object.entries(presets).map(([key, p]) => (_jsxs("button", { onClick: () => {
+                                                            setSelectedPreset(key);
+                                                            if (key !== 'custom') {
+                                                                setCustomWidth(p.width);
+                                                                setCustomHeight(p.height);
+                                                            }
+                                                        }, className: `w-full text-left px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all text-[10px] sm:text-xs font-medium border ${selectedPreset === key
+                                                            ? 'bg-primary text-white border-primary shadow-md'
+                                                            : 'bg-white text-gray-700 border-gray-200 hover:border-primary/50 hover:bg-gray-50'}`, children: [_jsx("div", { className: "font-semibold", children: p.label }), _jsxs("div", { className: `text-[9px] sm:text-[10px] mt-0.5 ${selectedPreset === key
+                                                                    ? 'text-primary-light/80'
+                                                                    : 'text-gray-500'}`, children: [p.width, "\u00D7", p.height, "px"] })] }, key))) })] }), selectedPreset === 'custom' && (_jsxs("div", { className: "space-y-1.5 sm:space-y-2 pt-1.5 sm:pt-2 border-t", children: [_jsx("p", { className: "text-[10px] sm:text-xs font-semibold text-gray-700", children: "Custom Dimensions" }), _jsxs("div", { className: "grid grid-cols-2 gap-1.5 sm:gap-2", children: [_jsxs("div", { children: [_jsx("label", { className: "text-[9px] sm:text-[10px] font-semibold text-gray-600 block mb-1", children: "Width (px)" }), _jsx("input", { type: "number", min: 50, max: 4000, value: customWidth, onChange: (e) => setCustomWidth(Number(e.target.value)), className: "w-full px-2 py-1 sm:py-1.5 border rounded-lg text-[10px] sm:text-xs focus:outline-none focus:ring-1 focus:ring-primary/50" })] }), _jsxs("div", { children: [_jsx("label", { className: "text-[9px] sm:text-[10px] font-semibold text-gray-600 block mb-1", children: "Height (px)" }), _jsx("input", { type: "number", min: 50, max: 4000, value: customHeight, onChange: (e) => setCustomHeight(Number(e.target.value)), className: "w-full px-2 py-1 sm:py-1.5 border rounded-lg text-[10px] sm:text-xs focus:outline-none focus:ring-1 focus:ring-primary/50" })] })] })] })), _jsx("div", { className: "bg-amber-50 border border-amber-200 rounded-lg p-2.5 sm:p-3 text-[10px] sm:text-xs text-amber-800 space-y-1", children: _jsxs("div", { className: "flex gap-1.5 sm:gap-2", children: [_jsx(Info, { size: 12, className: "shrink-0 mt-0.5 text-amber-600 sm:hidden" }), _jsx(Info, { size: 14, className: "shrink-0 mt-0.5 text-amber-600 hidden sm:block" }), _jsxs("div", { children: [_jsx("p", { className: "font-semibold text-amber-900 mb-0.5 sm:mb-1", children: preset.label }), _jsx("p", { className: "text-[9px] sm:text-[11px] text-amber-700", children: preset.hint })] })] }) })] })] }), _jsxs("div", { className: "flex gap-2 sm:gap-3 p-3 sm:p-4 md:p-6 border-t bg-gray-50 shrink-0", children: [_jsx("button", { onClick: onClose, className: "flex-1 py-2 sm:py-2.5 px-3 sm:px-4 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-100 transition", children: "Cancel" }), _jsx("button", { onClick: generateCroppedImage, disabled: isProcessing, className: "flex-1 py-2 sm:py-2.5 px-3 sm:px-4 bg-primary text-white rounded-lg text-xs sm:text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 disabled:cursor-not-allowed transition", children: isProcessing ? 'Processing...' : 'Apply Crop' })] })] }) })] }));
+}

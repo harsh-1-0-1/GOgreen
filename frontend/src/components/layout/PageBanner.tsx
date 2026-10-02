@@ -8,9 +8,13 @@ export default function PageBanner() {
 
   // Respect category or subcategory filter so per-category banners work.
   // The API falls back to the global page banner when no category-specific
-  // one exists.
+  // one exists. The multi-select facet writes `categories` (comma-separated), so
+  // take its first slug when that is what filtered the page.
   const categorySlug =
-    searchParams.get('category') || searchParams.get('subcategory') || undefined;
+    searchParams.get('category') ||
+    searchParams.get('subcategory') ||
+    searchParams.get('categories')?.split(',').filter(Boolean)[0] ||
+    undefined;
 
   const { data: banners = [] } = useBanners('page', categorySlug);
 

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     JSON,
     Boolean,
+    Column,
     DateTime,
     Enum,
     Float,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Table,
     Text,
     UniqueConstraint,
     event,
@@ -23,6 +25,38 @@ from app.db.base import Base
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# ── Product ↔ Category (many-to-many) ───────────────────────────────────────
+# A product always has ONE primary category (`products.category_id`) and may sit
+# in any number of ADDITIONAL ones recorded here — e.g. a succulent that is both
+# "Cacti & Succulents" and "Air Purifying".
+#
+# The primary deliberately stays a column instead of a row in this table:
+#   • it is NOT NULL, so "which collection does this product belong to" always has
+#     an answer (breadcrumbs, page banners, the admin's primary pick);
+#   • every existing row — and every code path that inserts a product directly
+#     (seed.py, scripts, tests) — keeps working with no backfill and no dual write;
+#   • category filtering ORs the two sources, so a product inserted with only a
+#     `category_id` is still findable under its category.
+product_categories = Table(
+    "product_categories",
+    Base.metadata,
+    Column(
+        "product_id",
+        Integer,
+        ForeignKey("products.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "category_id",
+        Integer,
+        ForeignKey("categories.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    # Filtering is always "products IN category X", so the lookup runs this way round.
+    Index("ix_product_categories_category_id", "category_id"),
+)
 
 
 class User(Base):
@@ -60,7 +94,55 @@ class Category(Base):
         back_populates="children", remote_side="Category.id"
     )
     children: Mapped[list["Category"]] = relationship(back_populates="parent")
+    # Products whose PRIMARY category is this one (`products.category_id`).
     products: Mapped[list["Product"]] = relationship(back_populates="category")
+    # Products that additionally sit in this category. The many-to-many half —
+    # see `product_categories` for why the primary is a column and not a row.
+    additional_products: Mapped[list["Product"]] = relationship(
+        secondary=product_categories,
+        back_populates="additional_categories",
+    )
+
+
+class CategoryBadgeConfig(Base):
+    """Per-category look of the three badges drawn on top of a product image.
+
+    The storefront used to hardcode the wording ("BESTSELLER", "15% OFF") and
+    read a colour off each product row, which meant renaming a badge or making
+    it look different per collection meant editing products one by one. The
+    wording, colour and on/off switch now live here, one row per category, and a
+    category with no row falls back to `DEFAULT_BADGE_*` on the client.
+
+    Rows are sparse on purpose: a category only gets one the first time an admin
+    customises it, so new categories keep the default appearance for free.
+    """
+
+    __tablename__ = "category_badge_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    category_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("categories.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    # Bestseller — only drawn on products the admin has flagged `is_bestseller`.
+    bestseller_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    bestseller_label: Mapped[str] = mapped_column(String(50), default="BESTSELLER")
+    bestseller_color: Mapped[str] = mapped_column(String(20), default="#F59E0B")
+    # Discount — auto-derived from original vs selling price. An empty label keeps
+    # the automatic "{n}% OFF" wording.
+    discount_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    discount_label: Mapped[str] = mapped_column(String(50), default="")
+    discount_color: Mapped[str] = mapped_column(String(20), default="#1B4332")
+    # Rating — auto-derived from reviews. An empty label keeps the star + score.
+    rating_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    rating_label: Mapped[str] = mapped_column(String(50), default="")
+    rating_color: Mapped[str] = mapped_column(String(20), default="#1B4332")
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=_utcnow, nullable=True
+    )
+
+    category: Mapped["Category"] = relationship()
+
+
 
 
 class Tag(Base):
@@ -106,13 +188,16 @@ class Product(Base):
     display_section: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     related_product_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # ── Image overlay badge controls ──────────────────────────────────────
-    # Admin can toggle and colour three badges shown directly on the product card image.
+    # Whether this product may wear the bestseller badge. The badge's wording
+    # and colour are NOT stored per product — see `CategoryBadgeConfig`, which
+    # is the single place badges are configured.
     is_bestseller: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
-    bestseller_badge_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    discount_badge_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    rating_badge_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     category: Mapped["Category"] = relationship(back_populates="products")
+    additional_categories: Mapped[list["Category"]] = relationship(
+        secondary=product_categories,
+        back_populates="additional_products",
+    )
     reviews: Mapped[list["ProductReview"]] = relationship(back_populates="product", cascade="all, delete-orphan")
 
 

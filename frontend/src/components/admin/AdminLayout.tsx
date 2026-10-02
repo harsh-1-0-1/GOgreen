@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
-import { FolderTree, Image, LayoutDashboard, List, MoreHorizontal, Package, ShoppingCart, Users, X, FileText, Briefcase, Tag, Settings, PlaySquare, ShieldAlert, AlertCircle, Menu as MenuIcon } from 'lucide-react';
+import { FolderTree, Image, LayoutDashboard, List, MoreHorizontal, Package, ShoppingCart, Users, X, FileText, Briefcase, Tag, Settings, PlaySquare, ShieldAlert, AlertCircle, Menu as MenuIcon, Award } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
@@ -8,6 +8,7 @@ const NAV = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/admin/products', icon: Package, label: 'Products' },
   { to: '/admin/categories', icon: FolderTree, label: 'Categories' },
+  { to: '/admin/badges', icon: Award, label: 'Image Badges' },
   { to: '/admin/orders', icon: ShoppingCart, label: 'Orders' },
   { to: '/admin/users', icon: Users, label: 'Users' },
   { to: '/admin/banners', icon: Image, label: 'Banners' },

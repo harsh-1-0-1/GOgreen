@@ -4,6 +4,8 @@ import type { Product, ProductListResponse } from '@/types';
 
 interface ProductFilters {
   category_slug?: string;
+  /** Comma-separated category slugs — matches products in ANY of them. */
+  categories?: string;
   search?: string;
   min_price?: number;
   max_price?: number;

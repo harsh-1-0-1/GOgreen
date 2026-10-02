@@ -19,6 +19,20 @@ class CategoryUpdate(BaseModel):
     sort_order: int | None = None
 
 
+class CategoryBrief(BaseModel):
+    """Trimmed category shape embedded in product payloads.
+
+    A product is returned inside lists, carts and order previews; pulling whole
+    CategoryResponse objects (with both image URLs resolved to CDN links) into
+    those payloads is wasted bytes, so only the identity fields travel.
+    """
+
+    id: int
+    name: str
+    slug: str
+    parent_id: int | None = None
+
+
 class CategoryResponse(BaseModel):
     id: int
     name: str

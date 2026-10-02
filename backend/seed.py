@@ -38,6 +38,8 @@ from app.db.models import (
     ProductReview,
     Story,
     User,
+    product_categories,
+    CategoryBadgeConfig,
 )
 
 
@@ -521,7 +523,9 @@ async def seed(catalog_only: bool = False) -> None:
             await db.execute(CartItem.__table__.delete())
             await db.execute(ProductReview.__table__.delete())
             await db.execute(Story.__table__.update().values(linked_product_id=None))
+            await db.execute(product_categories.delete())
             await db.execute(Product.__table__.delete())
+            await db.execute(CategoryBadgeConfig.__table__.delete())
             await db.execute(Category.__table__.delete())
             await db.flush()
             print("Cleared categories + products (and rows referencing products).\n")
@@ -535,7 +539,9 @@ async def seed(catalog_only: bool = False) -> None:
             await db.execute(ProductReview.__table__.delete())
             await db.execute(Banner.__table__.delete())
             await db.execute(Story.__table__.delete())
+            await db.execute(product_categories.delete())
             await db.execute(Product.__table__.delete())
+            await db.execute(CategoryBadgeConfig.__table__.delete())
             await db.execute(Category.__table__.delete())
             await db.execute(BlogPost.__table__.delete())
             await db.execute(User.__table__.delete())

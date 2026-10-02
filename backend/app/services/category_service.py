@@ -3,8 +3,20 @@ import re
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import CartItem, Category, DoNotForgetProduct, OrderItem, Product, ProductReview, Story
+from app.db.models import (
+    CartItem,
+    Category,
+    CategoryBadgeConfig,
+    DoNotForgetProduct,
+    OrderItem,
+    Product,
+    ProductReview,
+    Story,
+    product_categories,
+)
 from app.schemas.category import CategoryCreate, CategoryTree, CategoryUpdate
+from app.services import badge_config_service
+from app.utils.redis import cache_delete
 
 
 def _slugify(text: str) -> str:
@@ -112,6 +124,22 @@ async def delete_category(db: AsyncSession, category: Category, force: bool = Fa
     if has_children:
         raise ValueError("Cannot delete category with subcategories. Delete or move its subcategories first")
 
+    # Products that sit in this category as an ADDITIONAL one only. They are not
+    # this category's products and must survive — the link is simply dropped, the
+    # same as removing a category from a product's picker. Runs before the delete
+    # so the join table never holds a dangling row (SQLite does not enforce FKs).
+    linked_ids = list(
+        (
+            await db.execute(
+                select(product_categories.c.product_id).where(
+                    product_categories.c.category_id == category.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
     result = await db.execute(select(Product.id, Product.name, Product.is_active).where(Product.category_id == category.id))
     products = result.all()
 
@@ -120,6 +148,13 @@ async def delete_category(db: AsyncSession, category: Category, force: bool = Fa
 
     if active:
         raise ValueError("Cannot delete category with active products attached")
+
+    if linked_ids:
+        await db.execute(
+            delete(product_categories).where(
+                product_categories.c.category_id == category.id
+            )
+        )
 
     if product_ids:
         # force=True only bypasses the order-history block. Active products are
@@ -149,9 +184,19 @@ async def delete_category(db: AsyncSession, category: Category, force: bool = Fa
         # Product reviews - delete rows
         await db.execute(delete(ProductReview).where(ProductReview.product_id.in_(product_ids)))
 
+        # Additional category links - delete rows
+        await db.execute(delete(product_categories).where(product_categories.c.product_id.in_(product_ids)))
+
         # Finally delete products
         await db.execute(delete(Product).where(Product.category_id == category.id))
         await db.flush()
 
+    # Badge config is 1:1 with the category and has nowhere to go once the
+    # category is gone (SQLite does not enforce the CASCADE).
+    await db.execute(delete(CategoryBadgeConfig).where(CategoryBadgeConfig.category_id == category.id))
+
     await db.delete(category)
     await db.flush()
+    # The storefront caches the whole badge map, so a deleted category's entry
+    # would otherwise linger until the TTL expired.
+    await cache_delete(badge_config_service.CACHE_KEY)

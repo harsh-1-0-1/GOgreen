@@ -19,6 +19,41 @@ export interface Category {
   children?: Category[];
 }
 
+/**
+ * One badge's appearance for a category. `label` is the wording shown on the
+ * badge; an empty string keeps the automatic text ("40% OFF", the star rating).
+ */
+export interface BadgeStyle {
+  enabled: boolean;
+  label: string;
+  color: string;
+}
+
+export type BadgeKind = 'bestseller' | 'discount' | 'rating';
+
+export interface CategoryBadgeConfig {
+  bestseller: BadgeStyle;
+  discount: BadgeStyle;
+  rating: BadgeStyle;
+}
+
+export interface CategoryBadgeConfigOut extends CategoryBadgeConfig {
+  id: number;
+  category_id: number;
+  updated_at?: string | null;
+}
+
+export interface BadgeConfigMap {
+  defaults: CategoryBadgeConfig;
+  /** Only the categories an admin has explicitly saved; absent = not customised. */
+  by_category: Record<string, CategoryBadgeConfigOut>;
+  /**
+   * Resolved config for every category, with a parent's settings inherited by
+   * its subcategories — this is what the storefront renders with.
+   */
+  effective_by_category: Record<string, CategoryBadgeConfig>;
+}
+
 /** A globally-defined catalog tag (name + colour) shown as pill badges. */
 export interface CatalogTag {
   id: number;
@@ -35,6 +70,14 @@ export interface FAQItem {
   answer: string;
 }
 
+/** Trimmed category shape embedded in product payloads. */
+export interface ProductCategory {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id: number | null;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -43,7 +86,14 @@ export interface Product {
   price: number;
   original_price: number | null;
   stock_qty: number;
+  /** Primary category. Drives breadcrumbs and page banners. */
   category_id: number;
+  /** Every category the product sits in, primary first. */
+  category_ids?: number[];
+  /** Every category the product sits in, as briefs (primary first). */
+  categories?: ProductCategory[];
+  /** Categories beyond the primary one — the editable extra set. */
+  additional_category_ids?: number[];
   images: string[];
   tags: string[];
   care_tips: string[];
@@ -59,15 +109,9 @@ export interface Product {
   care_card_image?: string | null;
   faqs?: FAQItem[] | null;
   related_product_ids?: number[];
-  // ── Image overlay badge controls ──────────────────────────────────────
-  /** When true the BESTSELLER label is shown on the product card image. */
+  // ── Image overlay badges ──────────────────────────────────────────────
+  /** When true this product may wear the bestseller badge (wording/colour are per category). */
   is_bestseller?: boolean;
-  /** Background hex colour for the BESTSELLER badge (e.g. "#F59E0B"). Falls back to a default if null. */
-  bestseller_badge_color?: string | null;
-  /** Background hex colour for the % OFF discount badge. Falls back to a default if null. */
-  discount_badge_color?: string | null;
-  /** Background hex colour for the star/rating badge. Falls back to a default if null. */
-  rating_badge_color?: string | null;
   // ── Aggregated review data (computed by API) ──────────────────────────
   avg_rating?: number | null;
   review_count?: number;
@@ -426,6 +470,7 @@ export type BannerPlacement =
   | 'themed'
   | 'strip'
   | 'highlight'
+  | 'category_nav'
   | 'mobile_promo'
   | 'corporate_gifting'
   | 'happy_planters'

@@ -75,6 +75,12 @@ const PLACEMENTS = [
     helpText: 'Recommended size: 400x550px. The title becomes the bold text overlay.',
   },
   {
+    key: 'category_nav',
+    label: '🔵 Homepage Category Circles',
+    description: 'The row of round category icons at the very top of the homepage. Each circle is one banner you fully control.',
+    helpText: 'Upload a square image (1:1). The "Title" is the name shown under the circle and the link decides what it opens. Drag to reorder the row.',
+  },
+  {
     key: 'mobile_promo',
     label: '📱 Mobile Drawer Promo',
     description: 'Full-bleed rectangular banner shown at the top of the mobile menu drawer.',
@@ -119,7 +125,7 @@ const bannerSchema = z
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
-    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'mobile_promo', 'corporate_gifting', 'happy_planters', 'product_detail', 'product_spec', 'product_strip']),
+    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'category_nav', 'mobile_promo', 'corporate_gifting', 'happy_planters', 'product_detail', 'product_spec', 'product_strip']),
     target_path: z.string().max(255).optional().or(z.literal('')),
     bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #FFFFFF)'),
     text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #000000)'),
@@ -856,6 +862,34 @@ function BannerDrawer({
     watchedTargetPath !== '*' &&
     !categoryOptions.some((opt) => opt.value === watchedTargetPath);
 
+  // A circle opens exactly one thing, so the picker offers real destinations
+  // (pages + nested categories) instead of a free-text URL that can silently rot.
+  const circleLinkPages = useMemo(
+    () => [
+      { value: '/', label: 'Home page' },
+      { value: '/products', label: 'All products' },
+      { value: '/corporate-gifting', label: 'Corporate gifting' },
+      { value: '/blog', label: 'Blog' },
+      { value: '/faqs', label: 'FAQs' },
+      { value: '/damage-replacement', label: 'Damage replacement' },
+    ],
+    []
+  );
+  const circleLinkCategories = useMemo(
+    () =>
+      flattenCategoryOptions(categories).map((opt) => ({
+        value: `/products?category=${opt.value}`,
+        label: opt.label,
+      })),
+    [categories]
+  );
+  const circleLinkValues = useMemo(
+    () => new Set([...circleLinkPages, ...circleLinkCategories].map((o) => o.value)),
+    [circleLinkPages, circleLinkCategories]
+  );
+  const hasCustomCircleLink =
+    !!watchedCtaLink && !circleLinkValues.has(watchedCtaLink);
+
   const activePlacementDetails = useMemo(() => {
     return PLACEMENTS.find((p) => p.key === watchedPlacement) || PLACEMENTS[0];
   }, [watchedPlacement]);
@@ -1097,14 +1131,18 @@ function BannerDrawer({
 
           <div>
             <label className="text-xs font-semibold text-gray-700 mb-1 block">
-              Banner Heading / Title *
+              {watchedPlacement === 'category_nav' ? 'Name Under Circle *' : 'Banner Heading / Title *'}
             </label>
             <input
               {...register('title')}
               className={inputClass}
-              placeholder="e.g. Monsoon Plant Sale"
+              placeholder={watchedPlacement === 'category_nav' ? 'e.g. Indoor Plants' : 'e.g. Monsoon Plant Sale'}
             />
-            <p className="text-[10px] text-gray-400 mt-0.5">The main text displaying bold over the banner.</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              {watchedPlacement === 'category_nav'
+                ? 'Shown in small text directly beneath the circle. Keep it to one or two words so the row stays tidy.'
+                : 'The main text displaying bold over the banner.'}
+            </p>
             {errors.title && (
               <p className="text-xs text-red-500 mt-1">
                 {errors.title.message}
@@ -1112,56 +1150,102 @@ function BannerDrawer({
             )}
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-gray-700 mb-1 block">
-              Sub-heading / Description
-            </label>
-            <input
-              {...register('subtitle')}
-              className={inputClass}
-              placeholder="e.g. Up to 40% off on all indoor ferns and air-purifiers."
-            />
-            <p className="text-[10px] text-gray-400 mt-0.5">Subtext displayed under the main heading.</p>
-          </div>
+          {watchedPlacement !== 'category_nav' && (
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Sub-heading / Description
+              </label>
+              <input
+                {...register('subtitle')}
+                className={inputClass}
+                placeholder="e.g. Up to 40% off on all indoor ferns and air-purifiers."
+              />
+              <p className="text-[10px] text-gray-400 mt-0.5">Subtext displayed under the main heading.</p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Button Label (Text)
-              </label>
-              <input
-                {...register('cta_text')}
-                placeholder="e.g. Shop Sale"
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Link Address (URL)
-              </label>
-              <input
-                {...register('cta_link')}
-                placeholder="e.g. /products?category=ferns"
-                className={inputClass}
-              />
-              <CategoryLinkPicker
-                categories={categories}
-                value={watchedCtaLink}
-                onPick={(link) => setValue('cta_link', link)}
-              />
-            </div>
+            {watchedPlacement !== 'category_nav' && (
+              <div>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                  Button Label (Text)
+                </label>
+                <input
+                  {...register('cta_text')}
+                  placeholder="e.g. Shop Sale"
+                  className={inputClass}
+                />
+              </div>
+            )}
+            {watchedPlacement === 'category_nav' ? (
+              <div className={watchedPlacement === 'category_nav' ? 'col-span-2' : ''}>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                  Opens when tapped *
+                </label>
+                <select {...register('cta_link')} className={inputClass}>
+                  <option value="">— choose a page or category —</option>
+                  {hasCustomCircleLink && (
+                    <option value={watchedCtaLink}>{watchedCtaLink} (custom)</option>
+                  )}
+                  <optgroup label="Pages">
+                    {circleLinkPages.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Categories">
+                    {circleLinkCategories.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  {watchedCtaLink ? (
+                    <>
+                      This circle opens <strong>{watchedCtaLink}</strong>
+                    </>
+                  ) : (
+                    'Pick where this circle should take the shopper. Until you choose, the circle is not clickable.'
+                  )}
+                </p>
+                {errors.cta_link && (
+                  <p className="text-xs text-red-500 mt-1">{errors.cta_link.message}</p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                  Link Address (URL)
+                </label>
+                <input
+                  {...register('cta_link')}
+                  placeholder="e.g. /products?category=ferns"
+                  className={inputClass}
+                />
+                <CategoryLinkPicker
+                  categories={categories}
+                  value={watchedCtaLink}
+                  onPick={(link) => setValue('cta_link', link)}
+                />
+              </div>
+            )}
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-gray-700 mb-1 block">
-              Top Offer Badge Text
-            </label>
-            <input
-              {...register('badge_text')}
-              placeholder="e.g. LIMITED PERIOD ONLY or 20% OFF"
-              className={inputClass}
-            />
-          </div>
+{watchedPlacement !== 'category_nav' && (
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Top Offer Badge Text
+              </label>
+              <input
+                {...register('badge_text')}
+                className={inputClass}
+                placeholder="e.g. LIMITED PERIOD ONLY or 20% OFF"
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

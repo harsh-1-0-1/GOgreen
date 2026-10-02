@@ -56,6 +56,13 @@ const CROP_PRESETS: Record<string, CropPreset> = {
     height: 600,
     hint: '450×600px — Homepage promo strip tile. The image fills the tile edge-to-edge; the label bar sits below the image.',
   },
+  category_nav: {
+    label: '🔵 Category Circle (1:1)',
+    aspect: 1,
+    width: 300,
+    height: 300,
+    hint: '300×300px — Round category icon for the homepage circle row. The image is masked into a circle, so keep the subject centred.',
+  },
   mobile_promo: {
     label: '📱 Mobile Drawer (16:5)',
     aspect: 16 / 5,
