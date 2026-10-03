@@ -97,6 +97,7 @@ export function useCreateCategory() {
       parent_id?: number | null;
       image_url?: string | null;
       mobile_image_url?: string | null;
+      sort_order?: number;
     }) => {
       const { data } = await api.post('/categories', body);
       return data;

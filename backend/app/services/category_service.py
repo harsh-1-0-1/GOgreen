@@ -67,7 +67,17 @@ def build_tree(categories: list[Category]) -> list[CategoryTree]:
             by_id[node.parent_id].children.append(node)
         else:
             roots.append(node)
-    return roots
+
+    # Ensure every level is sorted by sort_order so the tree reflects the
+    # admin-defined position rather than DB insertion / dict iteration order.
+    def _sort(nodes: list[CategoryTree]) -> list[CategoryTree]:
+        nodes.sort(key=lambda n: (n.sort_order, n.id))
+        for n in nodes:
+            if n.children:
+                _sort(n.children)
+        return nodes
+
+    return _sort(roots)
 
 
 async def get_category_by_slug(db: AsyncSession, slug: str) -> Category | None:

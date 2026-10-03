@@ -21,7 +21,7 @@ CATS_TTL = 600
 
 @router.get("", response_model=list[CategoryTree])
 async def list_categories(response: Response, db: AsyncSession = Depends(get_db)):
-    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=60"
+    response.headers["Cache-Control"] = "no-cache"
     cached = await cache_get(CATS_ALL_KEY)
     if cached:
         return cached

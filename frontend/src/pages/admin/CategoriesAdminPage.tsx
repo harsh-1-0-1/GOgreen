@@ -499,7 +499,7 @@ function findSiblings(nodes: Category[], id: number): SiblingEntry[] {
   for (const n of nodes) {
     if (n.id === id) return nodes.map((c) => ({ id: c.id, sort_order: c.sort_order }));
     const found = findSiblings(n.children ?? [], id);
-    if (found) return found;
+    if (found.length > 0) return found;
   }
   return [];
 }
@@ -580,10 +580,23 @@ export default function CategoriesAdminPage() {
     if (!newName.trim()) return;
 
     try {
+      // Compute the next sort_order so the new category gets a unique value and
+      // always lands at the bottom of its sibling list (avoids the all-zeros
+      // problem that makes arrow-key reordering a no-op).
+      const resolvedParentId = parentId ? Number(parentId) : null;
+      const siblings = resolvedParentId
+        ? (allCats.find((c) => c.id === resolvedParentId)?.children ?? [])
+        : roots;
+      const nextSortOrder =
+        siblings.length > 0
+          ? Math.max(...siblings.map((s) => s.sort_order)) + 1
+          : 0;
+
       // 1. Create category basic structure (image_url accepted inline)
       const newCat = await createMutation.mutateAsync({
         name: newName.trim(),
-        parent_id: parentId ? Number(parentId) : null,
+        parent_id: resolvedParentId,
+        sort_order: nextSortOrder,
         ...(imageMode === 'url' && manualUrl ? { image_url: manualUrl } : {}),
         ...(mobileImageMode === 'url' && mobileManualUrl ? { mobile_image_url: mobileManualUrl } : {}),
       });
@@ -651,9 +664,30 @@ export default function CategoriesAdminPage() {
   }
 
   async function handleMove(id: number, direction: -1 | 1) {
-    const siblings = findSiblings(roots, id).sort((a, b) => a.sort_order - b.sort_order);
+    // Sort siblings by sort_order; break ties by id so the order is stable/deterministic
+    const siblings = findSiblings(roots, id).sort(
+      (a, b) => a.sort_order - b.sort_order || a.id - b.id,
+    );
+    if (siblings.length < 2) return;
+
+    // If any two siblings share the same sort_order the upcoming swap would be a
+    // no-op (swapping 0 ↔ 0 changes nothing).  Normalise every sibling to a
+    // dense 0-based sequence first so each one has a unique value.
+    const hasDuplicates = siblings.some(
+      (s, i) => i > 0 && s.sort_order === siblings[i - 1].sort_order,
+    );
+    if (hasDuplicates) {
+      await Promise.all(
+        siblings.map((s, i) =>
+          updateMutation.mutateAsync({ id: s.id, body: { sort_order: i } }),
+        ),
+      );
+      // Reflect the normalised values locally so the swap below uses correct numbers
+      siblings.forEach((s, i) => { s.sort_order = i; });
+    }
+
     const index = siblings.findIndex((s) => s.id === id);
-    if (index === -1 || siblings.length < 2) return;
+    if (index === -1) return;
     const swapWith = index + direction;
     if (swapWith < 0 || swapWith >= siblings.length) return;
 
@@ -661,6 +695,7 @@ export default function CategoriesAdminPage() {
     const b = siblings[swapWith];
     await updateMutation.mutateAsync({ id: a.id, body: { sort_order: b.sort_order } });
     await updateMutation.mutateAsync({ id: b.id, body: { sort_order: a.sort_order } });
+    toast.success('Category order updated');
     invalidate();
   }
 
