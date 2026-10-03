@@ -249,7 +249,10 @@ async def upsert_category_badge_config(
 
     await db.flush()
     await db.refresh(row)
-    await invalidate_badge_config_cache()
+    # NOTE: do NOT invalidate the cache here — the transaction has not been committed yet.
+    # The router calls invalidate_badge_config_cache() after db.commit(), which is the
+    # correct place. Invalidating pre-commit opens a race where a concurrent reader
+    # refills the cache from the DB before the commit lands, storing the old values.
     logger.info("Badge config updated category_id={}", category_id)
     return _to_out(row)
 
@@ -265,6 +268,7 @@ async def delete_category_badge_config(db: AsyncSession, category_id: int) -> bo
         return False
     await db.delete(row)
     await db.flush()
-    await invalidate_badge_config_cache()
+    # NOTE: do NOT invalidate here — transaction not committed yet. The router
+    # calls invalidate_badge_config_cache() after db.commit().
     logger.info("Badge config reset category_id={}", category_id)
     return True

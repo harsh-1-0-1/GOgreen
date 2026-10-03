@@ -22,8 +22,15 @@ async def list_badge_configs(
 
     The storefront calls this once and resolves each product against its primary
     category, so the badge wording and colour never ship inside the product list.
+
+    `no-cache` tells browsers and proxies they MUST revalidate with the server
+    before using a cached copy. This prevents the browser from serving stale
+    colours after an admin saves new ones. The Redis layer (30 s TTL) still
+    provides server-side caching so the DB isn't hit on every storefront load.
+    `must-revalidate` reinforces that stale-while-revalidate / stale-if-error
+    must not be applied by intermediaries.
     """
-    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=60"
+    response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return await badge_config_service.get_badge_config_map(db)
 
 
