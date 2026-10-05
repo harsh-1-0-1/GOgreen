@@ -1,4 +1,5 @@
 import { resolveCategoryBadgeConfig, useBadgeConfigs } from '@/hooks/useBadgeConfigs';
+import { resolveBestsellerBadge } from '@/lib/bestsellerBadge';
 import type { Product } from '@/types';
 
 interface ProductImageBadgesProps {
@@ -10,9 +11,12 @@ interface ProductImageBadgesProps {
  * (opt-in per product) and rating (auto).
  *
  * Which badges appear and what they look like is configured per category in the
- * admin — this component only resolves the config for the product's primary
- * category and draws it. Kept in one place because the card grid, the homepage
- * display sections and the product tile all need identical badges.
+ * admin — this component resolves the config for the product's primary category
+ * and draws it, except for the bestseller badge, which a single product may
+ * override. Kept in one place because the card grid, the homepage display
+ * sections and the product tile all need identical badges; the bestseller
+ * decision itself lives in `lib/bestsellerBadge` so the admin form's preview
+ * resolves it the same way.
  */
 export default function ProductImageBadges({ product }: ProductImageBadgesProps) {
   const { data } = useBadgeConfigs();
@@ -24,11 +28,11 @@ export default function ProductImageBadges({ product }: ProductImageBadgesProps)
       : null;
 
   const showDiscount = config.discount.enabled && discount !== null && discount > 0;
-  const showBestseller = config.bestseller.enabled && Boolean(product.is_bestseller);
+  const bestseller = resolveBestsellerBadge(product, config);
   const showRating =
     config.rating.enabled && (product.review_count ?? 0) > 0 && product.avg_rating != null;
 
-  if (!showDiscount && !showBestseller && !showRating) return null;
+  if (!showDiscount && !bestseller && !showRating) return null;
 
   return (
     <>
@@ -42,20 +46,20 @@ export default function ProductImageBadges({ product }: ProductImageBadgesProps)
         </span>
       )}
 
-      {/* Bestseller badge — top-right (wording set per category) */}
-      {showBestseller && (
+      {/* Bestseller badge — top-right (category wording, unless this product overrides it) */}
+      {bestseller && (
         <span
           className="absolute top-0 right-0 text-white text-[9px] sm:text-[10px] font-bold px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-bl-xl shadow-sm whitespace-nowrap leading-none flex items-center justify-center z-10"
-          style={{ backgroundColor: config.bestseller.color }}
+          style={{ backgroundColor: bestseller.color }}
         >
-          {config.bestseller.label || 'BESTSELLER'}
+          {bestseller.text}
         </span>
       )}
 
       {/* Rating badge — bottom-left (star + avg rating + review count) */}
       {showRating && (
         <span
-          className="absolute bottom-0 left-0 text-white text-[9px] sm:text-[10px] font-bold px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-tr-xl shadow-sm leading-none flex items-center gap-1 z-10"
+          className="absolute bottom-0 left-0 text-white text-[9px] sm:text-[10px] font-bold px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-tr-xl shadow-sm whitespace-nowrap leading-none flex items-center gap-1 z-10"
           style={{ backgroundColor: config.rating.color }}
         >
           {config.rating.label ? (

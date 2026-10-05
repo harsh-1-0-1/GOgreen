@@ -112,6 +112,15 @@ export interface Product {
   // ── Image overlay badges ──────────────────────────────────────────────
   /** When true this product may wear the bestseller badge (wording/colour are per category). */
   is_bestseller?: boolean;
+  /**
+   * Per-product exception to the category's bestseller badge. Null means "not
+   * overridden" and the category config decides. The two are independent, so a
+   * product can be renamed without being recoloured, and each half falls back on
+   * its own. When either is set the product also bypasses the category's
+   * `bestseller.enabled` switch — see `resolveBestsellerBadge`.
+   */
+  bestseller_label_override?: string | null;
+  bestseller_color_override?: string | null;
   // ── Aggregated review data (computed by API) ──────────────────────────
   avg_rating?: number | null;
   review_count?: number;

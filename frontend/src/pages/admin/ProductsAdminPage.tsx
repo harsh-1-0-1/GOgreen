@@ -14,7 +14,8 @@ import {
   Image as ImageIcon,
   AlertTriangle,
   Upload,
-  Loader2
+  Loader2,
+  RotateCcw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProduct, useProductRaw, useProducts, useAdminAllProducts } from '@/hooks/useProducts';
@@ -22,10 +23,17 @@ import { useCategories } from '@/hooks/useCategories';
 import { useAdminTags, useDeleteTag, useTags, useUpsertTag } from '@/hooks/useTags';
 import { useAdminDisplaySections } from '@/hooks/useDisplaySections';
 import { useDeleteProduct } from '@/hooks/useAdmin';
+import {
+  findInheritedFrom,
+  resolveCategoryBadgeConfig,
+  useBadgeConfigs,
+} from '@/hooks/useBadgeConfigs';
+import { resolveBestsellerBadge } from '@/lib/bestsellerBadge';
 import api from '@/lib/api';
 import { getApiErrorDetail } from '@/lib/apiError';
 import { toTagKey } from '@/lib/tagKey';
 import PotPriceEditor, { type PotPriceDraft } from '@/components/admin/PotPriceEditor';
+import BadgeColorField from '@/components/admin/BadgeColorField';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import type { CatalogTag, FAQItem, Product, ProductListResponse, ProductVariants, VariantGroup, VariantOption } from '@/types';
@@ -142,7 +150,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const { data: displaySections = [] } = useAdminDisplaySections();
   const { data: globalTags = [] } = useTags();
   const qc = useQueryClient();
-  const allCats = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
+  // Memoized because it is a dependency of other memos below — the `?? []` on a
+  // fresh expression builds a new array on every render, which would defeat them.
+  const allCats = useMemo(() => categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [], [categories]);
   const globalTagColors = useMemo(() => {
     const map: Record<string, string> = {};
     globalTags.forEach((t) => {
@@ -256,6 +266,16 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // Per-product image overlay badge controls
   const [isBestseller, setIsBestseller] = useState(false);
 
+  // Per-product bestseller badge wording/colour override. A null means "not
+  // overridden" and the category config decides — these are held as plain
+  // strings while editing so a field can be cleared, and turned back into
+  // null-or-value only at save time (see onSubmit). The toggle is separate from
+  // the fields so that switching it off saves a removal while leaving the typed
+  // values in place if the admin switches it back on.
+  const [bestsellerOverrideEnabled, setBestsellerOverrideEnabled] = useState(false);
+  const [bestsellerLabelOverride, setBestsellerLabelOverride] = useState('');
+  const [bestsellerColorOverride, setBestsellerColorOverride] = useState('');
+
   // Per-product FAQ entries
   const [faqItems, setFaqItems] = useState<{ question: string; answer: string }[]>([]);
   const DEFAULT_FAQ = { question: '', answer: '' };
@@ -319,6 +339,60 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       : [...current, catId];
     setValue('additional_category_ids', next, { shouldDirty: true, shouldValidate: true });
   }
+
+  // ── Bestseller badge: what the category says, and what this product overrides ──
+  const { data: badgeConfigMap } = useBadgeConfigs();
+
+  // Depends on primaryCategoryId, so the inherited values shown in the override
+  // section update live when the admin changes this product's category — no save,
+  // no stale preview.
+  const inheritedBadgeConfig = resolveCategoryBadgeConfig(badgeConfigMap, primaryCategoryId);
+
+  // Parent lookup, for naming the ancestor the category inherits from. Mirrors
+  // the lookup the Image Badges admin page builds.
+  const categoryParentOf = useMemo(() => {
+    const map: Record<number, number | null> = {};
+    (categories ?? []).forEach((parent) => {
+      map[parent.id] = null;
+      (parent.children ?? []).forEach((child) => {
+        map[child.id] = parent.id;
+      });
+    });
+    return map;
+  }, [categories]);
+
+  const inheritedFromCategoryId = findInheritedFrom(
+    badgeConfigMap,
+    primaryCategoryId,
+    categoryParentOf
+  );
+  const inheritedFromCategoryName = useMemo(() => {
+    if (inheritedFromCategoryId == null) return null;
+    return allCats.find((c) => c.id === inheritedFromCategoryId)?.name ?? null;
+  }, [allCats, inheritedFromCategoryId]);
+
+  const bestsellerLabelDraft = bestsellerLabelOverride.trim();
+  const bestsellerColorDraft = bestsellerColorOverride.trim();
+
+  /**
+   * What the storefront will actually paint for this product right now, given
+   * the form's unsaved edits. Calls the same resolver the storefront uses, so the
+   * preview cannot drift from the rendered result. When the toggle is off the
+   * drafts are passed as null, because that is what gets saved.
+   */
+  const bestsellerPreview = resolveBestsellerBadge(
+    {
+      is_bestseller: isBestseller,
+      bestseller_label_override: bestsellerOverrideEnabled ? bestsellerLabelDraft || null : null,
+      bestseller_color_override: bestsellerOverrideEnabled ? bestsellerColorDraft || null : null,
+    },
+    inheritedBadgeConfig
+  );
+
+  // The image the badge preview is drawn over. Falls back to the variant default
+  // image, and to nothing at all — in which case the preview degrades to a plain
+  // badge chip rather than an empty grey square.
+  const bestsellerPreviewImage = productImages[0] || defaultImageUrl;
 
   // Nested tree of parents with their subcategories underneath, so an admin can see
   // where a product will surface before ticking it. Parents stay open unless
@@ -494,6 +568,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setRelatedProductIds(p.related_product_ids || []);
     // Reset badge controls (will be overwritten by rawProduct effect on edit)
     setIsBestseller(Boolean(p.is_bestseller));
+    setBestsellerOverrideEnabled(
+      p.bestseller_label_override != null || p.bestseller_color_override != null
+    );
+    setBestsellerLabelOverride(p.bestseller_label_override ?? '');
+    setBestsellerColorOverride(p.bestseller_color_override ?? '');
   };
   // Seed default_image from the raw admin endpoint (relative key, not resolved URL).
   // Must wait for formInitialized so that variantGroups is already populated before
@@ -598,6 +677,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
       // Seed badge controls from raw product
       setIsBestseller(Boolean(rawProduct.is_bestseller));
+      const rawLabelOverride = rawProduct.bestseller_label_override ?? null;
+      const rawColorOverride = rawProduct.bestseller_color_override ?? null;
+      setBestsellerOverrideEnabled(rawLabelOverride != null || rawColorOverride != null);
+      setBestsellerLabelOverride(rawLabelOverride ?? '');
+      setBestsellerColorOverride(rawColorOverride ?? '');
     }
   }
 
@@ -675,6 +759,15 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     try {
       setVariantError(null);
       let variants: ProductVariants | null = null;
+
+      // Toggle off ⇒ save a removal, whatever is still typed in the fields. The
+      // draft stays in state so switching the toggle back on restores it.
+      const savedBestsellerLabelOverride = bestsellerOverrideEnabled
+        ? bestsellerLabelOverride.trim() || null
+        : null;
+      const savedBestsellerColorOverride = bestsellerOverrideEnabled
+        ? bestsellerColorOverride.trim() || null
+        : null;
 
       // Build new variant_groups payload
       const cleanGroups = variantGroups.filter(g => g.label.trim());
@@ -827,6 +920,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           faqs: faqItems.filter(f => f.question.trim() && f.answer.trim()),
           related_product_ids: relatedProductIds.length > 0 ? relatedProductIds : null,
           is_bestseller: isBestseller,
+          // Always sent, explicitly null when the toggle is off. The edit form
+          // owns both fields, so "off" has to be a deliberate write rather than
+          // an omission — omitting would preserve an existing override.
+          bestseller_label_override: savedBestsellerLabelOverride,
+          bestseller_color_override: savedBestsellerColorOverride,
         };
         const { data: updatedProduct } = await api.put<Product>(`/products/${editProduct.id}`, updatePayload);
         toast.success('Product updated successfully!');
@@ -894,6 +992,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         if (cleanFaqs.length) fd.append('faqs', JSON.stringify(cleanFaqs));
         if (relatedProductIds.length) fd.append('related_product_ids', JSON.stringify(relatedProductIds));
         fd.append('is_bestseller', String(isBestseller));
+        // Only appended when set, so "no override" never travels as an empty
+        // string that would have to be re-interpreted server-side.
+        if (savedBestsellerLabelOverride) fd.append('bestseller_label_override', savedBestsellerLabelOverride);
+        if (savedBestsellerColorOverride) fd.append('bestseller_color_override', savedBestsellerColorOverride);
         fd.append('image_urls', JSON.stringify(productImages));
 
         // Add file uploads
@@ -2335,6 +2437,155 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                   <strong>Image Badges</strong> in the admin menu, so one edit covers every product
                   in that category.
                 </p>
+
+                {/* ── Bestseller badge, this product only ──────────────────────
+                    Kept inside the Image Badges section because it IS an image badge —
+                    splitting it out would suggest it is something separate from the
+                    category config, when the whole point is that it overrides it. */}
+                <div className="border-t border-gray-100 pt-4 space-y-4">
+                  <p className="text-[11px] text-gray-400 leading-relaxed">
+                    Optional. Rename this product&rsquo;s bestseller badge or give it its own
+                    colour, for this product only. Switch it on and anything you set below wins
+                    over the category; leave it off and the category settings are used.
+                  </p>
+
+                  {!isBestseller && (
+                    <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-relaxed">
+                      This product is not flagged as a bestseller, so no bestseller badge is drawn
+                      at all — tick <strong>Show the bestseller badge</strong> above for anything
+                      here to appear.
+                    </p>
+                  )}
+
+                  {/* Editor card — deliberately the same shape as the Image Badges page's
+                      per-badge card, so the two feel like the same tool. */}
+                  <div
+                    className={`rounded-xl border p-4 space-y-3 ${
+                      bestsellerOverrideEnabled ? 'border-gray-200' : 'border-gray-200 bg-gray-50/40'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800">Bestseller badge</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          top-right corner · only shown on products an admin has flagged as a bestseller.
+                        </p>
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          {bestsellerOverrideEnabled
+                            ? 'This product has its own wording and colour.'
+                            : `Inherits ${
+                                inheritedFromCategoryName
+                                  ? `from ${inheritedFromCategoryName}`
+                                  : 'the store defaults'
+                              } — “${inheritedBadgeConfig.bestseller.label || 'BESTSELLER'}” in ${inheritedBadgeConfig.bestseller.color}. Switch it on to override just this product.`}
+                        </p>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer select-none shrink-0">
+                        <span className="text-[11px] text-gray-500">
+                          {bestsellerOverrideEnabled ? 'On' : 'Off'}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={bestsellerOverrideEnabled}
+                          onChange={(e) => setBestsellerOverrideEnabled(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                      </label>
+                    </div>
+
+                    {bestsellerOverrideEnabled && (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-600 shrink-0 w-16">Name</span>
+                          <input
+                            value={bestsellerLabelOverride}
+                            onChange={(e) => setBestsellerLabelOverride(e.target.value)}
+                            placeholder={`Leave blank — shows ${
+                              inheritedBadgeConfig.bestseller.label || 'BESTSELLER'
+                            }`}
+                            maxLength={50}
+                            className={inputClass}
+                          />
+                        </div>
+                        <BadgeColorField
+                          color={bestsellerColorDraft || inheritedBadgeConfig.bestseller.color}
+                          onChange={setBestsellerColorOverride}
+                          label="Bestseller badge colour"
+                        />
+                      </>
+                    )}
+
+                    {/* The category has this badge switched off but the override wins, so say so —
+                        otherwise the admin saves, sees a badge, and cannot explain it. */}
+                    {bestsellerOverrideEnabled && !inheritedBadgeConfig.bestseller.enabled && (
+                      <p className="text-[11px] text-amber-600 font-medium leading-relaxed">
+                        This product&rsquo;s category has the bestseller badge switched off in the
+                        admin menu under <strong>Image Badges</strong>. Your override still shows —
+                        this product is the exception.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Live preview. Calls the storefront's own resolver, so it cannot drift
+                      from what actually renders. Drawn over the product's own image when
+                      there is one, because that is the only way to see whether the badge
+                      collides with the % OFF badge sitting in the opposite corner. */}
+                  <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+                    <p className="text-[11px] font-semibold text-gray-500 mb-2 uppercase tracking-wider">
+                      Preview
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {bestsellerPreview ? (
+                        <>
+                          {bestsellerPreviewImage && (
+                            <span className="relative inline-block w-16 h-16 rounded-md overflow-hidden border border-gray-200">
+                              <img
+                                src={bestsellerPreviewImage}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                              <span
+                                className="absolute top-0 right-0 text-white text-[8px] font-bold px-1.5 py-1 rounded-bl-md shadow-sm whitespace-nowrap leading-none"
+                                style={{ backgroundColor: bestsellerPreview.color }}
+                              >
+                                {bestsellerPreview.text}
+                              </span>
+                            </span>
+                          )}
+                          {!bestsellerPreviewImage && (
+                            <span
+                              className="text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg shadow-sm whitespace-nowrap leading-none"
+                              style={{ backgroundColor: bestsellerPreview.color }}
+                            >
+                              {bestsellerPreview.text}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-gray-400">
+                            What shoppers will see on this product&rsquo;s image.
+                          </span>
+                        </>
+                      ) : (
+                        <p className="text-xs text-gray-400">
+                          No bestseller badge is drawn for this product.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {bestsellerOverrideEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBestsellerOverrideEnabled(false);
+                        setBestsellerLabelOverride('');
+                        setBestsellerColorOverride('');
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+                    >
+                      <RotateCcw size={13} /> Use category settings
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>

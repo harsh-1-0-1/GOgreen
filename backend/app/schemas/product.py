@@ -162,7 +162,47 @@ class FAQItem(BaseModel):
     answer: str
 
 
-class ProductCreate(BaseModel):
+# Same constraint the category badge config uses (app/schemas/badge_config.py), so the
+# admin form's colour picker is validated identically wherever a badge colour is set.
+HEX_RE = r"^#[0-9A-Fa-f]{6}$"
+
+
+class BestsellerOverrideIn(BaseModel):
+    """Write-side fields for a product's own bestseller badge wording/colour.
+
+    A per-product exception to the category's bestseller badge config
+    (`CategoryBadgeConfig`): blank/None means "not overridden", so the category
+    decides. The two fields are independent — a product can be renamed without
+    being recoloured, or vice versa — and each half falls back on its own.
+
+    Kept as its own base class so `ProductCreate` and `ProductUpdate` cannot drift
+    apart on the constraints. `ProductResponse` deliberately does NOT inherit it:
+    response models should pass stored values through, not risk a 500 on a legacy
+    row, and the write path is where validation belongs.
+    """
+
+    bestseller_label_override: str | None = Field(default=None, max_length=50)
+    bestseller_color_override: str | None = Field(default=None, pattern=HEX_RE)
+
+    @field_validator("bestseller_label_override", "bestseller_color_override", mode="before")
+    @classmethod
+    def normalise_override(cls, v: object) -> object:
+        """Trim, and treat blank as "not overridden" (None).
+
+        `mode="before"` is required, not stylistic: an empty value would otherwise
+        fail the field's own `max_length` / `pattern` check before an
+        after-the-fact normaliser could run, and an untrimmed value would be
+        pattern-checked with its padding still attached. Clearing a field in the
+        admin form is the normal way to remove an override, and this is what
+        stops that "removal" from being stored as an override that renders as an
+        empty badge.
+        """
+        if isinstance(v, str):
+            return v.strip() or None
+        return v
+
+
+class ProductCreate(BestsellerOverrideIn):
     name: str
     description: str | None = None
     price: float = Field(gt=0)
@@ -187,7 +227,10 @@ class ProductCreate(BaseModel):
     related_product_ids: Optional[List[int]] = None
     # ── Image overlay badges ──────────────────────────────────────────────
     # Only the per-product flag lives here. Wording/colour are category-wide —
-    # see CategoryBadgeConfig.
+    # see CategoryBadgeConfig, unless overridden per product, which is what the
+    # BestsellerOverrideIn fields this class inherits are for. They are
+    # deliberately NOT re-declared here: in Pydantic a redeclared field replaces
+    # the inherited one outright, silently dropping its length/pattern checks.
     is_bestseller: bool = False
 
     @field_validator("variants")
@@ -196,7 +239,7 @@ class ProductCreate(BaseModel):
         return validate_variant_structure(v)
 
 
-class ProductUpdate(BaseModel):
+class ProductUpdate(BestsellerOverrideIn):
     name: str | None = None
     description: str | None = None
     price: float | None = Field(default=None, gt=0)
@@ -226,6 +269,12 @@ class ProductUpdate(BaseModel):
     related_product_ids: Optional[List[int]] = None
     # ── Image overlay badges ──────────────────────────────────────────────
     is_bestseller: bool | None = None
+    # The two `*_override` fields are inherited from BestsellerOverrideIn and must
+    # not be redeclared here — that would drop their validation. Their three
+    # states are distinct and all reachable from this form:
+    #   None  → key absent from the request: leave the saved override alone.
+    #   ""    → normalised to None by the inherited validator: remove it.
+    #   value → replace that half; the other half keeps its own saved value.
 
     @field_validator("variants")
     @classmethod
@@ -267,6 +316,11 @@ class ProductResponse(BaseModel):
     related_product_ids: Optional[List[int]] = None
     # ── Image overlay badges ──────────────────────────────────────────────
     is_bestseller: bool = False
+    # Per-product exception to the category's bestseller badge. Null = not
+    # overridden, so the category config decides. Declared without validators on
+    # purpose (see BestsellerOverrideIn): stored values pass straight through.
+    bestseller_label_override: str | None = None
+    bestseller_color_override: str | None = None
     # ── Aggregated review data (computed at query time) ───────────────────
     avg_rating: float | None = None
     review_count: int = 0

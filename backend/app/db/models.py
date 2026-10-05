@@ -189,9 +189,21 @@ class Product(Base):
     related_product_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # ── Image overlay badge controls ──────────────────────────────────────
     # Whether this product may wear the bestseller badge. The badge's wording
-    # and colour are NOT stored per product — see `CategoryBadgeConfig`, which
-    # is the single place badges are configured.
+    # and colour come from `CategoryBadgeConfig` by default — see the two
+    # `*_override` columns below for the per-product exception.
     is_bestseller: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Per-product bestseller badge wording/colour. NULL means "not overridden",
+    # so the category config decides. The two are independent: renaming does not
+    # force a colour, and recolouring does not force a name. When either is set
+    # the product is an exception to the category — including to the category's
+    # `bestseller_enabled` switch. See `resolve_bestseller_badge` in the frontend
+    # `ProductImageBadges` component for the exact resolution order.
+    bestseller_label_override: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, default=None
+    )
+    bestseller_color_override: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, default=None
+    )
 
     category: Mapped["Category"] = relationship(back_populates="products")
     additional_categories: Mapped[list["Category"]] = relationship(
