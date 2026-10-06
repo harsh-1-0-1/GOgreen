@@ -538,10 +538,14 @@ export default function ProductDetailPage() {
     isInitialized.current = false;
   }, [slug]);
 
-  // Auto-select only level 1 (size) from the first in-stock combo row when the product
-  // loads. Pot type / colour start empty so the customer walks the levels in order
-  // instead of landing on a fully pre-filled configuration. Run during render (guarded
-  // by product id) instead of an effect to avoid the set-state-in-effect hook violation.
+  // Auto-select the default (already-included) full combo when the product loads:
+  // among in-stock rows pick the lowest final price — so the ₹0 set (e.g. Small +
+  // Grow pot) wins and the customer immediately sees what the base price includes —
+  // ties broken by admin-defined order (first row). Falls back to the very first row
+  // when nothing is in stock, keeping the honest "Out of Stock" state. The level-wise
+  // flow still applies afterwards: picking a higher level clears stranded lower ones.
+  // Run during render (guarded by product id) instead of an effect to avoid the
+  // set-state-in-effect hook violation.
   const [lastAutoSelectedProductId, setLastAutoSelectedProductId] = useState<number | null>(null);
   if (product && lastAutoSelectedProductId !== product.id) {
     const groups = product.variants?.variant_groups;
@@ -552,15 +556,38 @@ export default function ProductDetailPage() {
     } else {
       const stockMap = product.variants?.stock_map ?? null;
       const rows = buildComboRows(groups);
-      const firstInStock = stockMap
-        ? rows.find((r) => Number(stockMap[r.key] ?? 0) > 0)
-        : undefined;
-      const chosen = firstInStock ?? rows[0];
+      // Final price of a combo — mirrors the display chain below: a price_map row
+      // wins; otherwise base + non-grid option deltas + pot grid cell.
+      const axes = gridGroupIds(product.variants?.pot_price);
+      const base = Number(product.price ?? 0);
+      const priceMap = product.variants?.price_map ?? null;
+      const comboTotal = (row: { key: string; groupOption: Record<string, string> }): number => {
+        const mapped = priceMap ? Number(priceMap[row.key]) : NaN;
+        if (Number.isFinite(mapped)) return mapped;
+        const deltas = groups.reduce(
+          (sum, g) =>
+            axes.includes(g.id)
+              ? sum
+              : sum + Number((g.options ?? []).find((o) => o.id === row.groupOption[g.id])?.price ?? 0),
+          0,
+        );
+        return base + deltas + (exactPotPrice(axes, product.variants?.pot_price?.map, row.groupOption) ?? 0);
+      };
+      const inStock = stockMap ? rows.filter((r) => Number(stockMap[r.key] ?? 0) > 0) : rows;
+      const candidates = inStock.length > 0 ? inStock : rows.slice(0, 1);
+      let chosen = candidates[0];
+      let bestTotal = chosen ? comboTotal(chosen) : 0;
+      for (const row of candidates) {
+        const total = comboTotal(row);
+        // Strict < → on ties the earlier (admin-defined) row keeps winning.
+        if (total < bestTotal) {
+          bestTotal = total;
+          chosen = row;
+        }
+      }
       if (chosen) {
         setLastAutoSelectedProductId(product.id);
-        const firstLevelId = [...groups].sort((a, b) => flowRank(a) - flowRank(b))[0]?.id;
-        const firstPick = firstLevelId ? chosen.groupOption[firstLevelId] : undefined;
-        setSelectedOptions(firstPick ? { [firstLevelId]: firstPick } : {});
+        setSelectedOptions(chosen.groupOption);
         setQty(1);
       }
     }
