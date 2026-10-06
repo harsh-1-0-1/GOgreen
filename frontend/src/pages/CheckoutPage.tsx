@@ -390,7 +390,7 @@ export default function CheckoutPage() {
           cart.clearLocal();
         }
         toast.success('Payment completed');
-        navigate(`/orders/${response.order_id}`);
+        navigate(`/orders/${response.order_id}?poll=1`);
       },
       modal: { ondismiss: () => toast.error('Payment was cancelled') },
     }).open();

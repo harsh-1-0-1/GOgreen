@@ -313,24 +313,51 @@ async def get_or_create_cart(
         return carts[0]
 
 
-def build_cart_response(cart: Cart) -> CartResponse:
+async def build_cart_response(cart: Cart, db: AsyncSession) -> CartResponse:
+    """Build the cart response, self-healing rows that can no longer be resolved.
+
+    Every cart endpoint (GET /cart, add/update/delete, merge) re-prices ALL items on
+    every call. A row whose product/variants were edited after it was added — e.g.
+    `selected_options` referencing an option ID that no longer exists — used to raise
+    OUTSIDE the endpoints' try blocks, turning the WHOLE cart into a generic 500 for
+    that session: add-to-cart, buy-now and the cart page alike. Such a row can never
+    be priced or purchased, so it is dropped from the response and deleted from the
+    cart (get_db commits the delete at the end of the request). StockMapMissingError
+    still propagates: that one is a loud deployment bug, not stale data.
+    """
     items: list[CartItemResponse] = []
+    stale: list[CartItem] = []
     for ci in cart.items:
-        details = resolve_variant_details(ci.product, ci.selected_options)
-        unit_price = details["unit_price"]
-        available_stock = details["available_stock"]
-        items.append(CartItemResponse(
-            id=ci.id,
-            product_id=ci.product_id,
-            quantity=ci.quantity,
-            selected_options=details["selected_options"],
-            product=CartItemProduct.model_validate(ci.product),
-            line_total=round(unit_price * ci.quantity, 2),
-            resolved_image_url=details["resolved_image_url"],
-            unit_price=unit_price,
-            available_stock=available_stock,
-            stock_warning=ci.quantity > available_stock,
-        ))
+        try:
+            details = resolve_variant_details(ci.product, ci.selected_options)
+            unit_price = details["unit_price"]
+            available_stock = details["available_stock"]
+            items.append(CartItemResponse(
+                id=ci.id,
+                product_id=ci.product_id,
+                quantity=ci.quantity,
+                selected_options=details["selected_options"],
+                product=CartItemProduct.model_validate(ci.product),
+                line_total=round(unit_price * ci.quantity, 2),
+                resolved_image_url=details["resolved_image_url"],
+                unit_price=unit_price,
+                available_stock=available_stock,
+                stock_warning=ci.quantity > available_stock,
+            ))
+        except StockMapMissingError:
+            raise
+        except Exception:
+            logger.warning(
+                "Removing unresolvable cart item id={} product_id={} selected_options={!r}",
+                ci.id, ci.product_id, ci.selected_options,
+            )
+            stale.append(ci)
+
+    if stale:
+        for ci in stale:
+            await db.delete(ci)
+        await db.flush()
+
     subtotal = round(sum(i.line_total for i in items), 2)
     return CartResponse(
         id=cart.id,

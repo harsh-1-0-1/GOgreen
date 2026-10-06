@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Package } from 'lucide-react';
 import { useOrder } from '@/hooks/useOrders';
 import Spinner from '@/components/ui/Spinner';
@@ -15,7 +15,12 @@ function paymentLabel(paymentMethod: string, paymentStatus: string) {
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: order, isLoading, isError } = useOrder(Number(id));
+  const [searchParams] = useSearchParams();
+
+  // ?poll=1 is appended by CheckoutPage right after a Razorpay payment.
+  // Poll until payment_status moves off "pending" (webhook has arrived).
+  const arrivedFromPayment = searchParams.get('poll') === '1';
+  const { data: order, isLoading, isError } = useOrder(Number(id), arrivedFromPayment);
 
   if (isLoading) return <Spinner className="py-32" />;
   if (isError || !order) {
@@ -29,12 +34,24 @@ export default function OrderDetailPage() {
 
   const currentStep = STATUS_STEPS.indexOf(order.status);
   const isCancelled = order.status === 'cancelled';
+  const awaitingPayment = arrivedFromPayment && order.payment_status === 'pending';
 
   return (
     <div className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
       <Link to="/orders" className="text-xs sm:text-sm text-gray-500 flex items-center gap-1 mb-4 sm:mb-6 hover:text-primary touch-target">
         <ArrowLeft size={16} /> Back to Orders
       </Link>
+
+      {/* Waiting-for-webhook banner */}
+      {awaitingPayment && (
+        <div className="flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 mb-4 sm:mb-6 text-sm text-yellow-800">
+          <svg className="animate-spin shrink-0 h-4 w-4 text-yellow-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+          </svg>
+          Confirming your payment — this updates automatically, no need to refresh.
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 sm:mb-6">
