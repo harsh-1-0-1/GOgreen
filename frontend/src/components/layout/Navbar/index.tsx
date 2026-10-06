@@ -633,15 +633,15 @@ export default function Navbar() {
               {/* Promotional Banner Card — rendered only when an active
                   mobile_promo banner with an image is configured
                   (admin-managed), so no hardcoded/seasonal content ever leaks
-                  in. The image fills the rectangular card edge-to-edge with no
+                  in. Full-bleed across the drawer (no side padding) with no
                   text overlay — bake any text into the image itself. */}
               {mobilePromoBanner?.image_url && (
-                <div className="px-5 pb-3 shrink-0">
+                <div className="pb-3 shrink-0">
                   {mobilePromoBanner.cta_link ? (
                     <Link
                       to={mobilePromoBanner.cta_link}
                       onClick={closeDrawer}
-                      className="group relative block overflow-hidden rounded-2xl border border-emerald-100/50 shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
+                      className="group relative block overflow-hidden shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
                       style={
                         mobilePromoBanner.bg_color
                           ? { backgroundColor: mobilePromoBanner.bg_color }
@@ -657,7 +657,7 @@ export default function Navbar() {
                     </Link>
                   ) : (
                     <div
-                      className="group relative block overflow-hidden rounded-2xl border border-emerald-100/50 shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
+                      className="group relative block overflow-hidden shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
                       style={
                         mobilePromoBanner.bg_color
                           ? { backgroundColor: mobilePromoBanner.bg_color }

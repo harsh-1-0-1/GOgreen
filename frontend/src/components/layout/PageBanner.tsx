@@ -34,7 +34,7 @@ export default function PageBanner() {
       aria-label={banner.title}
     >
       <div
-        className="relative h-[58px] sm:h-[72px] md:h-[86px] overflow-hidden sm:rounded-md"
+        className="relative w-full aspect-[14/3] overflow-hidden sm:rounded-md"
         style={{ backgroundColor: banner.bg_color }}
       >
         <img
