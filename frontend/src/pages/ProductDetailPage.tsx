@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronUp, Minus, Plus, ShoppingCart, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Minus, Plus, ShoppingCart, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProduct, useProducts, useProductsByIds } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
@@ -72,6 +72,23 @@ function buildComboRows(
     rows = next;
   }
   return rows;
+}
+
+function isColourLabel(label: string): boolean {
+  return /colou?r/i.test(label);
+}
+
+// Level-wise selection flow: Size (level 0) → Pot type (level 1) → Colour (level 2).
+// `always_show_options` groups (sizes) rank first, colour groups rank last, everything
+// else keeps its admin-defined order in between. Stable sort → ties keep admin order.
+// Drives display order, auto-select and the direction of option filtering only —
+// combo keys / stock_map / price_map keep using the admin (variant_groups) order.
+function flowRank(group: VariantGroup): number {
+  // Size groups rank first whether flagged in admin or merely label-matched (the admin
+  // page uses the same /size/i heuristic for its flag hint), so a drag-reordered group
+  // list can't demote the size level below pot type.
+  if (group.always_show_options || /size/i.test(group.label)) return 0;
+  return isColourLabel(group.label) ? 2 : 1;
 }
 
 function findCategoryTrail(categories: Category[] | undefined, categoryId: number): Category[] {
@@ -521,10 +538,10 @@ export default function ProductDetailPage() {
     isInitialized.current = false;
   }, [slug]);
 
-  // Auto-select the first in-stock combo row when the product loads (per-combination stock).
-  // The row's combo_key dictates each group's selection, so groups are always consistent
-  // with a purchasable combination. Run during render (guarded by product id) instead of an
-  // effect to avoid the set-state-in-effect hook violation.
+  // Auto-select only level 1 (size) from the first in-stock combo row when the product
+  // loads. Pot type / colour start empty so the customer walks the levels in order
+  // instead of landing on a fully pre-filled configuration. Run during render (guarded
+  // by product id) instead of an effect to avoid the set-state-in-effect hook violation.
   const [lastAutoSelectedProductId, setLastAutoSelectedProductId] = useState<number | null>(null);
   if (product && lastAutoSelectedProductId !== product.id) {
     const groups = product.variants?.variant_groups;
@@ -541,7 +558,9 @@ export default function ProductDetailPage() {
       const chosen = firstInStock ?? rows[0];
       if (chosen) {
         setLastAutoSelectedProductId(product.id);
-        setSelectedOptions(chosen.groupOption);
+        const firstLevelId = [...groups].sort((a, b) => flowRank(a) - flowRank(b))[0]?.id;
+        const firstPick = firstLevelId ? chosen.groupOption[firstLevelId] : undefined;
+        setSelectedOptions(firstPick ? { [firstLevelId]: firstPick } : {});
         setQty(1);
       }
     }
@@ -566,6 +585,13 @@ export default function ProductDetailPage() {
 
   const variantGroups = product.variants?.variant_groups ?? [];
   const hasGroups = variantGroups.length > 0;
+
+  // Level order for the level-wise flow (Size → Pot type → Colour, see flowRank).
+  const orderedGroups = [...variantGroups].sort((a, b) => flowRank(a) - flowRank(b));
+  const levelIndex: Record<string, number> = {};
+  orderedGroups.forEach((g, i) => {
+    levelIndex[g.id] = i;
+  });
 
   // Axis IDs the pot grid prices. Read straight off the product — no group is named,
   // counted or special-cased here, so a two-axis or four-axis grid runs the same code.
@@ -662,18 +688,22 @@ export default function ProductDetailPage() {
     stock: Number(stockMap?.[row.key] ?? 0),
   }));
 
-  // Option visibility: an option is visible if some combo row containing it — consistent
-  // with the other groups' current selections — has stock > 0. Recomputed on every render.
-  // Groups flagged `always_show_options` always render every defined option regardless of
-  // stock (e.g. Small/Medium/Large always visible).
+  // Option visibility — level-wise and ONE-directional: an option is filtered only by
+  // selections of HIGHER levels (size filters pot types, pot type filters colours),
+  // never by a level below it, so picking a colour can no longer hide sizes/pot types.
+  // With no higher level selected the group renders unfiltered (aside from the global
+  // "stocked in some combo" check). Size groups (flowRank 0 / always_show_options) always
+  // render every defined option regardless of stock. Recomputed on every render.
   function isOptionVisible(group: VariantGroup, opt: VariantOption): boolean {
-    if (group.always_show_options) return true;
+    if (flowRank(group) === 0) return true;
     if (!stockMap) return true;
+    const myLevel = levelIndex[group.id] ?? 0;
     return comboRows.some((row) => {
       if (row.groupOption[group.id] !== opt.id) return false;
       if (row.stock <= 0) return false;
       for (const g of variantGroups) {
-        if (g.id === group.id) continue;
+        // Own level and every level below never constrain this option.
+        if ((levelIndex[g.id] ?? 0) >= myLevel) continue;
         const sel = selectedOptions[g.id];
         if (sel && row.groupOption[g.id] !== sel) return false;
       }
@@ -742,47 +772,39 @@ export default function ProductDetailPage() {
   const cartSelectedOptions: string[] = Object.values(selectedOptions);
 
   function selectOption(groupId: string, optionId: string) {
-    const clickedGroup = variantGroups.find((g) => g.id === groupId);
+    const next: Record<string, string> = { ...selectedOptions, [groupId]: optionId };
 
-    // Stale-selection guard for always-show groups: a picked option (e.g. a size) may
-    // have no in-stock combo with the customer's currently-selected options in other
-    // groups. Re-derive those groups from the first in-stock combo that preserves as
-    // many of their current picks as possible, so we never strand them on a hidden
-    // colour / dead "Out of Stock" state. If nothing is in stock for this pick at all,
-    // keep the plain selection and let effectiveStock <= 0 show "Out of Stock" honestly.
-    if (clickedGroup?.always_show_options && stockMap) {
-      const candidates = comboRows.filter(
-        (row) =>
-          row.groupOption[groupId] === optionId &&
-          Number(stockMap[row.key] ?? 0) > 0,
-      );
-      if (candidates.length > 0) {
-        let best = candidates[0];
-        let bestScore = -1;
-        for (const row of candidates) {
-          let score = 0;
-          for (const g of variantGroups) {
-            if (g.id === groupId) continue;
-            const sel = selectedOptions[g.id];
-            if (sel && row.groupOption[g.id] === sel) score++;
-          }
-          // Strict > over comboRows' cartesian (admin-defined) order → tie-break is
-          // "first in defined order", matching auto-select and the admin combos table.
-          if (score > bestScore) {
-            bestScore = score;
-            best = row;
-          }
+    // Level-wise cleanup: a selection may strand LOWER levels (pot type / colour) with
+    // no in-stock combo. Clear — never silently re-pick — those stale picks, walking the
+    // levels top-down so one stale pick cascades to everything below it. A lower level's
+    // validity is judged against the selections up to and including itself, so an
+    // unaffected deeper pick is judged independently of an already-cleared middle one.
+    // Levels above the click are constraints, never touched. Without a stockMap there is
+    // no combo truth to validate against, so nothing is cleared.
+    if (stockMap) {
+      const myLevel = levelIndex[groupId] ?? 0;
+      let blocked = false;
+      for (const g of orderedGroups) {
+        const gLevel = levelIndex[g.id] ?? 0;
+        if (gLevel <= myLevel) continue;
+        if (!next[g.id]) continue;
+        const stillValid =
+          !blocked &&
+          comboRows.some(
+            (row) =>
+              row.stock > 0 &&
+              Object.entries(next).every(
+                ([gid, oid]) => (levelIndex[gid] ?? 0) > gLevel || row.groupOption[gid] === oid,
+              ),
+          );
+        if (!stillValid) {
+          delete next[g.id];
+          blocked = true;
         }
-        setSelectedOptions(best.groupOption);
-        setQty(1);
-        if (window.innerWidth < 768) {
-          galleryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        return;
       }
     }
 
-    setSelectedOptions((prev) => ({ ...prev, [groupId]: optionId }));
+    setSelectedOptions(next);
     setQty(1);
     // On mobile the gallery sits above the variant selector and scrolls out of view.
     // Scroll back to the top of the page (galleryRef) so the image update is visible.
@@ -901,23 +923,37 @@ export default function ProductDetailPage() {
                 </div>
               ) : (
               <div className="space-y-4">
-                {/* Always-show groups (e.g. Select Size) render on top of colours/pots,
-                    regardless of their admin-defined order. Stable sort preserves relative
-                    order within each bucket; combo keys keep using variantGroups order. */}
-                {[...variantGroups]
-                  .sort((a, b) => Number(Boolean(b.always_show_options)) - Number(Boolean(a.always_show_options)))
-                  .map((group) => {
-                  const isColourGroup = /colou?r/i.test(group.label);
-                  // Only options with at least one in-stock combo — consistent with the other
-                  // groups' current selections — are rendered.
-                  const visibleOptions = (group.options ?? []).filter((o) => isOptionVisible(group, o));
+                {/* Level-wise flow: Size → Pot type → Colour (see flowRank). All levels
+                    stay visible; a level is filtered only by higher-level picks. Combo
+                    keys / stock_map keep using variantGroups (admin) order. */}
+                {orderedGroups.map((group) => {
+                  const isColourGroup = isColourLabel(group.label);
+                  const definedOptions = group.options ?? [];
+                  // Options with at least one in-stock combo consistent with the
+                  // HIGHER-level selections — never filtered by lower levels.
+                  const visibleOptions = definedOptions.filter((o) => isOptionVisible(group, o));
                   const hasOptionImages = visibleOptions.some((o) => o.images?.[0]);
                   // Render mode: colour → circular swatches; has images → image cards; else → pill chips
                   const renderMode: 'colour' | 'image-card' | 'pill' =
                     isColourGroup ? 'colour' : hasOptionImages ? 'image-card' : 'pill';
 
-                  // Group has no purchasable options — hide it entirely.
-                  if (visibleOptions.length === 0) return null;
+                  // Degenerate group with no defined options — nothing to render at all.
+                  if (definedOptions.length === 0) return null;
+
+                  // Every level stays visible; if nothing here is purchasable for the
+                  // current higher-level picks, say so instead of hiding the section.
+                  if (visibleOptions.length === 0) {
+                    return (
+                      <div key={group.id}>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                          {group.label}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Not available for the current selection
+                        </p>
+                      </div>
+                    );
+                  }
 
                   return (
                     <div key={group.id}>
@@ -943,7 +979,13 @@ export default function ProductDetailPage() {
                                   cursor-pointer
                                 `}
                                 style={{ backgroundColor: hex || '#e5e7eb' }}
-                              />
+                              >
+                                {isSelected && (
+                                  <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-white ring-2 ring-white">
+                                    <Check size={9} strokeWidth={4} />
+                                  </span>
+                                )}
+                              </button>
                             );
                           })}
                         </div>
@@ -980,6 +1022,11 @@ export default function ProductDetailPage() {
                                     : 'border-gray-200 hover:border-primary/60 bg-white cursor-pointer'
                                   }`}
                               >
+                                {isSelected && (
+                                  <span className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white shadow-sm">
+                                    <Check size={12} strokeWidth={3} />
+                                  </span>
+                                )}
                                 <div className="h-14 w-14 rounded-lg overflow-hidden bg-gray-50 mb-1.5 shrink-0">
                                   {opt.images?.[0] ? (
                                     <img
@@ -1036,12 +1083,13 @@ export default function ProductDetailPage() {
                                 key={opt.id}
                                 type="button"
                                 onClick={() => selectOption(group.id, opt.id)}
-                                className={`px-4 py-2 rounded-full border-2 text-sm font-semibold transition focus:outline-none
+                                className={`px-4 py-2 rounded-full border-2 text-sm font-semibold transition focus:outline-none inline-flex items-center
                                   ${isSelected
                                     ? 'bg-primary border-primary text-white shadow-sm'
                                     : 'border-gray-200 text-gray-700 hover:border-primary hover:text-primary bg-white'
                                   }`}
                               >
+                                {isSelected && <Check size={13} strokeWidth={3} className="mr-1 shrink-0" />}
                                 {opt.name}
                                 {priceLabel && (
                                   <span className={`ml-1.5 text-xs font-normal ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
