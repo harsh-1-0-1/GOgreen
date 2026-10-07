@@ -18,6 +18,7 @@ from app.db.models import (
     Product,
     Refund,
 )
+from app.services import cart_service as _cart_service
 from app.schemas.order import DirectCheckoutItem
 from app.services import coupon_service
 from app.services.cart_service import combination_key, resolve_variant_details
@@ -520,3 +521,91 @@ async def record_refund(
 
     await db.flush()
     return order
+
+
+async def restore_cart_from_order(
+    db: AsyncSession, order_id: int, user_id: int
+) -> Cart:
+    """
+    Re-populate the user's cart from a PENDING or FAILED Razorpay order so the
+    cart is not lost when the customer dismisses the Razorpay modal.
+
+    Rules:
+    - Only works for orders that belong to the requesting user.
+    - Only works when payment_status is PENDING or FAILED (not PAID / refunded).
+    - Each order item is added back to the cart using its original product_id,
+      quantity and selected_options.  Items whose product no longer exists or is
+      inactive are silently skipped so one bad product never blocks the rest.
+    - Uses get_or_create_cart so the user's existing cart (if any) is reused; we
+      never duplicate items — if the product+options combo already exists in the
+      cart we just bump the quantity instead.
+    """
+    result = await db.execute(
+        select(Order)
+        .where(Order.id == order_id, Order.user_id == user_id)
+        .options(selectinload(Order.items))
+    )
+    order = result.scalar_one_or_none()
+    if not order:
+        raise ValueError("Order not found")
+    if order.payment_status == PaymentStatus.PAID:
+        raise ValueError("Cannot restore a paid order to cart")
+
+    cart = await _cart_service.get_or_create_cart(db, user_id=user_id)
+    # Re-load with items so we can check for duplicates
+    cart_result = await db.execute(
+        select(Cart)
+        .where(Cart.id == cart.id)
+        .options(selectinload(Cart.items))
+    )
+    cart = cart_result.scalar_one()
+
+    for oi in order.items:
+        if not oi.product_id:
+            continue
+
+        # Verify product still exists and is active
+        prod_result = await db.execute(
+            select(Product).where(Product.id == oi.product_id, Product.is_active == True)  # noqa: E712
+        )
+        product = prod_result.scalar_one_or_none()
+        if not product:
+            logger.info(
+                "restore_cart_from_order: skipping product_id={} (not found / inactive)",
+                oi.product_id,
+            )
+            continue
+
+        # Normalise selected_options back to the list/dict the cart expects
+        selected_options = oi.selected_options
+        if isinstance(selected_options, dict) and "option_ids" in selected_options:
+            # New variant format — cart stores the raw list of IDs
+            selected_options = selected_options.get("option_ids")
+
+        # Check if this product+options combo is already in the cart; bump if so
+        existing = next(
+            (
+                ci for ci in cart.items
+                if ci.product_id == oi.product_id
+                and ci.selected_options == selected_options
+            ),
+            None,
+        )
+        if existing:
+            existing.quantity += oi.quantity
+        else:
+            db.add(
+                CartItem(
+                    cart_id=cart.id,
+                    product_id=oi.product_id,
+                    quantity=oi.quantity,
+                    selected_options=selected_options,
+                )
+            )
+
+    await db.flush()
+    logger.info(
+        "restore_cart_from_order: restored order {} items into cart {} for user {}",
+        order_id, cart.id, user_id,
+    )
+    return cart

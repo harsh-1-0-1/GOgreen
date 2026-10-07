@@ -425,7 +425,22 @@ export default function CheckoutPage() {
         toast.success('Payment completed');
         navigate(`/orders/${response.order_id}?poll=1`);
       },
-      modal: { ondismiss: () => toast.error('Payment was cancelled') },
+      modal: {
+        ondismiss: () => {
+          toast.error('Payment was cancelled');
+          if (shouldClearCart) {
+            // The backend deleted the cart rows when the order was created.
+            // Restore them so the customer doesn't lose their cart.
+            api
+              .post(`/orders/${response.order_id}/restore-cart`)
+              .then(() => cart.fetchCart())
+              .catch(() => {
+                // Silently ignore — worst case the cart stays empty and
+                // the customer can re-add items manually.
+              });
+          }
+        },
+      },
     }).open();
   }
 

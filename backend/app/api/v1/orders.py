@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import get_current_active_user
 from app.db.models import User
 from app.db.session import get_db
+from app.schemas.cart import CartResponse
 from app.schemas.order import CheckoutRequest, CheckoutResponse, DirectCheckoutRequest, OrderListResponse, OrderResponse
+from app.services import cart_service
 from app.services import email_service, order_service, whatsapp_service
 from app.utils.variant_pricing import StockMapMissingError
 
@@ -108,3 +110,23 @@ async def get_order(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return OrderResponse.model_validate(order)
+
+
+@router.post("/{order_id}/restore-cart", response_model=CartResponse, status_code=200)
+async def restore_cart_from_order(
+    order_id: int,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-populate the user's cart from a cancelled / pending Razorpay order.
+
+    Called by the frontend when the customer dismisses the Razorpay payment
+    modal so the cart is not lost after a cancelled payment attempt.
+    """
+    try:
+        restored_cart = await order_service.restore_cart_from_order(db, order_id, user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await db.commit()
+    cart_response = await cart_service.build_cart_response(restored_cart, db)
+    return cart_response
