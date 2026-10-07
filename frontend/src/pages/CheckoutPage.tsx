@@ -250,6 +250,14 @@ export default function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const contactRef = useRef<HTMLInputElement>(null);
+  const firstNameRef = useRef<HTMLInputElement>(null);
+  const lastNameRef = useRef<HTMLInputElement>(null);
+  const addressRef = useRef<HTMLInputElement>(null);
+  const cityRef = useRef<HTMLInputElement>(null);
+  const stateRef = useRef<HTMLSelectElement>(null);
+  const pincodeRef = useRef<HTMLInputElement>(null);
+  const phoneRef = useRef<HTMLInputElement>(null);
   const couponInputRef = useRef<HTMLInputElement>(null);
   const { user, openAuthModal } = useAuthStore();
   const cart = useCartStore();
@@ -358,7 +366,32 @@ export default function CheckoutPage() {
     if (!/^\d{6}$/.test(form.pincode.trim())) next.pincode = 'Enter a valid 6 digit PIN code';
     if (!/^\d{10}$/.test(form.phone.trim())) next.phone = 'Enter a valid 10 digit phone number';
     setErrors(next);
-    return Object.keys(next).length === 0;
+
+    if (Object.keys(next).length > 0) {
+      const fieldOrder: (keyof AddressFormState)[] = ['contact', 'firstName', 'lastName', 'address', 'city', 'state', 'pincode', 'phone'];
+      const refs = {
+        contact: contactRef,
+        firstName: firstNameRef,
+        lastName: lastNameRef,
+        address: addressRef,
+        city: cityRef,
+        state: stateRef,
+        pincode: pincodeRef,
+        phone: phoneRef,
+      } as const;
+      for (const field of fieldOrder) {
+        if (next[field]) {
+          const el = refs[field]?.current as HTMLElement | null;
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => el.focus(), 150);
+          }
+          break;
+        }
+      }
+      return false;
+    }
+    return true;
   }
 
   async function openRazorpay(response: CheckoutResponse, shouldClearCart: boolean = false) {
@@ -477,7 +510,7 @@ export default function CheckoutPage() {
               )}
             </div>
             <Field label="Email or mobile phone number">
-              <input ref={firstInputRef} value={form.contact} onChange={(e) => set('contact', e.target.value)} className={inputClass(Boolean(errors.contact))} placeholder="Email or mobile phone number" />
+              <input ref={contactRef} value={form.contact} onChange={(e) => set('contact', e.target.value)} className={inputClass(Boolean(errors.contact))} placeholder="Email or mobile phone number" />
             </Field>
             <label className="flex items-center gap-2.5 text-xs sm:text-sm text-gray-700 select-none cursor-pointer">
               <input type="checkbox" checked={form.newsletter} onChange={(e) => set('newsletter', e.target.checked)} className="h-4 w-4 rounded accent-primary border-gray-300 text-primary" />
@@ -491,20 +524,20 @@ export default function CheckoutPage() {
               <option>India</option>
             </select>
             <div className="grid gap-3 sm:grid-cols-2">
-              <input value={form.firstName} onChange={(e) => set('firstName', e.target.value)} className={inputClass(Boolean(errors.firstName))} placeholder="First name" />
-              <input value={form.lastName} onChange={(e) => set('lastName', e.target.value)} className={inputClass(Boolean(errors.lastName))} placeholder="Last name" />
+              <input ref={firstNameRef} value={form.firstName} onChange={(e) => set('firstName', e.target.value)} className={inputClass(Boolean(errors.firstName))} placeholder="First name" />
+              <input ref={lastNameRef} value={form.lastName} onChange={(e) => set('lastName', e.target.value)} className={inputClass(Boolean(errors.lastName))} placeholder="Last name" />
             </div>
-            <input value={form.address} onChange={(e) => set('address', e.target.value)} className={inputClass(Boolean(errors.address))} placeholder="Address" />
+            <input ref={addressRef} value={form.address} onChange={(e) => set('address', e.target.value)} className={inputClass(Boolean(errors.address))} placeholder="Address" />
             <input value={form.apartment} onChange={(e) => set('apartment', e.target.value)} className={inputClass()} placeholder="Apartment, suite, etc. (optional)" />
             <div className="grid gap-3 sm:grid-cols-2">
-              <input value={form.city} onChange={(e) => set('city', e.target.value)} className={inputClass(Boolean(errors.city))} placeholder="City" />
-              <select value={form.state} onChange={(e) => set('state', e.target.value)} className={inputClass(Boolean(errors.state))}>
+              <input ref={cityRef} value={form.city} onChange={(e) => set('city', e.target.value)} className={inputClass(Boolean(errors.city))} placeholder="City" />
+              <select ref={stateRef} value={form.state} onChange={(e) => set('state', e.target.value)} className={inputClass(Boolean(errors.state))}>
                 {states.map((state) => <option key={state}>{state}</option>)}
               </select>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <input inputMode="numeric" value={form.pincode} onChange={(e) => set('pincode', e.target.value)} className={inputClass(Boolean(errors.pincode))} placeholder="PIN code" maxLength={6} />
-              <input inputMode="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} className={inputClass(Boolean(errors.phone))} placeholder="Phone" maxLength={10} />
+              <input ref={pincodeRef} inputMode="numeric" value={form.pincode} onChange={(e) => set('pincode', e.target.value)} className={inputClass(Boolean(errors.pincode))} placeholder="PIN code" maxLength={6} />
+              <input ref={phoneRef} inputMode="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} className={inputClass(Boolean(errors.phone))} placeholder="Phone" maxLength={10} />
             </div>
             <label className="flex items-center gap-2.5 text-xs sm:text-sm text-gray-700 select-none cursor-pointer">
               <input type="checkbox" checked={form.saveInfo} onChange={(e) => set('saveInfo', e.target.checked)} className="h-4 w-4 rounded accent-primary border-gray-300 text-primary" />

@@ -38,6 +38,7 @@ import {
 import type { NavItemDef } from './navData';
 
 import { LOGO_PATH } from '@/lib/branding';
+import ResponsiveBannerImage from '@/components/banner/ResponsiveBannerImage';
 
 export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -49,6 +50,7 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [promoRatio, setPromoRatio] = useState<number | null>(null);
 
   const lastScrollY = useRef(0);
 
@@ -72,6 +74,9 @@ export default function Navbar() {
   }
   const { data: mobilePromoBanners = [] } = useBanners('mobile_promo');
   const mobilePromoBanner = mobilePromoBanners[0];
+  useEffect(() => {
+    setPromoRatio(null);
+  }, [mobilePromoBanner?.id]);
   const { data: categories = [] } = useCategories();
 
   // DB-driven menu items. dataUpdatedAt stays 0 until a successful fetch ever
@@ -630,50 +635,67 @@ export default function Navbar() {
                 className="flex-1 min-h-0 overflow-y-auto scrollbar-none flex flex-col"
                 style={{ WebkitOverflowScrolling: 'touch' }}
               >
-              {/* Promotional Banner Card — rendered only when an active
-                  mobile_promo banner with an image is configured
-                  (admin-managed), so no hardcoded/seasonal content ever leaks
-                  in. Full-bleed across the drawer (no side padding) with no
-                  text overlay — bake any text into the image itself. */}
-              {mobilePromoBanner?.image_url && (
-                <div className="pb-3 shrink-0">
-                  {mobilePromoBanner.cta_link ? (
-                    <Link
-                      to={mobilePromoBanner.cta_link}
-                      onClick={closeDrawer}
-                      className="group relative block overflow-hidden shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
-                      style={
-                        mobilePromoBanner.bg_color
-                          ? { backgroundColor: mobilePromoBanner.bg_color }
-                          : undefined
-                      }
-                    >
-                      <img
-                        src={mobilePromoBanner.image_url}
-                        alt={mobilePromoBanner.title}
-                        className="w-full aspect-[16/5] object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                        loading="eager"
-                      />
-                    </Link>
-                  ) : (
-                    <div
-                      className="group relative block overflow-hidden shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
-                      style={
-                        mobilePromoBanner.bg_color
-                          ? { backgroundColor: mobilePromoBanner.bg_color }
-                          : undefined
-                      }
-                    >
-                      <img
-                        src={mobilePromoBanner.image_url}
-                        alt={mobilePromoBanner.title}
-                        className="w-full aspect-[16/5] object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                        loading="eager"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
+               {/* Promotional Banner Card — rendered only when an active
+                   mobile_promo banner with an image is configured
+                   (admin-managed), so no hardcoded/seasonal content ever leaks
+                   in. Full-bleed across the drawer (no side padding) with no
+                   text overlay — bake any text into the image itself. */}
+               {(mobilePromoBanner?.image_url || mobilePromoBanner?.image_url_web) && (
+                 <div
+                   className="pb-3 shrink-0 relative overflow-hidden"
+                   style={
+                     promoRatio
+                       ? { aspectRatio: String(promoRatio) }
+                       : { aspectRatio: '16/5' }
+                   }
+                 >
+                   {mobilePromoBanner.cta_link ? (
+                     <Link
+                       to={mobilePromoBanner.cta_link}
+                       onClick={closeDrawer}
+                       className="group relative block h-full w-full overflow-hidden shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
+                       style={
+                         mobilePromoBanner.bg_color
+                           ? { backgroundColor: mobilePromoBanner.bg_color }
+                           : undefined
+                       }
+                     >
+                       <ResponsiveBannerImage
+                         banner={mobilePromoBanner}
+                         className="absolute inset-0 h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                         loading="eager"
+                         onLoad={(e) => {
+                           const img = e.currentTarget;
+                           if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                             setPromoRatio((r) => r ?? img.naturalWidth / img.naturalHeight);
+                           }
+                         }}
+                       />
+                     </Link>
+                   ) : (
+                     <div
+                       className="group relative block h-full w-full overflow-hidden shadow-[0_4px_12px_rgba(45,106,79,0.06)] transition active:scale-[0.98]"
+                       style={
+                         mobilePromoBanner.bg_color
+                           ? { backgroundColor: mobilePromoBanner.bg_color }
+                           : undefined
+                       }
+                     >
+                       <ResponsiveBannerImage
+                         banner={mobilePromoBanner}
+                         className="absolute inset-0 h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                         loading="eager"
+                         onLoad={(e) => {
+                           const img = e.currentTarget;
+                           if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                             setPromoRatio((r) => r ?? img.naturalWidth / img.naturalHeight);
+                           }
+                         }}
+                       />
+                     </div>
+                   )}
+                 </div>
+               )}
 
               {/* Login / Register Button or User Profile Card */}
               <div className="px-5 pb-4 border-b border-gray-100/80 shrink-0">
