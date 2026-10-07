@@ -369,7 +369,7 @@ export default function CheckoutPage() {
 
     if (Object.keys(next).length > 0) {
       const fieldOrder: (keyof AddressFormState)[] = ['contact', 'firstName', 'lastName', 'address', 'city', 'state', 'pincode', 'phone'];
-      const refs = {
+      const refs: Partial<Record<keyof AddressFormState, React.RefObject<HTMLElement | null>>> = {
         contact: contactRef,
         firstName: firstNameRef,
         lastName: lastNameRef,
@@ -378,7 +378,7 @@ export default function CheckoutPage() {
         state: stateRef,
         pincode: pincodeRef,
         phone: phoneRef,
-      } as const;
+      };
       for (const field of fieldOrder) {
         if (next[field]) {
           const el = refs[field]?.current as HTMLElement | null;
