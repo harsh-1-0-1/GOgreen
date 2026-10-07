@@ -53,6 +53,7 @@ export default function Navbar() {
   const [promoRatio, setPromoRatio] = useState<number | null>(null);
 
   const lastScrollY = useRef(0);
+  const searchOpenedAtRef = useRef<number>(0);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -61,6 +62,7 @@ export default function Navbar() {
 
   const hoverTimeoutRef = useRef<number>(0);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchToggleRef = useRef<HTMLButtonElement>(null);
 
   const debouncedQuery = useDebounce(searchQuery, 300);
   const isProductPage = /^\/products\/[^/]+/.test(location.pathname);
@@ -125,18 +127,28 @@ export default function Navbar() {
       const currentScrollY = window.scrollY;
       setScrolled(currentScrollY > 60);
 
-      if (currentScrollY < 100) {
-        setHidden(false);
-      } else {
-        const diff = currentScrollY - lastScrollY.current;
-        if (diff > 10) setHidden(true);   // scroll down → hide top navbar
-        else if (diff < -10) setHidden(false); // scroll up → show top navbar
-      }
-
-      // Hide search bar on any scroll
-      if (Math.abs(currentScrollY - lastScrollY.current) > 5) {
-        setSearchOpen(false);
-      }
+      // When search is open, keep the navbar visible and skip hide logic.
+      // Opening the search bar adds height to the sticky header which shifts
+      // page content down, causing a spurious positive-diff scroll event that
+      // would otherwise hide the navbar immediately.
+      setSearchOpen((searchIsOpen) => {
+        if (!searchIsOpen) {
+          if (currentScrollY < 100) {
+            setHidden(false);
+          } else {
+            const diff = currentScrollY - lastScrollY.current;
+            if (diff > 10) {
+              setHidden(true);
+            } else if (diff < -10) {
+              setHidden(false);
+            }
+          }
+        } else {
+          // Search is open — ensure navbar stays visible
+          setHidden(false);
+        }
+        return searchIsOpen; // don't actually change searchOpen
+      });
 
       lastScrollY.current = currentScrollY;
     }
@@ -147,9 +159,22 @@ export default function Navbar() {
   // Click-outside to close search bar & suggestions
   useEffect(() => {
     function onPointerDown(e: PointerEvent) {
+      // Ignore clicks within the search toggle button itself
+      const target = e.target as Node;
+      if (
+        searchToggleRef.current &&
+        searchToggleRef.current.contains(target)
+      ) {
+        return;
+      }
+      // Ignore spurious events fired immediately after opening (e.g. focus
+      // events that bubble up as synthetic pointer events on some browsers)
+      if (Date.now() - searchOpenedAtRef.current < 600) {
+        return;
+      }
       if (
         searchContainerRef.current &&
-        !searchContainerRef.current.contains(e.target as Node)
+        !searchContainerRef.current.contains(target)
       ) {
         setSearchFocused(false);
         setSearchOpen(false);
@@ -185,6 +210,7 @@ export default function Navbar() {
       navigate(
         `/products?search=${encodeURIComponent(searchQuery.trim())}`,
       );
+      window.scrollTo({ top: 0, behavior: 'instant' });
       setSearchQuery('');
       setSearchFocused(false);
       setSearchOpen(false);
@@ -373,11 +399,14 @@ export default function Navbar() {
 
           {/* Search icon — opens the search bar on all breakpoints */}
           <button
+            ref={searchToggleRef}
             className="flex items-center justify-center w-10 h-10 lg:w-11 lg:h-11 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setSearchOpen((prev) => {
                 const next = !prev;
                 if (next) {
+                  searchOpenedAtRef.current = Date.now();
                   // Focus the input after state update + DOM paint
                   setTimeout(() => {
                     document.querySelector<HTMLInputElement>('.mobile-search-input')?.focus();
