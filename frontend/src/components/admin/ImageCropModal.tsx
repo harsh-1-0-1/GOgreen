@@ -105,6 +105,13 @@ const CROP_PRESETS: Record<string, CropPreset> = {
     height: 200,
     hint: '1400×200px — Wide strip below Buy It Now button',
   },
+  why_plantoga: {
+    label: '🌿 Why Plantoga Side (2:3)',
+    aspect: 2 / 3,
+    width: 600,
+    height: 900,
+    hint: '600×900px — Portrait banner beside the comparison table',
+  },
   care_card: {
     label: '🌿 Care Card (2:1)',
     aspect: 2 / 1,

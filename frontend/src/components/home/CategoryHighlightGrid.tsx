@@ -5,7 +5,7 @@ import { useBanners } from '@/hooks/useBanners';
 function HighlightCardSkeleton() {
   return (
     <div className="flex flex-col gap-2.5 sm:gap-3">
-      <div className="aspect-[3/4] rounded-xl bg-gray-100 animate-pulse" />
+      <div className="rounded-xl bg-gray-100 animate-pulse" style={{ aspectRatio: '400 / 550' }} />
       <div className="h-5 w-3/4 mx-auto rounded bg-gray-100 animate-pulse" />
     </div>
   );
@@ -20,7 +20,7 @@ export default function CategoryHighlightGrid() {
   return (
     <section className="w-full py-7 sm:py-9 bg-white">
       <div className="mx-auto max-w-[760px] px-2 sm:px-6">
-        <div className="grid grid-cols-2 gap-x-2.5 gap-y-5 sm:gap-x-5 sm:gap-y-7">
+        <div className="grid grid-cols-2 items-start gap-x-2.5 gap-y-5 sm:gap-x-5 sm:gap-y-7">
           {isLoading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <HighlightCardSkeleton key={i} />
@@ -29,8 +29,8 @@ export default function CategoryHighlightGrid() {
                 const content = (
                   <div className="group flex flex-col gap-2.5 sm:gap-3">
                     <div
-                      className="relative aspect-[3/4] overflow-hidden rounded-xl shadow-sm transition-all group-hover:shadow-md"
-                      style={{ backgroundColor: card.bg_color || '#F5F0E8' }}
+                      className="relative overflow-hidden rounded-xl shadow-sm transition-all group-hover:shadow-md"
+                      style={{ aspectRatio: '400 / 550', backgroundColor: card.bg_color || '#F5F0E8' }}
                     >
                       {card.image_url && (
                         <img

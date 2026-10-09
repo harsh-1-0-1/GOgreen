@@ -536,6 +536,7 @@ export default function ProductDetailPage() {
   const { data: productDetailBanners = [] } = useBanners('product_detail', productCategorySlug);
   const { data: productSpecBanners = [] } = useBanners('product_spec', productCategorySlug);
   const { data: productStripBanners = [] } = useBanners('product_strip', productCategorySlug);
+  const { data: whyPlantogaBanners = [] } = useBanners('why_plantoga', productCategorySlug);
   const { data: stories = [] } = useStories();
 
   useEffect(() => {
@@ -870,6 +871,7 @@ export default function ProductDetailPage() {
   const productDetailBanner = selectProductTypeBanner(productDetailBanners, categories, product.category_id);
   const productSpecBanner = selectProductTypeBanner(productSpecBanners, categories, product.category_id);
   const productStripBanner = selectProductTypeBanner(productStripBanners, categories, product.category_id);
+  const whyPlantogaBanner = selectProductTypeBanner(whyPlantogaBanners, categories, product.category_id);
   const mrp = displayOriginalPrice ?? displayPrice;
   const productSpecs = [
     { label: 'Name', value: product.name },
@@ -1270,22 +1272,19 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        {/* WhyPlantoga — two-column split: product image LEFT, comparison table RIGHT */}
-        <div className="mt-8 sm:mt-10 flex flex-col md:flex-row gap-6 lg:gap-10">
-          <div className="hidden md:block md:w-[38%] lg:w-[36%] shrink-0">
-            {galleryImages[0] ? (
+        {/* WhyPlantoga — two-column split: category banner LEFT, comparison table RIGHT */}
+        <div className="mt-8 sm:mt-10 flex flex-col md:flex-row gap-6 lg:gap-8 items-stretch">
+          {whyPlantogaBanner?.image_url && (
+            <div className="hidden md:flex md:w-1/2 shrink-0">
               <img
-                src={galleryImages[0]}
-                alt={product.name}
+                src={whyPlantogaBanner.image_url}
+                alt={whyPlantogaBanner.title || ''}
                 className="w-full h-full rounded-2xl object-cover"
-                style={{ maxHeight: '600px' }}
                 loading="lazy"
               />
-            ) : (
-              <div className="w-full aspect-[3/4] rounded-2xl bg-gray-100" />
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
+            </div>
+          )}
+          <div className={whyPlantogaBanner?.image_url ? 'md:w-1/2' : 'w-full'}>
             <WhyPlantoga bannerImage={product.why_plantoga_banner_image} />
           </div>
         </div>
@@ -1315,36 +1314,36 @@ export default function ProductDetailPage() {
         {/* FAQ + detail banner — image LEFT (capped height, sticky), FAQ RIGHT.
             Falls back to full-width FAQ when no banner is configured. */}
         {productDetailBanner?.image_url ? (
-          <div className="mt-8 sm:mt-10 flex flex-col gap-6 lg:gap-10 md:flex-row md:items-start">
-            <div className="md:w-[300px] lg:w-[360px] md:shrink-0 overflow-hidden rounded-2xl">
+          <div className="mt-8 sm:mt-10 flex flex-col gap-6 lg:gap-8 md:flex-row items-stretch">
+            <div className="hidden md:flex md:w-1/2 shrink-0">
               {productDetailBanner.cta_link ? (
                 <Link
                   to={productDetailBanner.cta_link}
-                  className="block rounded-2xl overflow-hidden"
+                  className="block w-full rounded-2xl overflow-hidden"
                   style={{ backgroundColor: productDetailBanner.bg_color || '#1B4332' }}
                 >
                   <img
                     src={productDetailBanner.image_url}
                     alt={productDetailBanner.title}
-                    className="w-full h-auto object-cover rounded-2xl"
+                    className="w-full h-full object-cover rounded-2xl"
                     loading="lazy"
                   />
                 </Link>
               ) : (
                 <div
-                  className="rounded-2xl overflow-hidden"
+                  className="w-full rounded-2xl overflow-hidden"
                   style={{ backgroundColor: productDetailBanner.bg_color || '#1B4332' }}
                 >
                   <img
                     src={productDetailBanner.image_url}
                     alt={productDetailBanner.title}
-                    className="w-full h-auto object-cover rounded-2xl"
+                    className="w-full h-full object-cover rounded-2xl"
                     loading="lazy"
                   />
                 </div>
               )}
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="md:w-1/2">
               <ProductFaq faqs={product.faqs} embedded />
             </div>
           </div>

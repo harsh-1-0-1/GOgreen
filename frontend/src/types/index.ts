@@ -486,7 +486,8 @@ export type BannerPlacement =
   | 'trending'
   | 'product_detail'
   | 'product_spec'
-  | 'product_strip';
+  | 'product_strip'
+  | 'why_plantoga';
 
 export interface Banner {
   id: number;

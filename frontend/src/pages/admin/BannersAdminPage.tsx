@@ -116,6 +116,12 @@ const PLACEMENTS = [
     description: 'A wide horizontal strip banner displayed on the product detail page, just below the Buy It Now button.',
     helpText: 'Recommended size: 1400×200px. Choose a product category for category-specific banners, or leave blank as fallback for all products.',
   },
+  {
+    key: 'why_plantoga',
+    label: '🌿 Why Plantoga Side Banner',
+    description: 'A tall image displayed to the left of the "Plantoga vs the rest" comparison table on product detail pages.',
+    helpText: 'Upload a portrait image (e.g. 600×900px). Set the target category slug to show a category-specific image, or leave blank as a global fallback. The image is displayed at its natural ratio.',
+  },
 ] as const;
 
 const bannerSchema = z
@@ -125,7 +131,7 @@ const bannerSchema = z
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
-    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'category_nav', 'mobile_promo', 'corporate_gifting', 'happy_planters', 'product_detail', 'product_spec', 'product_strip']),
+    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'category_nav', 'mobile_promo', 'corporate_gifting', 'happy_planters', 'product_detail', 'product_spec', 'product_strip', 'why_plantoga']),
     target_path: z.string().max(255).optional().or(z.literal('')),
     bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #FFFFFF)'),
     text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #000000)'),
@@ -1120,6 +1126,35 @@ function BannerDrawer({
               )}
               <p className="text-[10px] text-gray-400 mt-0.5">
                 The banner appears on products under this main category. Leave blank or use * as the fallback banner.
+              </p>
+              {errors.target_path && (
+                <p className="text-xs text-red-500 mt-1">
+                  {errors.target_path.message}
+                </p>
+              )}
+            </div>
+          )}
+
+          {watchedPlacement === 'why_plantoga' && (
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Category <span className="font-normal text-gray-400">(Target Path)</span>
+              </label>
+              <select {...register('target_path')} className={inputClass}>
+                <option value="">All categories (global fallback)</option>
+                {hasCustomTargetPath && (
+                  <option value={watchedTargetPath}>
+                    {watchedTargetPath} (custom — not a current slug)
+                  </option>
+                )}
+                {categoryOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                Select a category to show this banner only on products in that category. Leave blank to show for all products.
               </p>
               {errors.target_path && (
                 <p className="text-xs text-red-500 mt-1">
