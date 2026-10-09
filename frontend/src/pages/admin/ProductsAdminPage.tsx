@@ -36,6 +36,7 @@ import PotPriceEditor, { type PotPriceDraft } from '@/components/admin/PotPriceE
 import BadgeColorField from '@/components/admin/BadgeColorField';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import ImageCropModal from '@/components/admin/ImageCropModal';
 import type { CatalogTag, FAQItem, Product, ProductListResponse, ProductVariants, VariantGroup, VariantOption } from '@/types';
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -262,6 +263,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   const [careCardImageKey, setCareCardImageKey] = useState('');
   const [careCardImageUrl, setCareCardImageUrl] = useState('');
   const [uploadingCareCardImage, setUploadingCareCardImage] = useState(false);
+  // Crop modal state for care card
+  const [careCardCropSrc, setCareCardCropSrc] = useState<string | null>(null);
+  const [careCardCropOpen, setCareCardCropOpen] = useState(false);
 
   // Per-product image overlay badge controls
   const [isBestseller, setIsBestseller] = useState(false);
@@ -1136,10 +1140,17 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
   async function handleCareCardImageUpload(file?: File) {
     if (!file) return;
+    // Open crop modal first — upload happens after cropping
+    const src = URL.createObjectURL(file);
+    setCareCardCropSrc(src);
+    setCareCardCropOpen(true);
+  }
+
+  async function uploadCroppedCareCard(croppedFile: File) {
     setUploadingCareCardImage(true);
     try {
       const fd = new FormData();
-      fd.append('image', file);
+      fd.append('image', croppedFile);
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/upload-image', fd);
       setCareCardImageKey(data.key);
@@ -2712,6 +2723,25 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         </div>
 
       </div>
+
+      {/* Care Card Crop Modal */}
+      {careCardCropOpen && careCardCropSrc && (
+        <ImageCropModal
+          isOpen={careCardCropOpen}
+          imageSrc={careCardCropSrc}
+          placement="care_card"
+          useServerCrop={false}
+          onCropComplete={(croppedFile) => {
+            void uploadCroppedCareCard(croppedFile);
+          }}
+          onServerCropComplete={() => {}}
+          onClose={() => {
+            setCareCardCropOpen(false);
+            if (careCardCropSrc) URL.revokeObjectURL(careCardCropSrc);
+            setCareCardCropSrc(null);
+          }}
+        />
+      )}
     </>
   );
 }

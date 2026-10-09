@@ -452,27 +452,31 @@ function DesktopGallery({
   const list = images;
 
   return (
-    <div className="space-y-3">
-      <div className="aspect-square rounded-2xl overflow-hidden bg-gray-50">
-        {list[activeIndex] ? (
-          <img src={list[activeIndex]} alt="Product" className="w-full h-full object-cover" loading="lazy" />
-        ) : (
-          <div className="w-full h-full bg-gray-100" />
-        )}
-      </div>
+    <div className="flex gap-3">
+      {/* Vertical thumbnail strip — only shown when there are multiple images */}
       {list.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+        <div className="flex flex-col gap-2 overflow-y-auto scrollbar-hide max-h-[520px] lg:max-h-[600px] shrink-0">
           {list.map((img, i) => (
             <button
               key={i}
               onClick={() => onActiveChange(i)}
-              className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition ${i === activeIndex ? 'border-primary' : 'border-transparent'}`}
+              className={`shrink-0 w-[68px] h-[68px] lg:w-[76px] lg:h-[76px] rounded-xl overflow-hidden border-2 transition ${
+                i === activeIndex ? 'border-primary' : 'border-transparent hover:border-gray-300'
+              }`}
             >
               <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
             </button>
           ))}
         </div>
       )}
+      {/* Main image */}
+      <div className="flex-1 aspect-square rounded-2xl overflow-hidden bg-gray-50">
+        {list[activeIndex] ? (
+          <img src={list[activeIndex]} alt="Product" className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full bg-gray-100" />
+        )}
+      </div>
     </div>
   );
 }
@@ -894,9 +898,9 @@ export default function ProductDetailPage() {
           <span className="text-gray-600 line-clamp-1">{product.name}</span>
         </nav>
 
-        <div className="grid md:grid-cols-2 gap-6 lg:gap-10">
-          {/* Desktop gallery */}
-          <div className="hidden md:block">
+        <div className="grid md:grid-cols-2 gap-6 lg:gap-10 md:items-start">
+          {/* Desktop gallery — sticky so it stays in view while the right column scrolls */}
+          <div className="hidden md:block md:sticky md:top-24">
             <DesktopGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} />
           </div>
 
@@ -1149,7 +1153,7 @@ export default function ProductDetailPage() {
                 </div>
                 <button
                   onClick={handleAddToCart}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90 flex items-center justify-center gap-2"
+                  className="flex-1 py-3.5 rounded-xl text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90 flex items-center justify-center gap-2"
                   style={{ backgroundColor: '#16A34A' }}
                 >
                   <ShoppingCart size={18} />
@@ -1157,7 +1161,7 @@ export default function ProductDetailPage() {
                 </button>
                 <button
                   onClick={handleBuyNow}
-                  className="flex-1 py-3.5 border-2 border-primary text-primary bg-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-primary/5 transition"
+                  className="flex-1 py-3.5 border-2 border-primary text-primary bg-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 hover:bg-primary/5 transition active:scale-[0.98]"
                 >
                   Buy It Now
                 </button>
@@ -1257,27 +1261,43 @@ export default function ProductDetailPage() {
             )}
 
             <CareTips tips={product.care_tips || []} />
+
+            <PlantCareCard careCardImage={product.care_card_image} />
+
+            <PlantogaPromise bannerImage={product.promise_banner_image} />
+
+            <ProductSpecification specs={productSpecs} />
           </div>
         </div>
 
-        <PlantCareCard careCardImage={product.care_card_image} />
-
-        <PlantogaPromise bannerImage={product.promise_banner_image} />
-
-        <ProductSpecification specs={productSpecs} />
-
-        <StoriesCarousel stories={stories} />
-
-        <WhyPlantoga bannerImage={product.why_plantoga_banner_image} />
+        {/* WhyPlantoga — two-column split: product image LEFT, comparison table RIGHT */}
+        <div className="mt-8 sm:mt-10 flex flex-col md:flex-row gap-6 lg:gap-10">
+          <div className="hidden md:block md:w-[38%] lg:w-[36%] shrink-0">
+            {galleryImages[0] ? (
+              <img
+                src={galleryImages[0]}
+                alt={product.name}
+                className="w-full h-full rounded-2xl object-cover"
+                style={{ maxHeight: '600px' }}
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full aspect-[3/4] rounded-2xl bg-gray-100" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <WhyPlantoga bannerImage={product.why_plantoga_banner_image} />
+          </div>
+        </div>
 
         {/* Similar products */}
         {similarProducts.length > 0 && (
           <ErrorBoundary>
-            <section className="mt-8 sm:mt-10">
+            <section className="mt-6 sm:mt-8">
               <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">You May Also Like</h2>
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-hide snap-x-mandatory pb-4 -mx-3 sm:-mx-4 px-3 sm:px-4 md:grid md:grid-cols-4 md:overflow-visible md:mx-0 md:px-0">
+              <div className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-hide snap-x-mandatory pb-4 -mx-3 sm:-mx-4 px-3 sm:px-4 md:justify-center">
                 {similarProducts.map((p) => (
-                  <div key={p.id} className="shrink-0 w-[47vw] min-w-[150px] sm:w-56 md:w-auto snap-start">
+                  <div key={p.id} className="shrink-0 w-[47vw] min-w-[160px] sm:w-56 md:w-64 snap-start">
                     <ProductCard product={p} />
                   </div>
                 ))}
@@ -1288,18 +1308,15 @@ export default function ProductDetailPage() {
 
         <HappyPlanters fallbackImages={galleryImages} />
 
+        <StoriesCarousel stories={stories} />
+
         <ProductReviews productId={product.id} />
 
-        {/* FAQ + detail banner — FAQ takes the wide left column, banner sits in a
-            narrower right rail that sticks while the FAQ list scrolls (admin controlled
-            via Banners › Product Detail Page Banner). Banner is optional; without one
-            the FAQ simply takes the full width. */}
+        {/* FAQ + detail banner — image LEFT (capped height, sticky), FAQ RIGHT.
+            Falls back to full-width FAQ when no banner is configured. */}
         {productDetailBanner?.image_url ? (
           <div className="mt-8 sm:mt-10 flex flex-col gap-6 lg:gap-10 md:flex-row md:items-start">
-            <div className="min-w-0 flex-1">
-              <ProductFaq faqs={product.faqs} embedded />
-            </div>
-            <div className="md:w-[340px] lg:w-[400px] md:shrink-0 md:sticky md:top-24">
+            <div className="md:w-[300px] lg:w-[360px] md:shrink-0 overflow-hidden rounded-2xl">
               {productDetailBanner.cta_link ? (
                 <Link
                   to={productDetailBanner.cta_link}
@@ -1309,7 +1326,7 @@ export default function ProductDetailPage() {
                   <img
                     src={productDetailBanner.image_url}
                     alt={productDetailBanner.title}
-                    className="w-full h-auto object-cover"
+                    className="w-full h-auto object-cover rounded-2xl"
                     loading="lazy"
                   />
                 </Link>
@@ -1321,11 +1338,14 @@ export default function ProductDetailPage() {
                   <img
                     src={productDetailBanner.image_url}
                     alt={productDetailBanner.title}
-                    className="w-full h-auto object-cover"
+                    className="w-full h-auto object-cover rounded-2xl"
                     loading="lazy"
                   />
                 </div>
               )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <ProductFaq faqs={product.faqs} embedded />
             </div>
           </div>
         ) : (

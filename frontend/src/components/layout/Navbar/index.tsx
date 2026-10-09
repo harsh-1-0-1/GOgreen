@@ -295,7 +295,7 @@ export default function Navbar() {
       {/* ROW 1 â€” Logo Â· Search Â· Icons (Ugaoo-style)                      */}
       {/* ================================================================ */}
       <div
-        className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 flex items-center gap-3 sm:gap-6 relative h-[84px] sm:h-[96px] lg:h-[104px]"
+        className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 flex items-center gap-3 sm:gap-6 relative h-[84px] sm:h-[96px] lg:h-[90px]"
       >
 
         {/* Hamburger â€” visible on every breakpoint */}
@@ -315,11 +315,72 @@ export default function Navbar() {
           <img
             src={LOGO_PATH}
             alt="Plantoga"
-            className="object-contain w-auto h-[76px] sm:h-[88px] lg:h-[96px]"
+            className="object-contain w-auto h-[76px] sm:h-[88px] lg:h-[72px]"
           />
         </Link>
 
-        <div className="flex items-center gap-1 ml-auto shrink-0">
+        {/* Desktop inline search bar — fills the center of the top row */}
+        <form
+          onSubmit={handleSearch}
+          className="hidden lg:flex flex-1 min-w-0 mx-8 relative"
+        >
+          <div className="relative flex items-center w-full">
+            <Search size={17} className="absolute left-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search for plants, seeds, pots..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => { setSearchFocused(true); setSearchOpen(true); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setSearchOpen(false);
+                  setSearchFocused(false);
+                }
+              }}
+              className="desktop-search-input w-full pl-11 pr-5 py-3 border border-gray-300 rounded-full bg-[#f5f5f5] focus:outline-none focus:border-primary focus:bg-white text-sm transition-all placeholder:text-gray-400"
+            />
+            <button type="submit" className="sr-only">Search</button>
+          </div>
+          {/* Desktop inline suggestions */}
+          {showSuggestions && (
+            <div
+              className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-dropdown"
+            >
+              {suggestions!.map((product) => (
+                <Link
+                  key={product.id}
+                  to={`/products/${product.slug}`}
+                  onClick={() => {
+                    setSearchOpen(false);
+                    setSearchFocused(false);
+                    setSearchQuery('');
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                >
+                  {product.images?.[0] ? (
+                    <img src={product.images[0]} alt="" className="w-10 h-10 rounded-xl object-cover shrink-0 bg-gray-100" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-xl bg-gray-100 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
+                    <p className="text-xs text-primary font-semibold mt-0.5">₹{product.price}</p>
+                  </div>
+                </Link>
+              ))}
+              <Link
+                to={`/products?search=${encodeURIComponent(debouncedQuery)}`}
+                onClick={() => { setSearchOpen(false); setSearchFocused(false); setSearchQuery(''); }}
+                className="flex items-center justify-center gap-2 px-4 py-3 text-sm text-primary font-semibold hover:bg-primary/5 transition-colors"
+              >
+                <Search size={14} /> View all results for &ldquo;{debouncedQuery}&rdquo;
+              </Link>
+            </div>
+          )}
+        </form>
+
+        <div className="flex items-center gap-1 ml-auto lg:ml-0 shrink-0">
 
 
 
@@ -397,10 +458,10 @@ export default function Navbar() {
             </button>
           )}
 
-          {/* Search icon — opens the search bar on all breakpoints */}
+          {/* Search icon — only visible on mobile/tablet; desktop uses inline bar */}
           <button
             ref={searchToggleRef}
-            className="flex items-center justify-center w-10 h-10 lg:w-11 lg:h-11 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
+            className="flex lg:hidden items-center justify-center w-10 h-10 rounded-full text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
             onClick={(e) => {
               e.stopPropagation();
               setSearchOpen((prev) => {
@@ -443,9 +504,8 @@ export default function Navbar() {
       {/* ROW 2 â€” Category navigation (desktop only, Ugaoo-style)          */}
       {/* ================================================================ */}
       <nav className="hidden lg:block border-t border-gray-100">
-        <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <style>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
-          <ul className="flex items-center justify-center text-[14px] font-semibold tracking-[0.03em] gap-0 min-w-max">
+        <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16">
+          <ul className="flex items-center justify-center text-[14px] font-semibold tracking-[0.03em] gap-0 flex-wrap">
             {categoryNavItems.map((item) => {
               const hasDropdown = item.groups && item.groups.length > 0;
               const isOpen = activeDropdown === item.label;
@@ -537,11 +597,11 @@ export default function Navbar() {
       </nav>
 
       {/* ================================================================ */}
-      {/* Search bar — shown only when the search icon is clicked           */}
+      {/* Search bar — mobile only (desktop uses inline bar in Row 1)      */}
       {/* ================================================================ */}
       <div
         ref={searchContainerRef}
-        className={`${searchOpen ? 'block' : 'hidden'} bg-white px-4 py-3 border-t border-gray-100 relative`}
+        className={`${searchOpen ? 'block lg:hidden' : 'hidden'} bg-white px-4 py-3 border-t border-gray-100 relative`}
       >
         <div className="mx-auto max-w-4xl">
           <form onSubmit={handleSearch}>

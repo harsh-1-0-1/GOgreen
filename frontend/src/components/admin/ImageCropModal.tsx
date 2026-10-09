@@ -105,6 +105,13 @@ const CROP_PRESETS: Record<string, CropPreset> = {
     height: 200,
     hint: '1400×200px — Wide strip below Buy It Now button',
   },
+  care_card: {
+    label: '🌿 Care Card (2:1)',
+    aspect: 2 / 1,
+    width: 600,
+    height: 300,
+    hint: '600×300px — Plant care info card shown in the product detail buy-box column.',
+  },
   custom: {
     label: 'Custom Size',
     aspect: 1,

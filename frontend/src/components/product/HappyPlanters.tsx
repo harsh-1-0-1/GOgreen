@@ -22,7 +22,7 @@ export default function HappyPlanters({ fallbackImages }: { fallbackImages: stri
   }
 
   return (
-    <section className="mt-8 sm:mt-10" aria-labelledby="happy-planters-title">
+    <section className="mt-6 sm:mt-8" aria-labelledby="happy-planters-title">
       <div className="mb-4 flex items-end justify-between gap-4">
         <div>
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Growing together</p>
@@ -46,9 +46,9 @@ export default function HappyPlanters({ fallbackImages }: { fallbackImages: stri
         )}
       </div>
 
-      <div ref={scrollerRef} className="-mx-3 flex snap-x-mandatory gap-3 overflow-x-auto px-3 pb-3 scrollbar-hide sm:-mx-4 sm:gap-4 sm:px-4">
+      <div ref={scrollerRef} className="-mx-3 flex snap-x-mandatory gap-3 overflow-x-auto px-3 pb-3 scrollbar-hide sm:-mx-4 sm:gap-4 sm:px-4 md:justify-center md:overflow-x-visible md:mx-0 md:px-0 md:flex-wrap">
         {images.map((image, index) => (
-          <figure key={`${image.src}-${index}`} className="relative aspect-[4/5] w-[68vw] max-w-[280px] shrink-0 snap-start overflow-hidden rounded-2xl bg-[#EAF3ED] sm:w-64">
+          <figure key={`${image.src}-${index}`} className="relative aspect-[4/5] w-[68vw] max-w-[300px] shrink-0 snap-start overflow-hidden rounded-2xl bg-[#EAF3ED] sm:w-72 md:w-80">
             <img src={image.src} alt={image.alt} className="h-full w-full object-cover transition duration-500 hover:scale-[1.03]" loading="lazy" />
           </figure>
         ))}
