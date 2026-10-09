@@ -486,20 +486,20 @@ function CareTips({ tips }: { tips: string[] }) {
   if (!tips?.length) return null;
 
   return (
-    <div className="border rounded-xl overflow-hidden">
+    <div className="border border-primary/20 rounded-xl overflow-hidden bg-white">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-4 text-sm font-semibold hover:bg-gray-50 transition touch-target"
+        className="w-full flex items-center justify-between p-4 text-sm font-semibold text-primary hover:bg-primary/5 transition touch-target"
       >
         Plant Care Tips
         {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
       </button>
       {open && (
-        <div className="px-4 pb-4">
-          <ul className="space-y-2">
+        <div className="px-4 pb-4 pt-1 border-t border-primary/15 bg-[#FAFAF7]">
+          <ul className="space-y-2.5 mt-2">
             {tips.map((tip, i) => (
-              <li key={i} className="text-sm text-gray-600 flex gap-2">
-                <span className="text-primary-light mt-0.5">•</span>{tip}
+              <li key={i} className="text-sm text-gray-700 flex gap-2.5 items-start">
+                <span className="text-primary-light mt-0.5 text-base leading-none">🌿</span>{tip}
               </li>
             ))}
           </ul>
