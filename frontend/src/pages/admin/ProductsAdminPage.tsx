@@ -807,6 +807,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           ? buildDenseStockMap(cleanGroups, comboStock, existingStockMap)
           : null;
 
+        // Determine which groups are in the pot price grid
+        const gridGroupIds = new Set(potPriceDraft?.group_ids ?? []);
+
         // price_map is RETIRED, not rebuilt.
         //
         // There is no longer a second place to type a price: the grid above is the only
@@ -832,11 +835,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
               .map(o => ({
                 id: o.id,
                 name: o.name.trim(),
-                // Save the option price. When pot_price grid is active and includes this
-                // group, the price is automatically excluded from calculations by the backend
-                // (variant_pricing.py checks grid_gid_set membership). When no grid is
-                // configured, this price is used as a simple surcharge on the base price.
-                price: Number(o.price) || 0,
+                // Smart price handling: If this group is in the pot_price grid, force price to 0
+                // to prevent double-charging. Otherwise, save the entered price.
+                // The backend also excludes grid groups automatically, but clearing here prevents
+                // confusing validation errors.
+                price: gridGroupIds.has(group.id) ? 0 : (Number(o.price) || 0),
                 // Per-option images — used as colour fallback on product page
                 ...(o.image_keys.length ? { images: o.image_keys } : {}),
                 ...(o.color_hex.trim() ? { color_hex: o.color_hex.trim() } : {}),
@@ -2088,29 +2091,31 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
                             {/* Row 2: price + (colour: image upload) */}
                             <div className="flex gap-2 items-center flex-wrap pl-12">
-                              {/* Price input - shows for all variant types */}
-                              <div className="flex items-center gap-1.5">
-                                <label className="text-[11px] text-gray-600 font-medium shrink-0">Price:</label>
-                                <div className="relative">
-                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">₹</span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    value={opt.price || 0}
-                                    onChange={(e) => {
-                                      const v = parseFloat(e.target.value) || 0;
-                                      setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
-                                        ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, price: v }),
-                                      }));
-                                    }}
-                                    placeholder="0"
-                                    className="w-24 pl-5 pr-2 py-1 text-[11px] border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary"
-                                    title="Surcharge added to base price. Leave at 0 if using Pot Price Grid below."
-                                  />
+                              {/* Price input - ONLY shown for single variant group products */}
+                              {variantGroups.length === 1 && (
+                                <div className="flex items-center gap-1.5">
+                                  <label className="text-[11px] text-gray-600 font-medium shrink-0">Price:</label>
+                                  <div className="relative">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">₹</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={opt.price || 0}
+                                      onChange={(e) => {
+                                        const v = parseFloat(e.target.value) || 0;
+                                        setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                          ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, price: v }),
+                                        }));
+                                      }}
+                                      placeholder="0"
+                                      className="w-24 pl-5 pr-2 py-1 text-[11px] border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary"
+                                      title="Surcharge added to base price"
+                                    />
+                                  </div>
+                                  <span className="text-[10px] text-gray-400">surcharge</span>
                                 </div>
-                                <span className="text-[10px] text-gray-400">surcharge</span>
-                              </div>
+                              )}
 
                               {/* Colour variants: quick add-photo button (full management in table below) */}
                               {isColourGroup && (
@@ -2162,24 +2167,15 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                   Add Variant Type
                 </button>
 
-                {/* ── Pot Price Grid (N-axis) ──────────────────────────────────── */}
-                {variantGroups.length > 0 && (
+                {/* ── Pot Price Grid (N-axis) - AUTO-SHOWN for 2+ variant groups ─────── */}
+                {variantGroups.length >= 2 && (
                   <div className="mt-4 border-t pt-4 space-y-3">
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-800">Pot Price Grid (Advanced)</h4>
+                      <h4 className="text-sm font-semibold text-gray-800">Price Grid</h4>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        A price that can depend on more than one choice — e.g. the pot costing
-                        more for a bigger plant. Set it here once, instead of retuning a price on
-                        every combination row.
+                        Set prices that depend on multiple choices (e.g., pot costing more for a bigger plant).
+                        Select which variant types affect the price, then fill in the grid.
                       </p>
-                      <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-900">
-                        <p className="font-semibold mb-1">💡 Simple products vs. Grid pricing:</p>
-                        <ul className="space-y-0.5 ml-4 list-disc">
-                          <li><strong>One variant type</strong> (e.g., just pot types): Use the <strong>Price field above</strong> on each option. Simpler and clearer.</li>
-                          <li><strong>Multiple variant types</strong> (e.g., Size × Pot Type): Use this grid. The grid <strong>replaces</strong> those price fields.</li>
-                          <li><strong>⚠️ Important:</strong> If you use this grid, set option prices to <strong>0</strong> for groups included in the grid, or you'll double-charge!</li>
-                        </ul>
-                      </div>
                     </div>
                     <PotPriceEditor
                       productId={editProduct?.id ?? null}

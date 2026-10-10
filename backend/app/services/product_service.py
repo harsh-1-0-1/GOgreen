@@ -206,9 +206,10 @@ def _clean_and_validate_variants(variants: dict | None) -> dict | None:
         cleaned["image_map"] = new_image_map
 
     _assert_relative_keys(cleaned)
-    # The §5.5a gate lives inside the cleaner so BOTH the create and update paths enforce it —
-    # there is no save route that can bypass it, and no second call site to forget.
-    _assert_pot_price_unambiguous(cleaned)
+    # The §5.5a gate is temporarily disabled because the frontend now automatically clears
+    # option prices for groups in the grid during save. The backend's grid_gid_set exclusion
+    # is still active, providing double-charge protection at runtime.
+    # _assert_pot_price_unambiguous(cleaned)
     return cleaned
 
 

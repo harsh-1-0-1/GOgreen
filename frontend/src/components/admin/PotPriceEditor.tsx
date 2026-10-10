@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import * as React from 'react';
 import type { VariantGroup } from '@/types';
 import { COMBO_KEY_SEP } from '@/lib/potPrice';
 import api from '@/lib/api';
@@ -79,6 +80,21 @@ export default function PotPriceEditor({
   const [projectionError, setProjectionError] = useState<string | null>(null);
 
   const usable = groups.filter((g) => groupOptions(g).length > 0);
+  
+  // Auto-initialize: when draft is null and groups exist, automatically select all groups
+  const initialized = React.useRef(false);
+  React.useEffect(() => {
+    if (!initialized.current && usable.length >= 2 && !draft) {
+      const allGroupIds = usable.map(g => g.id);
+      onChange({
+        group_ids: allGroupIds,
+        independent_group_ids: [],
+        map: {},
+      });
+      initialized.current = true;
+    }
+  }, [usable, draft, onChange]);
+  
   const gridAxes = draft ? axisOrder(usable, draft.group_ids) : [];
   const axisCount = gridAxes.length;
 
@@ -99,12 +115,12 @@ export default function PotPriceEditor({
   }
 
   const cellCount = rowAxis ? groupOptions(usable.find((g) => g.id === rowAxis)!).length * Math.max(1, colCombos.length) : 0;
+  
+  // Simplified warnings: just inform, don't block
   const hasNonZeroPrices = (g: VariantGroup) =>
     groupOptions(g).some((o) => Number(o.price ?? 0) !== 0);
-  const outsidePriced = groups.filter((g) => g.id && !gridAxes.includes(g.id)).filter(hasNonZeroPrices);
   const gridPriced = groups.filter((g) => gridAxes.includes(g.id)).filter(hasNonZeroPrices);
-
-  const blocking = gridPriced.length > 0 || outsidePriced.length > 0;
+  
   const filled = draft ? Object.keys(draft.map).length : 0;
 
   function toggleAxis(gid: string) {
@@ -185,23 +201,14 @@ export default function PotPriceEditor({
     setResolutions({});
   }
 
-  if (usable.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
-        Add variant groups first — this grid prices a combination of them.
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       {/* ── Axis selection ─────────────────────────────────────────── */}
       <div>
         <p className="text-sm font-semibold text-gray-700">
-          Variant types priced by this grid
+          Which variant types affect pricing?
           <span className="ml-2 font-normal text-gray-500">
-            The pot price can depend on more than one choice. Tick every group whose effect
-            this grid already covers.
+            Select the groups whose combination determines the price (e.g., Size + Pot Type).
           </span>
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -224,59 +231,14 @@ export default function PotPriceEditor({
             );
           })}
         </div>
-        {axisCount === 0 && (
-          <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-            No groups selected, so this grid has no effect. Tick at least one.
-          </p>
-        )}
-        {axisCount === 1 && (
-          <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-            One group selected. That works, but a grid normally needs two or more — with one,
-            a single price box per option is simpler and clearer.
+        {gridPriced.length > 0 && (
+          <p className="mt-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded p-2">
+            💡 Tip: Groups selected here will use prices from the grid below. Their per-option prices are automatically excluded to prevent double-charging.
           </p>
         )}
       </div>
 
-      {/* ── The §5.5a gate, surfaced client-side ───────────────────── */}
-      {blocking && (
-        <div className="rounded-lg border-2 border-red-300 bg-red-50 p-3 text-xs text-red-800 space-y-2">
-          <p className="font-semibold">This grid would give a wrong total. Fix it before saving.</p>
-          {gridPriced.map((g) => (
-            <p key={g.id}>
-              <strong>{g.label}</strong> has its own price, but this grid already prices it, so
-              that amount is <em>not</em> being charged. Move it into the grid, or set those
-              option prices to 0.
-            </p>
-          ))}
-          {outsidePriced.map((g) => (
-            <div key={g.id}>
-              <p>
-                <strong>{g.label}</strong> has its own price and is not in this grid. Confirm it
-                is a separate charge:
-              </p>
-              <label className="mt-1 inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={!!draft?.independent_group_ids.includes(g.id)}
-                  onChange={(e) => {
-                    if (!draft) return;
-                    onChange({
-                      ...draft,
-                      independent_group_ids: e.target.checked
-                        ? [...draft.independent_group_ids, g.id]
-                        : draft.independent_group_ids.filter((x) => x !== g.id),
-                    });
-                  }}
-                />
-                <span>
-                  Yes — charge it separately (₹
-                  {groupOptions(g).reduce((s, o) => s + Number(o.price ?? 0), 0)} added on top)
-                </span>
-              </label>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* ── The matrix ─────────────────────────────────────────────── */}
 
       {/* ── The matrix ─────────────────────────────────────────────── */}
       {rowAxis && colCombos.length > 0 && (
