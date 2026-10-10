@@ -35,10 +35,240 @@ import {
   categoryTreeToNavItems,
   resolveSubcategories,
 } from './navData';
-import type { NavItemDef } from './navData';
+import type { NavItemDef, DropdownLink } from './navData';
 
 import { LOGO_PATH } from '@/lib/branding';
 import ResponsiveBannerImage from '@/components/banner/ResponsiveBannerImage';
+
+// ── Shop mega-menu panel ─────────────────────────────────────────────────────
+interface MobileMenuItem {
+  label: string;
+  href: string;
+  img: string;
+}
+
+interface ShopMegaMenuProps {
+  menuItems: MobileMenuItem[];
+  mobilePromoBanner: import('@/types').Banner | undefined;
+  promoRatio: number | null;
+  setPromoRatio: React.Dispatch<React.SetStateAction<number | null>>;
+  user: import('@/types').User | null;
+  onClose: () => void;
+  onLogout: () => void;
+  onLogin: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+}
+
+function ShopMegaMenu({
+  menuItems,
+  mobilePromoBanner,
+  promoRatio,
+  setPromoRatio,
+  user,
+  onClose,
+  onLogout,
+  onLogin,
+  onMouseEnter,
+  onMouseLeave,
+}: ShopMegaMenuProps) {
+  const hasBanner = !!(mobilePromoBanner?.image_url_web || mobilePromoBanner?.image_url);
+
+  return (
+    <div
+      className="absolute top-full left-1/2 -translate-x-1/2 z-[51]"
+      style={{ width: '580px' }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {/* Invisible bridge — spans from navbar bottom to panel top */}
+      <div className="absolute -top-2 left-0 right-0 h-2" />
+      
+      {/* Actual panel content */}
+      <div className="bg-white rounded-b-2xl shadow-2xl border border-t-0 border-gray-100 animate-dropdown">
+
+      <div className="flex gap-0 overflow-hidden rounded-b-2xl">
+
+        {/* ── LEFT: banner + single-column category list ── */}
+        <div className="flex-1 min-w-0 p-4 overflow-y-auto" style={{ maxHeight: '70vh' }}>
+
+          {/* Promo banner — same admin-managed banner shown in the mobile drawer */}
+          {hasBanner && (
+            <div
+              className="mb-3 w-full rounded-xl overflow-hidden bg-gray-100"
+              style={{ aspectRatio: promoRatio ? String(promoRatio) : '16/5' }}
+            >
+              {mobilePromoBanner!.cta_link ? (
+                <Link
+                  to={mobilePromoBanner!.cta_link}
+                  onClick={onClose}
+                  className="block h-full w-full"
+                  style={mobilePromoBanner!.bg_color ? { backgroundColor: mobilePromoBanner!.bg_color } : undefined}
+                >
+                  <ResponsiveBannerImage
+                    banner={mobilePromoBanner!}
+                    className="w-full h-full object-cover hover:scale-[1.02] transition-transform duration-300"
+                    loading="eager"
+                    onLoad={(e) => {
+                      const img = e.currentTarget;
+                      if (img.naturalWidth > 0 && img.naturalHeight > 0)
+                        setPromoRatio((r) => r ?? img.naturalWidth / img.naturalHeight);
+                    }}
+                  />
+                </Link>
+              ) : (
+                <div
+                  className="h-full w-full"
+                  style={mobilePromoBanner!.bg_color ? { backgroundColor: mobilePromoBanner!.bg_color } : undefined}
+                >
+                  <ResponsiveBannerImage
+                    banner={mobilePromoBanner!}
+                    className="w-full h-full object-cover"
+                    loading="eager"
+                    onLoad={(e) => {
+                      const img = e.currentTarget;
+                      if (img.naturalWidth > 0 && img.naturalHeight > 0)
+                        setPromoRatio((r) => r ?? img.naturalWidth / img.naturalHeight);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Single-column category rows — circular thumbnail + label */}
+          <div className="flex flex-col">
+            {menuItems.map((cat) => (
+              <Link
+                key={cat.href}
+                to={cat.href}
+                onClick={onClose}
+                className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-emerald-50/60 active:bg-emerald-50/80 transition-all duration-150 group"
+              >
+                <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 border border-gray-100/60 shrink-0">
+                  {cat.img ? (
+                    <img
+                      src={cat.img}
+                      alt={cat.label}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-primary/10 flex items-center justify-center text-xs">🌿</div>
+                  )}
+                </div>
+                <span className="text-[12.5px] font-semibold text-gray-800 group-hover:text-primary transition-colors leading-tight">
+                  {cat.label}
+                </span>
+              </Link>
+            ))}
+          </div>
+
+          <Link
+            to="/products"
+            onClick={onClose}
+            className="inline-flex items-center gap-1 mt-2 ml-2 text-[11px] font-bold text-primary hover:text-primary/80 transition-colors"
+          >
+            View all plants →
+          </Link>
+        </div>
+
+        {/* ── RIGHT: account + info + support ── */}
+        <div className="w-52 shrink-0 border-l border-gray-100 p-4 overflow-y-auto flex flex-col" style={{ maxHeight: '70vh' }}>
+
+          {/* Account card / login prompt */}
+          <div className="mb-3">
+            {user ? (
+              <div className="flex items-center gap-2.5 p-2.5 bg-gray-50 rounded-xl border border-gray-100 mb-2">
+                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold shrink-0 text-xs">
+                  {(user.full_name || 'U').charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-gray-800 truncate leading-none">{user.full_name || 'Account'}</p>
+                  <p className="text-[10px] text-gray-400 truncate mt-0.5">{user.email}</p>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => { onClose(); onLogin(); }}
+                className="w-full py-2 bg-primary hover:bg-primary/90 text-white rounded-full text-xs font-bold tracking-wider uppercase shadow-sm active:scale-[0.97] transition-all duration-200 mb-2"
+              >
+                Login / Register
+              </button>
+            )}
+          </div>
+
+          {/* My Account links — only when logged in */}
+          {user && (
+            <div className="mb-3">
+              <p className="text-[9px] font-extrabold text-gray-400 uppercase tracking-widest mb-1.5">My Account</p>
+              <div>
+                <Link to="/orders" onClick={onClose}
+                  className="flex items-center gap-2 py-1.5 text-[12px] font-medium text-gray-700 hover:text-primary transition-colors">
+                  <Package size={13} className="text-gray-400 shrink-0" /> My Orders
+                </Link>
+                <Link to="/damage-replacement" onClick={onClose}
+                  className="flex items-center gap-2 py-1.5 text-[12px] font-medium text-gray-700 hover:text-primary transition-colors">
+                  <ShieldCheck size={13} className="text-gray-400 shrink-0" /> Damage Replacement
+                </Link>
+                <Link to="/damage-claims" onClick={onClose}
+                  className="flex items-center gap-2 py-1.5 text-[12px] font-medium text-gray-700 hover:text-primary transition-colors">
+                  <FileCheck2 size={13} className="text-gray-400 shrink-0" /> My Damage Claims
+                </Link>
+                {user.is_admin && (
+                  <Link to="/admin" onClick={onClose}
+                    className="flex items-center gap-2 py-1.5 text-[12px] font-medium text-primary hover:text-primary/80 transition-colors">
+                    <Settings size={13} className="shrink-0" /> Admin Panel
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Info links — always visible */}
+          <div className="mb-3">
+            <p className="text-[9px] font-extrabold text-gray-400 uppercase tracking-widest mb-1.5">Info</p>
+            <div>
+              {([
+                { label: 'About Us', href: '/#about-us' },
+                { label: 'Track Your Order', href: '/orders' },
+                { label: 'Corporate Gifting', href: '/corporate-gifting' },
+              ] as const).map((link) => (
+                <Link key={link.href} to={link.href} onClick={onClose}
+                  className="flex items-center py-1.5 text-[12px] font-medium text-gray-600 hover:text-primary transition-colors">
+                  {link.label}
+                </Link>
+              ))}
+              <a
+                href={`https://wa.me/${WHATSAPP_NUMBER}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={onClose}
+                className="flex items-center justify-between py-1.5 text-[12px] font-medium text-gray-600 hover:text-primary transition-colors group"
+              >
+                <span>Support</span>
+                <ArrowUpRight size={12} className="text-gray-400 group-hover:text-primary" />
+              </a>
+            </div>
+          </div>
+
+          {/* Logout — only when logged in */}
+          {user && (
+            <button
+              onClick={() => { onLogout(); onClose(); }}
+              className="mt-auto w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-red-500 hover:bg-red-50 rounded-lg transition-all duration-150"
+            >
+              <LogOut size={13} /> Logout
+            </button>
+          )}
+        </div>
+
+      </div>
+      </div>
+    </div>
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -222,7 +452,7 @@ export default function Navbar() {
     clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = window.setTimeout(
       () => setActiveDropdown(label),
-      200,
+      150,
     );
   }
 
@@ -230,7 +460,7 @@ export default function Navbar() {
     clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = window.setTimeout(
       () => setActiveDropdown(null),
-      150,
+      200,
     );
   }
 
@@ -498,14 +728,11 @@ export default function Navbar() {
       </div>
 
       {/* ================================================================ */}
-      {/* ROW 2 â€” Category navigation (desktop only)                       */}
+      {/* ROW 2 — Category navigation (desktop only)                      */}
       {/* ================================================================ */}
-      {/* ================================================================ */}
-      {/* ROW 2 â€” Category navigation (desktop only, Ugaoo-style)          */}
-      {/* ================================================================ */}
-      <nav className="hidden lg:block border-t border-gray-100">
+      <nav className="hidden lg:block border-t border-gray-100 relative">
         <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16">
-          <ul className="flex items-center justify-center text-[14px] font-semibold tracking-[0.03em] gap-0 flex-wrap">
+          <ul className="flex items-center justify-center text-[14px] font-semibold tracking-[0.03em] gap-0">
             {categoryNavItems.map((item) => {
               const hasDropdown = item.groups && item.groups.length > 0;
               const isOpen = activeDropdown === item.label;
@@ -519,35 +746,61 @@ export default function Navbar() {
                   onMouseEnter={hasDropdown ? () => handleDropdownEnter(item.label) : undefined}
                   onMouseLeave={hasDropdown ? handleDropdownLeave : undefined}
                 >
-                  <Link
-                    to={item.href}
-                    className={clsx(
-                      'flex items-center gap-1.5 px-5 py-4 transition-colors relative whitespace-nowrap group',
-                      item.highlight
-                        ? 'text-accent hover:text-accent/80'
-                        : active
-                          ? 'text-primary'
-                          : 'text-gray-700 hover:text-primary',
-                    )}
-                  >
-                    {item.label}
-                    {hasDropdown && (
+                  {/* For the Shop item: button that toggles/opens the mega-menu.
+                      For all other items: a normal Link that also shows a dropdown on hover. */}
+                  {item.isShopMenu ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveDropdown((prev) => (prev === item.label ? null : item.label))
+                      }
+                      className={clsx(
+                        'flex items-center gap-1.5 px-5 py-4 transition-colors relative whitespace-nowrap group',
+                        active ? 'text-primary' : 'text-gray-700 hover:text-primary',
+                      )}
+                    >
+                      {item.label}
                       <ChevronDown
                         size={12}
                         className={clsx('opacity-60 transition-transform duration-200 mt-px', isOpen && 'rotate-180')}
                       />
-                    )}
-                    {/* Active underline */}
-                    <span
+                      <span
+                        className={clsx(
+                          'absolute bottom-0 left-5 right-5 h-[2px] bg-primary rounded-full transition-transform duration-200 origin-left',
+                          active ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+                        )}
+                      />
+                    </button>
+                  ) : (
+                    <Link
+                      to={item.href}
                       className={clsx(
-                        'absolute bottom-0 left-5 right-5 h-[2px] bg-primary rounded-full transition-transform duration-200 origin-left',
-                        active ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+                        'flex items-center gap-1.5 px-5 py-4 transition-colors relative whitespace-nowrap group',
+                        item.highlight
+                          ? 'text-accent hover:text-accent/80'
+                          : active
+                            ? 'text-primary'
+                            : 'text-gray-700 hover:text-primary',
                       )}
-                    />
-                  </Link>
+                    >
+                      {item.label}
+                      {hasDropdown && (
+                        <ChevronDown
+                          size={12}
+                          className={clsx('opacity-60 transition-transform duration-200 mt-px', isOpen && 'rotate-180')}
+                        />
+                      )}
+                      <span
+                        className={clsx(
+                          'absolute bottom-0 left-5 right-5 h-[2px] bg-primary rounded-full transition-transform duration-200 origin-left',
+                          active ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+                        )}
+                      />
+                    </Link>
+                  )}
 
-                  {/* Mega Dropdown */}
-                  {hasDropdown && isOpen && (
+                  {/* ── Standard dropdown (non-Shop items) ── */}
+                  {!item.isShopMenu && hasDropdown && isOpen && (
                     <div
                       className={clsx(
                         'absolute top-full left-0 bg-white rounded-b-2xl shadow-2xl border border-t-0 border-gray-100 z-50 animate-dropdown',
@@ -594,6 +847,32 @@ export default function Navbar() {
             })}
           </ul>
         </div>
+
+        {/* ── Shop mega-menu — outside the <li> so it can span full nav width ── */}
+        {activeDropdown === 'SHOP' && (
+          <>
+            {/* Backdrop — clicking outside closes the menu */}
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setActiveDropdown(null)}
+            />
+            <ShopMegaMenu
+              menuItems={mobileMenuItems}
+              mobilePromoBanner={mobilePromoBanner}
+              promoRatio={promoRatio}
+              setPromoRatio={setPromoRatio}
+              user={user}
+              onClose={() => setActiveDropdown(null)}
+              onLogout={() => { logout(); }}
+              onLogin={openAuthModal}
+              onMouseEnter={() => {
+                clearTimeout(hoverTimeoutRef.current);
+                setActiveDropdown('SHOP');
+              }}
+              onMouseLeave={handleDropdownLeave}
+            />
+          </>
+        )}
       </nav>
 
       {/* ================================================================ */}

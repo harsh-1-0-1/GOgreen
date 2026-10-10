@@ -3,6 +3,8 @@ import type { Category, MenuItem } from '@/types';
 export interface DropdownLink {
   label: string;
   href: string;
+  /** Optional thumbnail shown in the Shop mega-menu image-tile layout. */
+  image?: string;
 }
 
 export interface DropdownGroup {
@@ -14,6 +16,11 @@ export interface NavItemDef {
   label: string;
   href: string;
   highlight?: boolean;
+  /**
+   * `isShopMenu` marks this item as the special image-tile mega-menu.
+   * The renderer uses a different layout branch for it.
+   */
+  isShopMenu?: boolean;
   groups?: DropdownGroup[][];
 }
 
@@ -86,32 +93,71 @@ export function subcategoryLinks(root: Category): DropdownLink[] | null {
 }
 
 /**
+ * Builds the single "SHOP" nav item that collapses all root categories into
+ * one mega-menu with image tiles on the left and static links on the right.
+ *
+ * groups layout (passed to the renderer):
+ *   groups[0]  — left "panel": one group per root category, each link carries
+ *                the category image so the renderer can show a thumbnail tile.
+ *   groups[1]  — right "panel": static / admin-configured extra links that
+ *                the non-category menu items (DB-driven) contribute.
+ */
+export function buildShopNavItem(
+  categories: Category[],
+  menuItems: MenuItem[],
+): NavItemDef {
+  const roots = sortByMenuOrder(categories);
+
+  // Left column — one link per root category, carrying its image
+  const categoryLinks: DropdownLink[] = roots.map((root) => ({
+    label: root.name,
+    href: categoryLink(root),
+    image: root.image_url ?? root.mobile_image_url ?? undefined,
+  }));
+
+  // Right column — DB-driven top-level menu items (non-category extras like
+  // "Corporate Gifting", "Deals of the Day", etc.) grouped by their label.
+  const extraItems = menuItems
+    .filter((m) => !m.parent_id && m.is_active)
+    .sort((a, b) => a.sort_order - b.sort_order);
+
+  const rightLinks: DropdownLink[] = extraItems.map((m) => ({
+    label: m.label,
+    href: m.href,
+  }));
+
+  // Build groups — always include the left (categories). Add the right column
+  // only when there are DB-driven extras so we don't leave a hollow column.
+  const groups: DropdownGroup[][] = [
+    [{ title: 'Shop by Category', links: categoryLinks }],
+  ];
+
+  if (rightLinks.length > 0) {
+    groups.push([{ title: 'More', links: rightLinks }]);
+  }
+
+  return {
+    label: 'SHOP',
+    href: '/products',
+    isShopMenu: true,
+    groups,
+  };
+}
+
+/**
  * Desktop nav items from the category tree + DB-driven menu items.
  *
- * `menuItems` is a FLAT list from /menu_items (or [] when the API hasn't
- * responded yet). Top-level items are those with parent_id == null. Children
- * (parent_id set) are filtered out here; they form the submenu dropdown for
- * their parent via resolveSubcategories.
+ * All root categories are collapsed into a single "SHOP ▾" mega-menu item.
+ * DB-driven top-level menu items that are NOT categories are appended after it
+ * as individual nav links (e.g. "CORPORATE GIFTING", "DEALS").
  */
 export function categoryTreeToNavItems(
   categories: Category[],
   menuItems: MenuItem[],
 ): NavItemDef[] {
-  const roots = sortByMenuOrder(categories);
-  const items: NavItemDef[] = roots.map((root) => {
-    const children = sortByMenuOrder(root.children ?? []);
-    const item: NavItemDef = {
-      label: root.name.toUpperCase(),
-      href: categoryLink(root),
-    };
-    if (children.length > 0) {
-      item.groups = columnize(
-        children.map((c) => ({ label: c.name, href: categoryLink(c) })),
-      );
-    }
-    return item;
-  });
+  const shopItem = buildShopNavItem(categories, menuItems);
 
+  // DB-driven top-level items rendered as standalone nav links (after Shop)
   const dynamicItems = menuItems
     .filter((m) => !m.parent_id)
     .sort((a, b) => a.sort_order - b.sort_order)
@@ -121,7 +167,7 @@ export function categoryTreeToNavItems(
       highlight: m.highlight || undefined,
     }));
 
-  return [...items, ...dynamicItems];
+  return [shopItem, ...dynamicItems];
 }
 
 /**
