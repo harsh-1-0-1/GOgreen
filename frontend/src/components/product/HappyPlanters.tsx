@@ -35,12 +35,12 @@ export default function HappyPlanters({ fallbackImages }: { fallbackImages: stri
           </h2>
         </div>
         {images.length > 1 && (
-          <div className="hidden gap-2 sm:flex" aria-label="Gallery controls">
-            <button type="button" onClick={() => scroll(-1)} className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-white text-primary transition hover:bg-primary hover:text-white" aria-label="Previous images">
-              <ChevronLeft size={19} />
+          <div className="flex gap-2" aria-label="Gallery controls">
+            <button type="button" onClick={() => scroll(-1)} className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-primary/20 bg-white text-primary transition hover:bg-primary hover:text-white active:scale-95 shadow-sm" aria-label="Previous images">
+              <ChevronLeft size={18} className="sm:w-[19px] sm:h-[19px]" />
             </button>
-            <button type="button" onClick={() => scroll(1)} className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-white text-primary transition hover:bg-primary hover:text-white" aria-label="Next images">
-              <ChevronRight size={19} />
+            <button type="button" onClick={() => scroll(1)} className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-primary/20 bg-white text-primary transition hover:bg-primary hover:text-white active:scale-95 shadow-sm" aria-label="Next images">
+              <ChevronRight size={18} className="sm:w-[19px] sm:h-[19px]" />
             </button>
           </div>
         )}
@@ -53,7 +53,7 @@ export default function HappyPlanters({ fallbackImages }: { fallbackImages: stri
           </figure>
         ))}
       </div>
-      {images.length > 1 && <p className="mt-1 text-center text-[11px] text-gray-400 sm:hidden">Swipe to see more</p>}
+      {images.length > 1 && <p className="mt-1 text-center text-[11px] text-gray-400 sm:hidden">← Swipe or use buttons →</p>}
     </section>
   );
 }

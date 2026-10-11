@@ -69,7 +69,7 @@ export default function DoNotForgetBar() {
       </div>
 
       {/* Horizontal scroll strip */}
-      <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-none snap-x snap-mandatory">
+      <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide snap-x snap-mandatory -mx-1 px-1 touch-pan-x">
         {products.map((item) => (
           <Link
             key={item.id}

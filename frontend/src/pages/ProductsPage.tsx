@@ -252,7 +252,7 @@ function FiltersSidebar({
     <div className="space-y-6">
       {/* Page Title */}
       <div className="pb-4 border-b border-gray-200">
-        <h1 className="text-xl sm:text-2xl font-bold mb-1">
+        <h1 className="text-3xl sm:text-4xl font-bold mb-1">
           {pageTitle}
         </h1>
         {totalProducts !== undefined && (

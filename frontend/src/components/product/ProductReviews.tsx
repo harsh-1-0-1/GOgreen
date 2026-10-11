@@ -112,6 +112,93 @@ function isVideoFile(url: string): boolean {
   return /\.(mp4|webm|mov)$/i.test(url);
 }
 
+function CustomerPhotosGallery({ productId }: { productId: number }) {
+  const [showAll, setShowAll] = useState(false);
+  // Fetch reviews with media to display in masonry gallery
+  const { data: mediaReviews } = useProductReviews(productId, {
+    limit: 100, // Fetch more to get photos
+    sort_by: 'newest',
+  });
+
+  // Filter reviews that have media URLs (only images, not videos)
+  const reviewPhotos = useMemo(() => {
+    if (!mediaReviews?.items) return [];
+    return mediaReviews.items
+      .filter((review) => review.media_url && !isVideoFile(review.media_url))
+      .map((review) => ({
+        url: review.media_url!,
+        authorName: review.author_name,
+        rating: review.rating,
+      }));
+  }, [mediaReviews]);
+
+  if (reviewPhotos.length === 0) return null;
+
+  const displayedPhotos = showAll ? reviewPhotos : reviewPhotos.slice(0, 10);
+
+  return (
+    <div className="mt-8 sm:mt-10 border-t border-gray-100 pt-8 sm:pt-10">
+      <h3 className="text-xl font-bold text-gray-950 mb-4">Customer Photos ({reviewPhotos.length})</h3>
+      
+      {/* Masonry Grid Layout - CSS Grid based */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3">
+        {displayedPhotos.map((photo, index) => {
+          // Vary heights for masonry effect - create staggered layout
+          const heightClass = [
+            'aspect-square',
+            'aspect-[3/4]',
+            'aspect-[4/3]',
+            'aspect-square',
+            'aspect-[3/4]',
+          ][index % 5];
+
+          return (
+            <div
+              key={index}
+              className={`relative overflow-hidden rounded-lg border border-gray-200 bg-gray-100 hover:shadow-lg transition-shadow cursor-pointer group ${heightClass}`}
+            >
+              <img
+                src={photo.url}
+                alt={`Customer photo by ${photo.authorName}`}
+                className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                loading="lazy"
+              />
+              {/* Overlay with rating on hover */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-2 left-2 right-2">
+                  <div className="flex items-center gap-1">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        size={12}
+                        className={i < photo.rating ? 'fill-[#f4b400] text-[#f4b400]' : 'fill-gray-400 text-gray-400'}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-white font-medium mt-1 truncate">{photo.authorName}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {reviewPhotos.length > 10 && !showAll && (
+        <div className="flex justify-center mt-6">
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border-2 border-gray-300 text-sm font-bold text-gray-700 hover:border-primary hover:text-primary transition"
+          >
+            View All Photos ({reviewPhotos.length})
+            <ChevronDown size={16} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProductReviews({ productId }: { productId: number }) {
   const [sortBy, setSortBy] = useState<'newest' | 'highest' | 'lowest'>('newest');
   const [ratingFilter, setRatingFilter] = useState<number | undefined>();
@@ -233,6 +320,9 @@ export default function ProductReviews({ productId }: { productId: number }) {
             }}
           />
         </div>
+
+        {/* Customer Photos Masonry Gallery */}
+        <CustomerPhotosGallery productId={productId} />
 
         <button
           type="button"
@@ -437,7 +527,8 @@ export default function ProductReviews({ productId }: { productId: number }) {
                         <video
                           src={review.media_url}
                           controls
-                          className="max-h-80 w-full rounded-lg border border-gray-200 object-contain"
+                          className="w-full rounded-lg border border-gray-200 object-cover"
+                          style={{ maxHeight: '400px' }}
                         >
                           Your browser does not support the video tag.
                         </video>
@@ -445,7 +536,8 @@ export default function ProductReviews({ productId }: { productId: number }) {
                         <img
                           src={review.media_url}
                           alt="Review media"
-                          className="max-h-80 w-full rounded-lg border border-gray-200 object-contain"
+                          className="w-full rounded-lg border border-gray-200 object-cover hover:opacity-95 transition-opacity cursor-pointer"
+                          style={{ maxHeight: '400px' }}
                         />
                       )}
                     </div>

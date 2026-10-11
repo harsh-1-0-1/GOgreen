@@ -524,6 +524,7 @@ export default function ProductDetailPage() {
 
   const galleryRef = useRef<HTMLDivElement>(null);
   const isInitialized = useRef(false);
+  const similarScrollRef = useRef<HTMLDivElement>(null);
 
   const { data: similar } = useProducts({ limit: 5 });
   const { data: curatedRelated } = useProductsByIds(product?.related_product_ids ?? []);
@@ -1294,12 +1295,45 @@ export default function ProductDetailPage() {
           <ErrorBoundary>
             <section className="mt-6 sm:mt-8">
               <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">You May Also Like</h2>
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-hide snap-x-mandatory pb-4 -mx-3 sm:-mx-4 px-3 sm:px-4 md:justify-center">
-                {similarProducts.map((p) => (
-                  <div key={p.id} className="shrink-0 w-[47vw] min-w-[160px] sm:w-56 md:w-64 snap-start">
-                    <ProductCard product={p} />
-                  </div>
-                ))}
+              <div className="relative">
+                <div 
+                  ref={similarScrollRef}
+                  className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-hide snap-x-mandatory pb-4 -mx-3 sm:-mx-4 px-3 sm:px-4 md:justify-center"
+                >
+                  {similarProducts.map((p) => (
+                    <div key={p.id} className="shrink-0 w-[47vw] min-w-[160px] sm:w-56 md:w-64 snap-start">
+                      <ProductCard product={p} />
+                    </div>
+                  ))}
+                </div>
+                {similarProducts.length > 4 && (
+                  <>
+                    <button
+                      onClick={() => {
+                        if (similarScrollRef.current) {
+                          const cardWidth = similarScrollRef.current.firstElementChild?.clientWidth || 0;
+                          similarScrollRef.current.scrollBy({ left: -(cardWidth + 16), behavior: 'smooth' });
+                        }
+                      }}
+                      aria-label="Previous products"
+                      className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl items-center justify-center text-gray-700 hover:scale-110 transition-all z-20"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (similarScrollRef.current) {
+                          const cardWidth = similarScrollRef.current.firstElementChild?.clientWidth || 0;
+                          similarScrollRef.current.scrollBy({ left: cardWidth + 16, behavior: 'smooth' });
+                        }
+                      }}
+                      aria-label="Next products"
+                      className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl items-center justify-center text-gray-700 hover:scale-110 transition-all z-20"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  </>
+                )}
               </div>
             </section>
           </ErrorBoundary>

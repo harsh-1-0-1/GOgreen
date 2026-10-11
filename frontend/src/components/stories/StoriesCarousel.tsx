@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { StoryViewer } from './StoryViewer';
 import type { Story } from '@/types';
 
@@ -84,16 +85,33 @@ function StoryCard({ story, onClick }: { story: Story; onClick: () => void }) {
 
 export function StoriesCarousel({ stories }: StoriesCarouselProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
 
   if (!stories || stories.length === 0) return null;
+
+  function scroll(direction: -1 | 1) {
+    const element = scrollerRef.current;
+    if (!element) return;
+    element.scrollBy({ left: direction * Math.min(element.clientWidth * 0.8, 440), behavior: 'smooth' });
+  }
 
   return (
     <div className="mt-6 sm:mt-8">
       <div className="flex items-center justify-between mb-4 sm:mb-6">
         <h2 className="text-2xl font-serif text-green-900" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>Stories Across India.</h2>
+        {stories.length > 1 && (
+          <div className="flex gap-2" aria-label="Stories controls">
+            <button type="button" onClick={() => scroll(-1)} className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-primary/20 bg-white text-primary transition hover:bg-primary hover:text-white active:scale-95 shadow-sm" aria-label="Previous stories">
+              <ChevronLeft size={18} className="sm:w-[19px] sm:h-[19px]" />
+            </button>
+            <button type="button" onClick={() => scroll(1)} className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-primary/20 bg-white text-primary transition hover:bg-primary hover:text-white active:scale-95 shadow-sm" aria-label="Next stories">
+              <ChevronRight size={18} className="sm:w-[19px] sm:h-[19px]" />
+            </button>
+          </div>
+        )}
       </div>
       
-      <div className="flex gap-3 sm:gap-4 overflow-x-auto snap-x-mandatory pb-4 scrollbar-hide -mx-3 sm:-mx-4 px-3 sm:px-4 md:justify-center md:overflow-x-visible md:mx-0 md:px-0 md:flex-wrap">
+      <div ref={scrollerRef} className="flex gap-3 sm:gap-4 overflow-x-auto snap-x-mandatory pb-4 scrollbar-hide -mx-3 sm:-mx-4 px-3 sm:px-4 md:justify-center md:overflow-x-visible md:mx-0 md:px-0 md:flex-wrap touch-pan-x">
         {stories.map((story, i) => (
           <StoryCard 
             key={story.id} 
