@@ -9,7 +9,7 @@ import ResponsiveBannerImage from '@/components/banner/ResponsiveBannerImage';
 function SlidesSkeleton() {
   return (
     <section className="w-full overflow-hidden">
-      <div className="animate-pulse bg-[#f0ebe3] h-[340px] sm:h-[380px] lg:h-[calc(100vh-64px)]">
+      <div className="animate-pulse bg-[#f0ebe3] h-[400px] sm:h-[480px] md:h-[560px] lg:h-[640px] xl:h-[720px]">
         <div className="flex items-center h-full px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28">
           <div className="space-y-5 w-full max-w-md">
             <div className="h-10 w-3/4 bg-gray-300/40 rounded-lg" />
@@ -72,7 +72,7 @@ export default function HeroBanner() {
 
   return (
     <section
-      className="relative w-full overflow-hidden group h-[340px] sm:h-[380px] lg:h-[calc(100vh-64px)]"
+      className="relative w-full overflow-hidden group h-[400px] sm:h-[480px] md:h-[560px] lg:h-[640px] xl:h-[720px]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={handleTouchStart}
