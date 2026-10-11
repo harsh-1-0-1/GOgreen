@@ -52,6 +52,7 @@ async def get_do_not_forget_products(db: AsyncSession = Depends(get_db)):
                 "images": [resolve_image_url(img) for img in (item.product.images or [])],
                 "stock_qty": item.product.stock_qty,
                 "is_active": item.product.is_active,
+                "variants": item.product.variants,
             }
             products_data.append(
                 DoNotForgetProductWithDetails(
@@ -105,6 +106,7 @@ async def admin_list_do_not_forget(
                 "images": [resolve_image_url(img) for img in (item.product.images or [])],
                 "stock_qty": item.product.stock_qty,
                 "is_active": item.product.is_active,
+                "variants": item.product.variants,
             }
             products_data.append(
                 DoNotForgetProductWithDetails(

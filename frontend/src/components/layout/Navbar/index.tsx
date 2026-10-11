@@ -163,7 +163,7 @@ function ShopMegaMenu({
                           <div className="w-full h-full bg-primary/10 flex items-center justify-center text-xs">🌿</div>
                         )}
                       </div>
-                      <span className="text-[12.5px] font-semibold text-gray-800 group-hover:text-primary transition-colors leading-tight">
+                      <span className="text-[14px] font-semibold text-gray-800 group-hover:text-primary transition-colors leading-tight">
                         {cat.label}
                       </span>
                     </Link>
@@ -603,11 +603,15 @@ export default function Navbar() {
               placeholder="Search for plants, seeds, pots..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => { setSearchFocused(true); setSearchOpen(true); }}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => {
+                // Delay to allow clicking on suggestions
+                setTimeout(() => setSearchFocused(false), 200);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
-                  setSearchOpen(false);
                   setSearchFocused(false);
+                  setSearchQuery('');
                 }
               }}
               className="desktop-search-input w-full pl-11 pr-5 py-3 border border-gray-300 rounded-full bg-[#f5f5f5] focus:outline-none focus:border-primary focus:bg-white text-sm transition-all placeholder:text-gray-400"
@@ -624,7 +628,6 @@ export default function Navbar() {
                   key={product.id}
                   to={`/products/${product.slug}`}
                   onClick={() => {
-                    setSearchOpen(false);
                     setSearchFocused(false);
                     setSearchQuery('');
                   }}
@@ -643,7 +646,7 @@ export default function Navbar() {
               ))}
               <Link
                 to={`/products?search=${encodeURIComponent(debouncedQuery)}`}
-                onClick={() => { setSearchOpen(false); setSearchFocused(false); setSearchQuery(''); }}
+                onClick={() => { setSearchFocused(false); setSearchQuery(''); }}
                 className="flex items-center justify-center gap-2 px-4 py-3 text-sm text-primary font-semibold hover:bg-primary/5 transition-colors"
               >
                 <Search size={14} /> View all results for &ldquo;{debouncedQuery}&rdquo;

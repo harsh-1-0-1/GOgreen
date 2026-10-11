@@ -1,0 +1,428 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1. Generate products with 1-3 variant groups, each with 2-4 options": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745798888
+      },
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745812954
+      },
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791746823385
+      }
+    ],
+    "1.2. Simulate clicking \"Add\" button in DoNotForgetBar component  ": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745798909
+      }
+    ],
+    "1.3. Capture backend error response (400/422 status with variant selection required message)": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745798938
+      }
+    ],
+    "1.4. Confirm selected_options parameter is null/undefined when bug occurs": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745798988
+      }
+    ],
+    "1.5. Run test on UNFIXED code and surface counterexamples showing the bug": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799008
+      }
+    ],
+    "1.6. Document specific error messages and conditions that trigger the bug": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799028
+      }
+    ],
+    "2.1. Create function that takes variant_groups array as input": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799049
+      }
+    ],
+    "2.2. Return array of objects with { key: string, optionIds: string[] }": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799069
+      }
+    ],
+    "2.3. Each entry represents one complete combination across all groups": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799089
+      }
+    ],
+    "2.4. Combo key is option IDs joined by \"__\" in variant_group order": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799113
+      }
+    ],
+    "2.5. Handle 1-4 variant groups correctly": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799131
+      }
+    ],
+    "2.6. Write unit tests to verify correct cartesian product for various group configurations": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799150
+      }
+    ],
+    "3.1. Create function that takes product, option IDs array, optionById map, and grid axes as input": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799168
+      }
+    ],
+    "3.2. Return total price as a number": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799187
+      }
+    ],
+    "3.3. Check price_map first - if combo_key exists in price_map, return that absolute price": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799206
+      }
+    ],
+    "3.4. Implement fallback calculation: base price + non-grid option deltas + pot_price grid cell (if applicable)": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799227
+      }
+    ],
+    "3.5. Correctly exclude grid group option deltas from summation when pot_price grid exists": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799248
+      }
+    ],
+    "3.6. Use exactPotPrice and gridGroupIds from @/lib/potPrice": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799269
+      }
+    ],
+    "3.7. Write unit tests to verify correct prices for various product configurations": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799287
+      }
+    ],
+    "4.1. Create function that takes Product as input": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799306
+      }
+    ],
+    "4.2. Return string[] of option IDs for least-priced combination, or null if no variants": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799348
+      }
+    ],
+    "4.3. Use buildComboRows to generate all possible combinations": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799388
+      }
+    ],
+    "4.4. Use calculateComboPrice to get price for each combination": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799407
+      }
+    ],
+    "4.5. Return first combination encountered when multiple have same lowest price (tie-breaking)": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799428
+      }
+    ],
+    "4.6. Handle products without variants by returning null": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799449
+      }
+    ],
+    "4.7. Handle empty variant_groups array by returning null": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799478
+      }
+    ],
+    "4.8. Write unit tests to verify correct least-priced selection": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799496
+      }
+    ],
+    "4.9. Write property-based tests to verify selected combination is always valid and truly lowest priced": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799516
+      }
+    ],
+    "5.1. Add imports for exactPotPrice, gridGroupIds, and type imports": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799537
+      }
+    ],
+    "5.2. Check if product has variants (variants !== null and variant_groups.length > 0)": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799558
+      }
+    ],
+    "5.3. Call findLeastPricedCombo when product has variants": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799582
+      }
+    ],
+    "5.4. Keep selectedOptions as null when product has no variants": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799601
+      }
+    ],
+    "5.5. Pass selectedOptions as fourth parameter to addItem": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799620
+      }
+    ],
+    "5.6. Preserve all existing behavior: success toast, cart drawer opening, error handling, loading state": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799640
+      }
+    ],
+    "5.7. Keep variants: null in fullProduct object construction": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799661
+      }
+    ],
+    "5.8. Ensure code follows existing code style": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799681
+      }
+    ],
+    "6.1. Generate random products with variants (1-4 groups, 2-5 options each)": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799701
+      }
+    ],
+    "6.2. Simulate clicking \"Add\" in DoNotForgetBar on FIXED code": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799720
+      }
+    ],
+    "6.3. Verify addItem is called with correct selectedOptions array": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799739
+      }
+    ],
+    "6.4. Verify cart contains new item with correct selected_options": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799759
+      }
+    ],
+    "6.5. Verify selected combination is the least-priced one": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799778
+      }
+    ],
+    "6.6. Handle products with price_map correctly": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799799
+      }
+    ],
+    "6.7. Handle products with pot_price grids correctly": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799818
+      }
+    ],
+    "6.8. Confirm tests pass on FIXED code demonstrating bug is resolved": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799840
+      }
+    ],
+    "7.1. Generate products WITHOUT variants": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799861
+      }
+    ],
+    "7.2. Verify these products still add to cart successfully with null selected_options": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799880
+      }
+    ],
+    "7.3. Verify success toast message format is unchanged": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799900
+      }
+    ],
+    "7.4. Verify cart drawer opens and page scrolls to top": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799920
+      }
+    ],
+    "7.5. Verify error handling works correctly (network errors, stock errors, etc.)": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799944
+      }
+    ],
+    "7.6. Verify loading spinner and button disabling work correctly": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799965
+      }
+    ],
+    "7.7. Use property-based approach to generate many test cases automatically": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745799987
+      }
+    ],
+    "7.8. Confirm tests pass on both UNFIXED and FIXED code with identical results for non-variant products": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745800007
+      }
+    ],
+    "8.1. Test full flow: click Add on variant product → verify cart item with correct selected_options": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745800028
+      }
+    ],
+    "8.2. Test full flow: click Add on non-variant product → verify cart item without selected_options": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745800054
+      }
+    ],
+    "8.3. Test that cart drawer displays auto-selected variant options with proper labels": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745800076
+      }
+    ],
+    "8.4. Test that ProductDetailPage variant selection UI continues to work independently": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745800097
+      }
+    ],
+    "8.5. Test that manually selecting variants elsewhere still works correctly": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745800118
+      }
+    ],
+    "8.6. Make integration tests interact with actual React components and cart store": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745800142
+      }
+    ],
+    "8.7. Verify API calls are made with correct payloads": [
+      {
+        "executionId": "069cd109-ba1b-49e2-993c-41e3c55e3239",
+        "chatSessionId": "sess_74689614-0fb0-4e4b-b834-0f7a540c9958",
+        "timestamp": 1791745800163
+      }
+    ]
+  }
+}

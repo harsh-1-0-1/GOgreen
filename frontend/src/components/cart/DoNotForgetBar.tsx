@@ -5,6 +5,131 @@ import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import { useDoNotForgetProducts } from '@/hooks/useDoNotForget';
 import { getApiErrorDetail } from '@/lib/apiError';
+import { exactPotPrice, gridGroupIds, COMBO_KEY_SEP } from '@/lib/potPrice';
+import type { Product, VariantGroup, VariantOption } from '@/types';
+
+/**
+ * Build cartesian product of all variant combinations
+ */
+function buildComboRows(groups: VariantGroup[]): { key: string; optionIds: string[] }[] {
+  if (groups.length === 0) return [];
+  
+  // Generate all combinations recursively
+  function cartesian(arrays: string[][]): string[][] {
+    if (arrays.length === 0) return [[]];
+    const [first, ...rest] = arrays;
+    const restCombos = cartesian(rest);
+    const result: string[][] = [];
+    for (const item of first) {
+      for (const combo of restCombos) {
+        result.push([item, ...combo]);
+      }
+    }
+    return result;
+  }
+  
+  const optionIdArrays = groups.map(g => g.options.map(o => o.id));
+  const combos = cartesian(optionIdArrays);
+  
+  return combos.map(optionIds => ({
+    key: optionIds.join(COMBO_KEY_SEP),
+    optionIds,
+  }));
+}
+
+/**
+ * Calculate total price for a specific variant combination
+ */
+function calculateComboPrice(
+  product: Product,
+  optionIds: string[],
+  optionById: Record<string, VariantOption>,
+  gridAxes: string[]
+): number {
+  const variants = product.variants;
+  if (!variants) return product.price;
+  
+  const comboKey = optionIds.join(COMBO_KEY_SEP);
+  
+  // Check price_map first (absolute per-combination prices)
+  if (variants.price_map && typeof variants.price_map[comboKey] === 'number') {
+    return variants.price_map[comboKey];
+  }
+  
+  // Fallback: base price + non-grid option deltas + pot_price grid cell
+  let total = product.price;
+  
+  // Build selected options map for pot price calculation
+  const selectedMap: Record<string, string> = {};
+  const variantGroups = variants.variant_groups || [];
+  variantGroups.forEach((g, idx) => {
+    if (idx < optionIds.length) {
+      selectedMap[g.id] = optionIds[idx];
+    }
+  });
+  
+  // Add non-grid option deltas
+  for (const optId of optionIds) {
+    const opt = optionById[optId];
+    if (opt) {
+      // Get the group ID for this option
+      const groupId = variantGroups.find(g => g.options.some(o => o.id === optId))?.id;
+      // Only add delta if this group is NOT in the grid axes
+      if (!groupId || !gridAxes.includes(groupId)) {
+        total += opt.price;
+      }
+    }
+  }
+  
+  // Add pot_price grid cell if applicable
+  const potPriceCell = exactPotPrice(gridAxes, variants.pot_price?.map, selectedMap);
+  if (potPriceCell !== null) {
+    total += potPriceCell;
+  }
+  
+  return total;
+}
+
+/**
+ * Find the least-priced variant combination for a product
+ */
+function findLeastPricedCombo(product: Product): string[] | null {
+  const variants = product.variants;
+  if (!variants || !variants.variant_groups || variants.variant_groups.length === 0) {
+    return null;
+  }
+  
+  const variantGroups = variants.variant_groups;
+  
+  // Build option ID lookup
+  const optionById: Record<string, VariantOption> = {};
+  for (const group of variantGroups) {
+    for (const option of group.options) {
+      optionById[option.id] = option;
+    }
+  }
+  
+  // Get grid axes for pot_price calculation
+  const gridAxes = gridGroupIds(variants.pot_price);
+  
+  // Generate all combinations
+  const comboRows = buildComboRows(variantGroups);
+  if (comboRows.length === 0) return null;
+  
+  // Find least-priced combination
+  let minPrice = Infinity;
+  let minCombo: string[] | null = null;
+  
+  for (const row of comboRows) {
+    const price = calculateComboPrice(product, row.optionIds, optionById, gridAxes);
+    if (price < minPrice) {
+      minPrice = price;
+      minCombo = row.optionIds;
+    }
+  }
+  
+  return minCombo;
+}
 
 export default function DoNotForgetBar() {
   const addItem = useCartStore((s) => s.addItem);
@@ -28,7 +153,7 @@ export default function DoNotForgetBar() {
     setAddingId(productId);
     try {
       // Create a full Product object from the do-not-forget product
-      const fullProduct = {
+      const fullProduct: Product = {
         id: product.id,
         name: product.name,
         slug: product.slug,
@@ -46,10 +171,15 @@ export default function DoNotForgetBar() {
         display_section: null,
         is_active: true,
         created_at: new Date().toISOString(),
-        variants: null,
+        variants: product.variants,
       };
 
-      await addItem(productId, 1, fullProduct);
+      // Auto-select least-priced variant if product has variants
+      const selectedOptions = fullProduct.variants?.variant_groups?.length
+        ? findLeastPricedCombo(fullProduct)
+        : null;
+
+      await addItem(productId, 1, fullProduct, selectedOptions);
       toast.success(`${productName} added!`);
     } catch (err) {
       toast.error(getApiErrorDetail(err, 'Failed to add'));

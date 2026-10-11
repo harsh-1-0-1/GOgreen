@@ -103,12 +103,12 @@ function TrendingPromoBanner({
 
   if (isLoading) {
     return (
-      <div className="mb-6 h-[340px] w-full animate-pulse rounded-none bg-gray-100 sm:mb-8 sm:h-[380px] sm:rounded-2xl md:h-[58vh] lg:h-[58vh]" />
+      <div className="mb-6 w-full animate-pulse rounded-none bg-gray-100 sm:mb-8 sm:rounded-2xl h-[100px] sm:h-[120px] md:h-[140px] lg:h-[160px] xl:h-[180px]" />
     );
   }
 
   return (
-    <section className="relative -mx-3 mb-6 h-[340px] overflow-hidden bg-[#e9dfc9] sm:mx-0 sm:mb-8 sm:h-[380px] sm:rounded-2xl md:h-[58vh] lg:h-[58vh]">
+    <section className="relative -mx-3 mb-6 overflow-hidden bg-[#e9dfc9] sm:mx-0 sm:mb-8 sm:rounded-2xl h-[100px] sm:h-[100px] md:h-[120px] lg:h-[140px] xl:h-[120px]">
       <div
         className="flex h-full transition-transform duration-700 ease-in-out"
         style={{ transform: `translateX(-${current * 100}%)` }}

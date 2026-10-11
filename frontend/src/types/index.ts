@@ -569,6 +569,7 @@ export interface DoNotForgetProduct {
     images: string[];
     stock_qty: number;
     is_active: boolean;
+    variants: ProductVariants | null;
   };
 }
 
