@@ -15,11 +15,11 @@ type CropPreset = {
 
 const CROP_PRESETS: Record<string, CropPreset> = {
   hero: {
-    label: '🏠 Home Hero (16:5)',
-    aspect: 16 / 5,
-    width: 1920,
-    height: 650,
-    hint: '1920×650px — Full-width hero banner for homepage',
+    label: '🏠 Home Hero (9:16)',
+    aspect: 9 / 16,
+    width: 1080,
+    height: 1920,
+    hint: '1080×1920px — Full-height hero banner for homepage',
   },
   page: {
     label: '📄 Shop Listing (14:3)',
@@ -134,11 +134,11 @@ const CROP_PRESETS: Record<string, CropPreset> = {
 // caused the cropped/letterboxed hero.
 const WEB_CROP_PRESETS: Record<string, CropPreset> = {
   web_hero: {
-    label: '🖥️ Web Hero (21:9)',
-    aspect: 21 / 9,
+    label: '🖥️ Web Hero (16:9)',
+    aspect: 16 / 9,
     width: 1920,
-    height: 824,
-    hint: '1920×824px — Homepage hero on desktop. Shown from the 640px breakpoint up.',
+    height: 1080,
+    hint: '1920×1080px — Full-height homepage hero on desktop. Shown from the 640px breakpoint up.',
   },
   web_wide: {
     label: '🖥️ Web Wide (16:9)',

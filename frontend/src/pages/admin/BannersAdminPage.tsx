@@ -36,7 +36,7 @@ const PLACEMENTS = [
     key: 'hero',
     label: '🏠 Home Page Hero Banner',
     description: 'This banner appears at the very top of the homepage. It is the first thing customers see.',
-    helpText: 'Upload two images: a phone crop (portrait 4:5, e.g. 800×1000px) and a wide desktop crop (21:9, e.g. 1920×824px). Each has its own crop presets.',
+    helpText: 'Upload two images: a phone crop (portrait 9:16, e.g. 1080×1920px) and a wide desktop crop (16:9, e.g. 1920×1080px). The banner takes full viewport height on desktop. Each has its own crop presets.',
   },
   {
     key: 'announcement',

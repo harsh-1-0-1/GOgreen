@@ -890,9 +890,9 @@ export default function ProductDetailPage() {
         <MobileGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} />
       </div>
 
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 pt-2 pb-4 sm:pt-3 sm:pb-8">
         {/* Breadcrumb */}
-        <nav className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6 flex items-center gap-1.5">
+        <nav className="text-xs sm:text-sm text-gray-400 mb-3 sm:mb-4 flex items-center gap-1.5">
           <Link to="/" className="hover:text-primary">Home</Link>
           <span>/</span>
           <Link to="/products" className="hover:text-primary">Products</Link>

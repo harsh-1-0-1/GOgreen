@@ -56,8 +56,6 @@ interface ShopMegaMenuProps {
   onClose: () => void;
   onLogout: () => void;
   onLogin: () => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
 }
 
 function ShopMegaMenu({
@@ -69,67 +67,57 @@ function ShopMegaMenu({
   onClose,
   onLogout,
   onLogin,
-  onMouseEnter,
-  onMouseLeave,
 }: ShopMegaMenuProps) {
   const hasBanner = !!(mobilePromoBanner?.image_url_web || mobilePromoBanner?.image_url);
 
   return (
     <div
-      className="absolute top-full left-1/2 -translate-x-1/2 z-[51]"
-      style={{ width: '580px' }}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      className="absolute top-full left-1/2 -translate-x-1/2 z-[51] bg-white rounded-b-2xl shadow-2xl border border-t-0 border-gray-100 animate-dropdown overflow-hidden"
+      style={{ 
+        width: '580px', 
+        maxHeight: '500px',
+        minHeight: '200px' // Ensure panel has minimum height
+      }}
     >
-      {/* Invisible bridge — spans from navbar bottom to panel top */}
-      <div className="absolute -top-2 left-0 right-0 h-2" />
-      
-      {/* Actual panel content */}
-      <div className="bg-white rounded-b-2xl shadow-2xl border border-t-0 border-gray-100 animate-dropdown">
-
-      <div className="flex gap-0 overflow-hidden rounded-b-2xl">
+      <div className="flex gap-0 h-full max-h-[500px]">
 
         {/* ── LEFT: banner + single-column category list ── */}
-        <div className="flex-1 min-w-0 p-4 overflow-y-auto" style={{ maxHeight: '70vh' }}>
+        <div className="flex-1 min-w-0 p-4 overflow-y-auto flex flex-col" style={{ maxHeight: '500px' }}>
 
           {/* Promo banner — same admin-managed banner shown in the mobile drawer */}
           {hasBanner && (
             <div
-              className="mb-3 w-full rounded-xl overflow-hidden bg-gray-100"
-              style={{ aspectRatio: promoRatio ? String(promoRatio) : '16/5' }}
+              className="mb-3 w-full rounded-xl overflow-hidden bg-gray-100 shrink-0 relative"
+              style={{ 
+                height: '80px',
+                minHeight: '80px',
+                maxHeight: '80px'
+              }}
             >
               {mobilePromoBanner!.cta_link ? (
                 <Link
                   to={mobilePromoBanner!.cta_link}
                   onClick={onClose}
-                  className="block h-full w-full"
+                  className="block w-full h-full"
                   style={mobilePromoBanner!.bg_color ? { backgroundColor: mobilePromoBanner!.bg_color } : undefined}
                 >
-                  <ResponsiveBannerImage
-                    banner={mobilePromoBanner!}
-                    className="w-full h-full object-cover hover:scale-[1.02] transition-transform duration-300"
+                  <img
+                    src={mobilePromoBanner!.image_url_web || mobilePromoBanner!.image_url || ''}
+                    alt="Promo"
+                    className="w-full h-full object-cover"
                     loading="eager"
-                    onLoad={(e) => {
-                      const img = e.currentTarget;
-                      if (img.naturalWidth > 0 && img.naturalHeight > 0)
-                        setPromoRatio((r) => r ?? img.naturalWidth / img.naturalHeight);
-                    }}
                   />
                 </Link>
               ) : (
                 <div
-                  className="h-full w-full"
+                  className="w-full h-full"
                   style={mobilePromoBanner!.bg_color ? { backgroundColor: mobilePromoBanner!.bg_color } : undefined}
                 >
-                  <ResponsiveBannerImage
-                    banner={mobilePromoBanner!}
+                  <img
+                    src={mobilePromoBanner!.image_url_web || mobilePromoBanner!.image_url || ''}
+                    alt="Promo"
                     className="w-full h-full object-cover"
                     loading="eager"
-                    onLoad={(e) => {
-                      const img = e.currentTarget;
-                      if (img.naturalWidth > 0 && img.naturalHeight > 0)
-                        setPromoRatio((r) => r ?? img.naturalWidth / img.naturalHeight);
-                    }}
                   />
                 </div>
               )}
@@ -174,7 +162,7 @@ function ShopMegaMenu({
         </div>
 
         {/* ── RIGHT: account + info + support ── */}
-        <div className="w-52 shrink-0 border-l border-gray-100 p-4 overflow-y-auto flex flex-col" style={{ maxHeight: '70vh' }}>
+        <div className="w-52 shrink-0 border-l border-gray-100 p-4 overflow-y-auto flex flex-col">
 
           {/* Account card / login prompt */}
           <div className="mb-3">
@@ -263,7 +251,6 @@ function ShopMegaMenu({
           )}
         </div>
 
-      </div>
       </div>
     </div>
   );
@@ -743,10 +730,10 @@ export default function Navbar() {
                 <li
                   key={item.label}
                   className="relative"
-                  onMouseEnter={hasDropdown ? () => handleDropdownEnter(item.label) : undefined}
-                  onMouseLeave={hasDropdown ? handleDropdownLeave : undefined}
+                  onMouseEnter={!item.isShopMenu && hasDropdown ? () => handleDropdownEnter(item.label) : undefined}
+                  onMouseLeave={!item.isShopMenu && hasDropdown ? handleDropdownLeave : undefined}
                 >
-                  {/* For the Shop item: button that toggles/opens the mega-menu.
+                  {/* For the Shop item: button that toggles/opens the mega-menu (click only).
                       For all other items: a normal Link that also shows a dropdown on hover. */}
                   {item.isShopMenu ? (
                     <button
@@ -865,11 +852,6 @@ export default function Navbar() {
               onClose={() => setActiveDropdown(null)}
               onLogout={() => { logout(); }}
               onLogin={openAuthModal}
-              onMouseEnter={() => {
-                clearTimeout(hoverTimeoutRef.current);
-                setActiveDropdown('SHOP');
-              }}
-              onMouseLeave={handleDropdownLeave}
             />
           </>
         )}

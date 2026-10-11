@@ -9,7 +9,7 @@ import ResponsiveBannerImage from '@/components/banner/ResponsiveBannerImage';
 function SlidesSkeleton() {
   return (
     <section className="w-full overflow-hidden">
-      <div className="animate-pulse bg-[#f0ebe3] h-[340px] sm:h-[380px] md:h-[58vh] lg:h-[58vh]">
+      <div className="animate-pulse bg-[#f0ebe3] h-[340px] sm:h-[380px] lg:h-[calc(100vh-64px)]">
         <div className="flex items-center h-full px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28">
           <div className="space-y-5 w-full max-w-md">
             <div className="h-10 w-3/4 bg-gray-300/40 rounded-lg" />
@@ -28,7 +28,6 @@ export default function HeroBanner() {
 
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [slideRatio, setSlideRatio] = useState<number | null>(null);
   const touchStartRef = useRef(0);
 
   // Reset to the first slide when the banner set changes. React docs recommend
@@ -48,16 +47,6 @@ export default function HeroBanner() {
     () => setCurrent((c) => (c - 1 + slides.length) % slides.length),
     [slides.length],
   );
-
-  // Preserve the banner image's own aspect ratio so the hero is sized the same
-  // on web and mobile (the admin's crop obviously stays as intended). Uses the
-  // first loaded slide's ratio as the uniform height for the whole strip.
-  function handleImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
-    const img = e.currentTarget;
-    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-      setSlideRatio((r) => r ?? img.naturalWidth / img.naturalHeight);
-    }
-  }
 
   useEffect(() => {
     if (paused || slides.length <= 1) return;
@@ -82,32 +71,21 @@ export default function HeroBanner() {
   if (slides.length === 0) return null;
 
   return (
-<section
-        className="relative w-full overflow-hidden group"
-        style={
-          slideRatio
-            ? {
-                height: 'auto',
-                aspectRatio: String(slideRatio),
-                minHeight: 320,
-                maxHeight: 620,
-              }
-            : undefined
-        }
+    <section
+      className="relative w-full overflow-hidden group h-[340px] sm:h-[380px] lg:h-[calc(100vh-64px)]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
       <div
-        className="flex transition-transform duration-700 ease-in-out h-[340px] sm:h-[380px] md:h-[58vh] lg:h-[58vh]"
+        className="flex transition-transform duration-700 ease-in-out h-full"
         style={{
           transform: `translateX(-${current * 100}%)`,
-          ...(slideRatio ? { height: '100%' } : {}),
         }}
       >
         {slides.map((slide, i) => {
-          const slideInner = <ResponsiveBannerImage banner={slide} loading={i === 0 ? 'eager' : 'lazy'} onLoad={handleImageLoad} onError={(e) => { e.currentTarget.style.display = 'none'; }} />;
+          const slideInner = <ResponsiveBannerImage banner={slide} loading={i === 0 ? 'eager' : 'lazy'} onError={(e) => { e.currentTarget.style.display = 'none'; }} />;
 
           const slideStyle = { backgroundColor: slide.bg_color };
 

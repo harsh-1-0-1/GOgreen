@@ -38,7 +38,7 @@ export default function CategoryNavBanners() {
   if (!isLoading && circles.length === 0) return null;
 
   return (
-    <section className="bg-white w-full border-b border-gray-100 py-3 sm:py-4">
+    <section className="bg-white w-full border-b border-gray-100 py-3 sm:py-4 lg:hidden">
       <div
         ref={scrollRef}
         className="overflow-x-auto scrollbar-hide px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto"

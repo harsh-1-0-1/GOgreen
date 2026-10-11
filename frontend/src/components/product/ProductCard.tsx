@@ -80,14 +80,11 @@ export default function ProductCard({ product }: { product: Product }) {
           {product.name}
         </h3>
 
-        {/* Tag badges */}
-        <ProductTagBadges tags={product.tags} maxTags={2} size="sm" />
-
         {/* Price row
             Mobile  → text-base, font-semibold, color #16A34A  (ProductTile)
             Desktop → text-base, font-bold,      color primary
         */}
-        <div className="flex items-baseline gap-1.5 sm:gap-2 mt-0.5">
+        <div className="flex items-baseline gap-1.5 sm:gap-2">
           <span
             className="font-semibold sm:font-bold text-base sm:text-base"
             style={{ color: SECONDARY }}
@@ -111,21 +108,27 @@ export default function ProductCard({ product }: { product: Product }) {
           group's sum to be 0, making every combination unpurchasable.
         */}
         {product.stock_qty <= 5 && product.stock_qty > 0 && stockQtyIsExact && (
-          <p className="hidden sm:block text-xs text-red-500 mt-1">Only {product.stock_qty} left!</p>
+          <p className="hidden sm:block text-xs text-red-500">Only {product.stock_qty} left!</p>
         )}
         {product.stock_qty <= 5 && product.stock_qty > 0 && !stockQtyIsExact && (
-          <p className="hidden sm:block text-xs text-amber-600 mt-1">Low stock</p>
+          <p className="hidden sm:block text-xs text-amber-600">Low stock</p>
         )}
         {product.stock_qty === 0 && (
-          <p className="hidden sm:block text-xs text-red-500 mt-1 font-medium">Out of Stock</p>
+          <p className="hidden sm:block text-xs text-red-500 font-medium">Out of Stock</p>
         )}
+
+        {/* Spacer to push tags and button to bottom */}
+        <div className="flex-1" />
+
+        {/* Tag badges - moved above the button */}
+        <ProductTagBadges tags={product.tags} maxTags={2} size="sm" />
 
         {/* Add-to-cart / Out-of-stock button — identical styling to ProductTile */}
         {product.stock_qty === 0 ? (
           <button
             type="button"
             disabled
-            className="mt-auto w-full py-2.5 rounded-lg text-sm font-semibold bg-gray-100 text-gray-400 cursor-not-allowed"
+            className="w-full py-2.5 rounded-lg text-sm font-semibold bg-gray-100 text-gray-400 cursor-not-allowed"
           >
             Out of Stock
           </button>
@@ -133,7 +136,7 @@ export default function ProductCard({ product }: { product: Product }) {
           <button
             type="button"
             onClick={handleAdd}
-            className="mt-auto w-full py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90"
+            className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90"
             style={{ backgroundColor: SECONDARY }}
           >
             {hasVariants ? 'Choose options' : 'Add to cart'}

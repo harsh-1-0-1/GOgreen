@@ -175,6 +175,8 @@ function FiltersSidebar({
   selectedTags,
   onTagToggle,
   onReset,
+  pageTitle,
+  totalProducts,
 }: {
   selectedCategories: string[];
   onCategoryToggle: (slug: string) => void;
@@ -185,6 +187,8 @@ function FiltersSidebar({
   selectedTags: string[];
   onTagToggle: (tag: string) => void;
   onReset: () => void;
+  pageTitle: string;
+  totalProducts?: number;
 }) {
   const { data: categories } = useCategories();
   const selectedCategorySet = new Set(selectedCategories);
@@ -246,6 +250,16 @@ function FiltersSidebar({
 
   return (
     <div className="space-y-6">
+      {/* Page Title */}
+      <div className="pb-4 border-b border-gray-200">
+        <h1 className="text-xl sm:text-2xl font-bold mb-1">
+          {pageTitle}
+        </h1>
+        {totalProducts !== undefined && (
+          <p className="text-sm text-gray-500">{totalProducts} products</p>
+        )}
+      </div>
+      
       <div className="flex items-center justify-between">
         <h3 className="font-bold text-sm uppercase tracking-wider text-gray-500">Filters</h3>
         <button onClick={onReset} className="text-xs text-primary hover:underline">Clear All</button>
@@ -564,11 +578,13 @@ export default function ProductsPage() {
       selectedTags={selectedTags}
       onTagToggle={handleTagToggle}
       onReset={resetFilters}
+      pageTitle={pageTitle}
+      totalProducts={data?.total}
     />
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
       {isTrendingPage && (
         <TrendingPromoBanner
           banners={trendingBanners}
@@ -577,16 +593,8 @@ export default function ProductsPage() {
         />
       )}
 
-      {/* Header */}
-      <div className="mb-4 sm:mb-6">
-        <h1 className="text-lg sm:text-2xl font-bold">
-          {pageTitle}
-        </h1>
-        {data && <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{data.total} products</p>}
-      </div>
-
       {/* Mobile Control Bar */}
-      <div className="lg:hidden flex items-center gap-3 mb-4 -mx-1 sm:mx-0">
+      <div className="lg:hidden flex items-center gap-3 mb-3 -mx-1 sm:mx-0">
         <button
           onClick={() => setMobileFiltersOpen(true)}
           className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-xl py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 transition-colors"
@@ -614,7 +622,7 @@ export default function ProductsPage() {
       </div>
 
       {/* Desktop sort */}
-      <div className="hidden lg:flex items-center justify-end mb-4 gap-3">
+      <div className="hidden lg:flex items-center justify-end mb-3 gap-3">
         <select
           value={sort}
           onChange={(e) => updateParams({ sort_by: e.target.value })}
@@ -626,9 +634,9 @@ export default function ProductsPage() {
         </select>
       </div>
 
-      <div className="flex gap-8">
+      <div className="flex gap-6 lg:gap-8">
         {/* Desktop sidebar */}
-        <aside className="hidden lg:block w-60 shrink-0">{sidebar}</aside>
+        <aside className="hidden lg:block w-64 shrink-0">{sidebar}</aside>
 
         {/* Mobile filter bottom sheet */}
         {mobileFiltersOpen && (
@@ -658,7 +666,7 @@ export default function ProductsPage() {
         <div className="flex-1">
           <ErrorBoundary>
             {isLoading ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                 {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
               </div>
             ) : data?.items.length === 0 ? (
@@ -667,7 +675,7 @@ export default function ProductsPage() {
                 <button onClick={resetFilters} className="text-sm text-primary hover:underline">Reset Filters</button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                 {data?.items.map((p) => <ProductCard key={p.id} product={p} />)}
               </div>
             )}
