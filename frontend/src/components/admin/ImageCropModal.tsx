@@ -138,7 +138,14 @@ const WEB_CROP_PRESETS: Record<string, CropPreset> = {
     aspect: 16 / 9,
     width: 1920,
     height: 1080,
-    hint: '1920×1080px — Full-height homepage hero on desktop. Shown from the 640px breakpoint up.',
+    hint: '1920×1080px (16:9 ratio) — Full-height homepage hero on desktop. Banner displays at heights: 400px(mobile), 480px(sm), 560px(md), 640px(lg), 720px(xl). Shown from 640px breakpoint up.',
+  },
+  web_hero_ugaoo: {
+    label: '🖥️ Ugaoo Hero (1404×564)',
+    aspect: 1404 / 564,
+    width: 1404,
+    height: 564,
+    hint: '1404×564px (2.49:1 ratio) — Ugaoo-style homepage hero. Banner displays at heights: 400px(mobile), 480px(sm), 560px(md), 640px(lg), 720px(xl). Balanced to show content below.',
   },
   web_wide: {
     label: '🖥️ Web Wide (16:9)',
