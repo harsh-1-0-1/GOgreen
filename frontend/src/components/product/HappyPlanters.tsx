@@ -46,9 +46,9 @@ export default function HappyPlanters({ fallbackImages }: { fallbackImages: stri
         )}
       </div>
 
-      <div ref={scrollerRef} className="-mx-3 flex snap-x-mandatory gap-3 overflow-x-auto px-3 pb-3 scrollbar-hide sm:-mx-4 sm:gap-4 sm:px-4 md:justify-center md:overflow-x-visible md:mx-0 md:px-0 md:flex-wrap">
+      <div ref={scrollerRef} className="-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 pb-3 scrollbar-hide sm:-mx-4 sm:gap-4 sm:px-4">
         {images.map((image, index) => (
-          <figure key={`${image.src}-${index}`} className="relative aspect-[4/5] w-[68vw] max-w-[300px] shrink-0 snap-start overflow-hidden rounded-2xl bg-[#EAF3ED] sm:w-72 md:w-80">
+          <figure key={`${image.src}-${index}`} className="relative aspect-[4/5] w-[68vw] max-w-[300px] shrink-0 snap-start overflow-hidden rounded-2xl bg-[#EAF3ED] sm:w-72 md:w-80 lg:w-[300px]">
             <img src={image.src} alt={image.alt} className="h-full w-full object-cover transition duration-500 hover:scale-[1.03]" loading="lazy" />
           </figure>
         ))}
