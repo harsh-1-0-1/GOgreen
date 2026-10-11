@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { useBanners } from '@/hooks/useBanners';
 
@@ -14,7 +16,7 @@ interface Tile {
 
 function QuickAccessSkeleton() {
   return (
-    <section className="w-full pt-2 pb-4 sm:pt-3 sm:pb-6">
+    <section className="w-full pt-2 pb-4 sm:pt-3 sm:pb-6 relative">
       <div className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto scrollbar-hide px-4 sm:px-6 lg:px-10 xl:px-16 w-full pb-2">
         {Array.from({ length: 8 }).map((_, i) => (
           <div
@@ -86,6 +88,21 @@ function CategoryTile({ tile }: { tile: Tile }) {
 
 export default function QuickAccessStrip() {
   const { data: banners = [], isLoading } = useBanners('strip');
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollLeft = () => {
+    if (scrollRef.current) {
+      const cardWidth = 160; // approximate card width including gap
+      scrollRef.current.scrollBy({ left: -cardWidth * 3, behavior: 'smooth' });
+    }
+  };
+
+  const scrollRight = () => {
+    if (scrollRef.current) {
+      const cardWidth = 160; // approximate card width including gap
+      scrollRef.current.scrollBy({ left: cardWidth * 3, behavior: 'smooth' });
+    }
+  };
 
   if (isLoading) return <QuickAccessSkeleton />;
   if (banners.length === 0) return null;
@@ -101,14 +118,39 @@ export default function QuickAccessStrip() {
   }));
 
   return (
-    <section className="w-full pt-2 pb-4 sm:pt-3 sm:pb-6">
-      <div className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto scrollbar-hide px-4 sm:px-6 lg:px-10 xl:px-16 w-full pb-2">
-        {tiles.map((tile) =>
-          tile.type === 'promo' ? (
-            <PromoTile key={tile.id} tile={tile} />
-          ) : (
-            <CategoryTile key={tile.id} tile={tile} />
-          ),
+    <section className="w-full pt-2 pb-4 sm:pt-3 sm:pb-6 relative">
+      <div className="relative px-4 sm:px-6 lg:px-10 xl:px-16">
+        <div
+          ref={scrollRef}
+          className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto scrollbar-hide w-full pb-2 scroll-smooth"
+        >
+          {tiles.map((tile) =>
+            tile.type === 'promo' ? (
+              <PromoTile key={tile.id} tile={tile} />
+            ) : (
+              <CategoryTile key={tile.id} tile={tile} />
+            ),
+          )}
+        </div>
+        
+        {/* Scroll buttons - only show on larger screens when there are enough items */}
+        {tiles.length > 5 && (
+          <>
+            <button
+              onClick={scrollLeft}
+              aria-label="Scroll left"
+              className="hidden lg:flex absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl items-center justify-center text-gray-700 hover:scale-110 hover:bg-gray-50 transition-all z-10"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <button
+              onClick={scrollRight}
+              aria-label="Scroll right"
+              className="hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl items-center justify-center text-gray-700 hover:scale-110 hover:bg-gray-50 transition-all z-10"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </>
         )}
       </div>
     </section>

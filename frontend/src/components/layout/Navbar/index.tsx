@@ -68,7 +68,19 @@ function ShopMegaMenu({
   onLogout,
   onLogin,
 }: ShopMegaMenuProps) {
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const hasBanner = !!(mobilePromoBanner?.image_url_web || mobilePromoBanner?.image_url);
+  
+  // Get categories with their subcategories
+  const { data: categories = [] } = useCategories();
+
+  const getCategorySubcategories = (categoryLabel: string): Array<{ name: string; slug: string }> => {
+    const category = categories.find(c => c.name === categoryLabel);
+    if (category && category.children && category.children.length > 0) {
+      return category.children.map(child => ({ name: child.name, slug: child.slug }));
+    }
+    return [];
+  };
 
   return (
     <div
@@ -124,32 +136,75 @@ function ShopMegaMenu({
             </div>
           )}
 
-          {/* Single-column category rows — circular thumbnail + label */}
+          {/* Single-column category rows — circular thumbnail + label with expandable subcategories */}
           <div className="flex flex-col">
-            {menuItems.map((cat) => (
-              <Link
-                key={cat.href}
-                to={cat.href}
-                onClick={onClose}
-                className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-emerald-50/60 active:bg-emerald-50/80 transition-all duration-150 group"
-              >
-                <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 border border-gray-100/60 shrink-0">
-                  {cat.img ? (
-                    <img
-                      src={cat.img}
-                      alt={cat.label}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-primary/10 flex items-center justify-center text-xs">🌿</div>
+            {menuItems.map((cat) => {
+              const subcategories = getCategorySubcategories(cat.label);
+              const hasSubcategories = subcategories.length > 0;
+              const isExpanded = expandedCategory === cat.label;
+
+              return (
+                <div key={cat.href}>
+                  <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-emerald-50/60 active:bg-emerald-50/80 transition-all duration-150 group">
+                    <Link
+                      to={cat.href}
+                      onClick={onClose}
+                      className="flex items-center gap-2.5 flex-1"
+                    >
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 border border-gray-100/60 shrink-0">
+                        {cat.img ? (
+                          <img
+                            src={cat.img}
+                            alt={cat.label}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-primary/10 flex items-center justify-center text-xs">🌿</div>
+                        )}
+                      </div>
+                      <span className="text-[12.5px] font-semibold text-gray-800 group-hover:text-primary transition-colors leading-tight">
+                        {cat.label}
+                      </span>
+                    </Link>
+                    {hasSubcategories && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedCategory(isExpanded ? null : cat.label);
+                        }}
+                        className="p-1 hover:bg-emerald-100 rounded transition-colors"
+                        aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                      >
+                        <ChevronDown
+                          size={14}
+                          className={clsx(
+                            'text-gray-500 transition-transform duration-200',
+                            isExpanded && 'rotate-180'
+                          )}
+                        />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Subcategories list */}
+                  {hasSubcategories && isExpanded && (
+                    <div className="ml-10 mt-1 mb-2 space-y-0.5 animate-dropdown">
+                      {subcategories.map((subcat) => (
+                        <Link
+                          key={subcat.slug}
+                          to={`/products?category=${subcat.slug}`}
+                          onClick={onClose}
+                          className="block px-2 py-1 text-[11.5px] font-medium text-gray-600 hover:text-primary hover:bg-emerald-50/40 rounded transition-all"
+                        >
+                          {subcat.name}
+                        </Link>
+                      ))}
+                    </div>
                   )}
                 </div>
-                <span className="text-[12.5px] font-semibold text-gray-800 group-hover:text-primary transition-colors leading-tight">
-                  {cat.label}
-                </span>
-              </Link>
-            ))}
+              );
+            })}
           </div>
 
           <Link
