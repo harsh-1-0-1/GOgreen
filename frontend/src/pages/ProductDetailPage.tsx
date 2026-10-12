@@ -867,8 +867,8 @@ export default function ProductDetailPage() {
   }
 
   const similarProducts = curatedRelated && curatedRelated.length > 0
-    ? curatedRelated.filter((p) => p.id !== product.id).slice(0, 4)
-    : similar?.items.filter((p) => p.id !== product.id).slice(0, 4) ?? [];
+    ? curatedRelated.filter((p) => p.id !== product.id)
+    : similar?.items.filter((p) => p.id !== product.id).slice(0, 8) ?? [];
   const productDetailBanner = selectProductTypeBanner(productDetailBanners, categories, product.category_id);
   const productSpecBanner = selectProductTypeBanner(productSpecBanners, categories, product.category_id);
   const productStripBanner = selectProductTypeBanner(productStripBanners, categories, product.category_id);
@@ -1295,40 +1295,40 @@ export default function ProductDetailPage() {
           <ErrorBoundary>
             <section className="mt-6 sm:mt-8">
               <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">You May Also Like</h2>
+              {/* Outer: relative so arrow buttons can be positioned, no overflow clip */}
               <div className="relative">
-                <div 
+                {/* Scroll row: negative margin lets cards bleed to page edge; padding restores the gap */}
+                <div
                   ref={similarScrollRef}
-                  className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-hide snap-x-mandatory pb-4 -mx-3 sm:-mx-4 px-3 sm:px-4 md:justify-center"
+                  className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto scrollbar-hide pb-2 scroll-smooth -mx-3 px-3 sm:-mx-4 sm:px-4"
                 >
                   {similarProducts.map((p) => (
-                    <div key={p.id} className="shrink-0 w-[47vw] min-w-[160px] sm:w-56 md:w-64 snap-start">
+                    <div key={p.id} className="shrink-0 w-[47vw] min-w-[160px] sm:w-56 md:w-64">
                       <ProductCard product={p} />
                     </div>
                   ))}
                 </div>
-                {similarProducts.length > 4 && (
+                {similarProducts.length > 3 && (
                   <>
                     <button
                       onClick={() => {
                         if (similarScrollRef.current) {
-                          const cardWidth = similarScrollRef.current.firstElementChild?.clientWidth || 0;
-                          similarScrollRef.current.scrollBy({ left: -(cardWidth + 16), behavior: 'smooth' });
+                          similarScrollRef.current.scrollBy({ left: -160 * 3, behavior: 'smooth' });
                         }
                       }}
                       aria-label="Previous products"
-                      className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl items-center justify-center text-gray-700 hover:scale-110 transition-all z-20"
+                      className="hidden lg:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl items-center justify-center text-gray-700 hover:scale-110 hover:bg-gray-50 transition-all z-10"
                     >
                       <ChevronLeft size={20} />
                     </button>
                     <button
                       onClick={() => {
                         if (similarScrollRef.current) {
-                          const cardWidth = similarScrollRef.current.firstElementChild?.clientWidth || 0;
-                          similarScrollRef.current.scrollBy({ left: cardWidth + 16, behavior: 'smooth' });
+                          similarScrollRef.current.scrollBy({ left: 160 * 3, behavior: 'smooth' });
                         }
                       }}
                       aria-label="Next products"
-                      className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl items-center justify-center text-gray-700 hover:scale-110 transition-all z-20"
+                      className="hidden lg:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl items-center justify-center text-gray-700 hover:scale-110 hover:bg-gray-50 transition-all z-10"
                     >
                       <ChevronRight size={20} />
                     </button>

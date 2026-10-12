@@ -84,7 +84,7 @@ function ShopMegaMenu({
 
   return (
     <div
-      className="absolute top-full left-1/2 -translate-x-1/2 z-[51] bg-white rounded-b-2xl shadow-2xl border border-t-0 border-gray-100 animate-dropdown overflow-hidden"
+      className="absolute top-full left-1/2 -translate-x-1/2 z-[51] bg-white rounded-b-2xl shadow-2xl border border-t-0 border-gray-100 animate-dropdown overflow-hidden overscroll-contain"
       style={{ 
         width: '580px', 
         maxHeight: '500px',
@@ -94,7 +94,11 @@ function ShopMegaMenu({
       <div className="flex gap-0 h-full max-h-[500px]">
 
         {/* ── LEFT: banner + single-column category list ── */}
-        <div className="flex-1 min-w-0 p-4 overflow-y-auto flex flex-col" style={{ maxHeight: '500px' }}>
+        <div
+          data-mega-scroll
+          className="flex-1 min-w-0 p-4 overflow-y-auto overscroll-contain flex flex-col"
+          style={{ maxHeight: '500px' }}
+        >
 
           {/* Promo banner — same admin-managed banner shown in the mobile drawer */}
           {hasBanner && (
@@ -217,7 +221,10 @@ function ShopMegaMenu({
         </div>
 
         {/* ── RIGHT: account + info + support ── */}
-        <div className="w-52 shrink-0 border-l border-gray-100 p-4 overflow-y-auto flex flex-col">
+        <div
+          data-mega-scroll
+          className="w-52 shrink-0 border-l border-gray-100 p-4 overflow-y-auto overscroll-contain flex flex-col"
+        >
 
           {/* Account card / login prompt */}
           <div className="mb-3">
@@ -335,7 +342,11 @@ export default function Navbar() {
 
   const hoverTimeoutRef = useRef<number>(0);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const desktopSearchRef = useRef<HTMLFormElement>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
+  // True while the pointer is held down inside a suggestions dropdown.
+  // Prevents the input's onBlur from hiding suggestions before the click registers.
+  const suggestionMouseDownRef = useRef(false);
 
   const debouncedQuery = useDebounce(searchQuery, 300);
   const isProductPage = /^\/products\/[^/]+/.test(location.pathname);
@@ -389,7 +400,45 @@ export default function Navbar() {
     ...(useFallback ? [] : dbMobileItems),
   ];
 
-  useBodyScrollLock(drawerOpen);
+  const shopMegaOpen = activeDropdown === 'SHOP';
+  useBodyScrollLock(drawerOpen || shopMegaOpen);
+
+  // Keep wheel/trackpad scroll inside the mega-menu. Without this, reaching the
+  // panel's top/bottom (or scrolling over the transparent backdrop) also moves
+  // the page behind it.
+  useEffect(() => {
+    if (!shopMegaOpen) return;
+
+    const shouldLockPage = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return true;
+      return !target.closest('[data-mega-scroll]');
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      const scrollable = e.target instanceof Element
+        ? e.target.closest('[data-mega-scroll]')
+        : null;
+      if (!(scrollable instanceof HTMLElement)) {
+        e.preventDefault();
+        return;
+      }
+      const { scrollTop, scrollHeight, clientHeight } = scrollable;
+      const atTop = scrollTop <= 0 && e.deltaY < 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 1 && e.deltaY > 0;
+      if (atTop || atBottom) e.preventDefault();
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (shouldLockPage(e.target)) e.preventDefault();
+    };
+
+    window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => {
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('touchmove', onTouchMove);
+    };
+  }, [shopMegaOpen]);
 
   // Cleanup hover timeout on unmount
   useEffect(() => () => clearTimeout(hoverTimeoutRef.current), []);
@@ -471,10 +520,10 @@ export default function Navbar() {
       if (Date.now() - searchOpenedAtRef.current < 600) {
         return;
       }
-      if (
-        searchContainerRef.current &&
-        !searchContainerRef.current.contains(target)
-      ) {
+      // Ignore clicks inside either the mobile search container OR the desktop search form
+      const insideMobile = searchContainerRef.current?.contains(target);
+      const insideDesktop = desktopSearchRef.current?.contains(target);
+      if (!insideMobile && !insideDesktop) {
         setSearchFocused(false);
         setSearchOpen(false);
       }
@@ -622,6 +671,7 @@ export default function Navbar() {
         {/* Desktop inline search bar — fills the center of the top row */}
         <form
           onSubmit={handleSearch}
+          ref={desktopSearchRef}
           className="hidden lg:flex flex-1 min-w-0 mx-8 relative"
         >
           <div className="relative flex items-center w-full">
@@ -633,8 +683,9 @@ export default function Navbar() {
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => {
-                // Delay to allow clicking on suggestions
-                setTimeout(() => setSearchFocused(false), 200);
+                // Don't hide suggestions if the user is clicking on one
+                if (suggestionMouseDownRef.current) return;
+                setSearchFocused(false);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
@@ -650,6 +701,8 @@ export default function Navbar() {
           {showSuggestions && (
             <div
               className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-dropdown"
+              onMouseDown={() => { suggestionMouseDownRef.current = true; }}
+              onMouseUp={() => { suggestionMouseDownRef.current = false; }}
             >
               {suggestions!.map((product) => (
                 <Link
@@ -974,7 +1027,11 @@ export default function Navbar() {
 
           {/* Suggestions dropdown */}
           {showSuggestions && (
-            <div className="absolute top-full mt-2 left-4 right-4 sm:left-6 sm:right-6 lg:left-10 lg:right-10 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-dropdown">
+            <div 
+              className="absolute top-full mt-2 left-4 right-4 sm:left-6 sm:right-6 lg:left-10 lg:right-10 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-dropdown"
+              onMouseDown={() => { suggestionMouseDownRef.current = true; }}
+              onMouseUp={() => { suggestionMouseDownRef.current = false; }}
+            >
               {suggestions!.map((product) => (
                 <Link
                   key={product.id}

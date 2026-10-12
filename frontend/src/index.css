@@ -60,6 +60,7 @@ input, select, textarea {
 }
 
 /* prevent body scroll when modal/drawer is open */
+html:has(body.overflow-hidden),
 body.overflow-hidden {
   overflow: hidden;
 }
