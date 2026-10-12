@@ -326,6 +326,7 @@ export default function Navbar() {
 
   const lastScrollY = useRef(0);
   const searchOpenedAtRef = useRef<number>(0);
+  const headerRef = useRef<HTMLElement>(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -392,6 +393,32 @@ export default function Navbar() {
 
   // Cleanup hover timeout on unmount
   useEffect(() => () => clearTimeout(hoverTimeoutRef.current), []);
+
+  // Sticky page content (product gallery) sits below the header when it is
+  // visible, and flush with the viewport once the header slides away.
+  useEffect(() => {
+    const root = document.documentElement;
+    const header = headerRef.current;
+    if (!header) return;
+
+    const updateOffset = () => {
+      root.style.setProperty(
+        '--sticky-header-offset',
+        hidden ? '0px' : `${header.offsetHeight}px`,
+      );
+    };
+
+    updateOffset();
+    const observer = new ResizeObserver(updateOffset);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [hidden]);
+
+  useEffect(() => {
+    return () => {
+      document.documentElement.style.removeProperty('--sticky-header-offset');
+    };
+  }, []);
 
   // Scroll-based shadow and hide/show on scroll
   useEffect(() => {
@@ -557,6 +584,7 @@ export default function Navbar() {
 
   return (
     <header
+      ref={headerRef}
       className={clsx(
         'sticky top-0 z-50 bg-white transition-transform duration-300 ease-in-out',
         scrolled && 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] border-b border-gray-100',

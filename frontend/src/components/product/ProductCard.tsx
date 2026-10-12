@@ -80,20 +80,20 @@ export default function ProductCard({ product }: { product: Product }) {
           {product.name}
         </h3>
 
-        {/* Price row
-            Mobile  → text-base, font-semibold, color #16A34A  (ProductTile)
-            Desktop → text-base, font-bold,      color primary
+        {/* Price row - moved below product name
+            Mobile  → text-lg, font-semibold, color #16A34A
+            Desktop → text-xl, font-bold,      color primary
         */}
         <div className="flex items-baseline gap-1.5 sm:gap-2">
           <span
-            className="font-semibold sm:font-bold text-base sm:text-base"
+            className="font-semibold sm:font-bold text-lg sm:text-xl"
             style={{ color: SECONDARY }}
           >
             {hasVariants && <span className="text-xs font-normal text-gray-500 mr-0.5">from</span>}
             ₹{product.price}
           </span>
           {product.original_price && product.original_price > product.price && (
-            <span className="text-xs text-gray-400 line-through">
+            <span className="text-sm text-gray-400 line-through">
               ₹{product.original_price}
             </span>
           )}
@@ -120,7 +120,7 @@ export default function ProductCard({ product }: { product: Product }) {
         {/* Spacer to push tags and button to bottom */}
         <div className="flex-1" />
 
-        {/* Tag badges - moved above the button */}
+        {/* Tag badges - displayed directly above the button */}
         <ProductTagBadges tags={product.tags} maxTags={2} size="sm" />
 
         {/* Add-to-cart / Out-of-stock button — identical styling to ProductTile */}

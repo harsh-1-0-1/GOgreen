@@ -903,7 +903,7 @@ export default function ProductDetailPage() {
 
         <div className="grid md:grid-cols-2 gap-6 lg:gap-10 md:items-start">
           {/* Desktop gallery — sticky so it stays in view while the right column scrolls */}
-          <div className="hidden md:block md:sticky md:top-24">
+          <div className="hidden md:block md:sticky md:top-[var(--sticky-header-offset,0px)] md:transition-[top] md:duration-300">
             <DesktopGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} />
           </div>
 
