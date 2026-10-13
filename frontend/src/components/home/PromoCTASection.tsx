@@ -8,7 +8,7 @@ export default function PromoCTASection() {
   if (isLoading) {
     return (
       <section className="w-full py-10 sm:py-14 bg-white">
-        <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 max-w-7xl">
+        <div className="w-full px-6 sm:px-10 lg:px-16 xl:px-24">
           <div className="grid md:grid-cols-2 gap-4 sm:gap-5">
             <div className="rounded-2xl bg-gray-200 animate-pulse" style={{ aspectRatio: '800 / 480' }} />
             <div className="rounded-2xl bg-gray-200 animate-pulse" style={{ aspectRatio: '800 / 480' }} />
@@ -24,7 +24,7 @@ export default function PromoCTASection() {
 
   return (
     <section className="w-full py-10 sm:py-14 bg-white">
-      <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 max-w-7xl">
+      <div className="w-full px-6 sm:px-10 lg:px-16 xl:px-24">
         <div className="grid md:grid-cols-2 items-start gap-4 sm:gap-5">
           {cards.map((card) => {
             const content = (

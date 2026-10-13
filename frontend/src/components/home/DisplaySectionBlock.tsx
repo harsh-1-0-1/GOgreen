@@ -140,7 +140,7 @@ export default function DisplaySectionBlock({ section }: { section: DisplaySecti
 
   return (
     <section className="w-full py-8 sm:py-10 bg-white">
-      <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16 max-w-7xl">
+      <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-16">
         <div className="mb-5 sm:mb-6">
           <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-black">
             {section.name}

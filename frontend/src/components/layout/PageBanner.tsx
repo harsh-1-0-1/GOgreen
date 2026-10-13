@@ -30,7 +30,7 @@ export default function PageBanner() {
 
   const content = (
     <div
-      className="mx-auto w-full max-w-7xl overflow-hidden bg-white sm:px-4"
+      className="w-full overflow-hidden bg-white sm:px-4"
       aria-label={banner.title}
     >
       <div

@@ -19,7 +19,7 @@ export default function CategoryHighlightGrid() {
 
   return (
     <section className="w-full py-7 sm:py-9 bg-white">
-      <div className="mx-auto max-w-[1400px] px-2 sm:px-6">
+      <div className="w-full px-2 sm:px-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 items-start gap-x-2.5 gap-y-5 sm:gap-x-5 sm:gap-y-7">
           {isLoading
             ? Array.from({ length: 4 }).map((_, i) => (

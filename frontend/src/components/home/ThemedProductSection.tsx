@@ -149,7 +149,7 @@ function FullScreenCarouselLayout({
         </div>
 
         {/* Cards carousel */}
-        <div className="relative px-10 sm:px-14 md:px-16 lg:px-20 pb-6 max-w-[1300px] mx-auto w-full">
+        <div className="relative px-10 sm:px-14 md:px-16 lg:px-20 pb-6 w-full">
           <div className="relative w-full">
             <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
             <div
