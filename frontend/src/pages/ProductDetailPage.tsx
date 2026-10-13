@@ -979,7 +979,7 @@ export default function ProductDetailPage() {
                   if (visibleOptions.length === 0) {
                     return (
                       <div key={group.id}>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
                           {group.label}
                         </p>
                         <p className="text-xs text-gray-400">
@@ -991,7 +991,7 @@ export default function ProductDetailPage() {
 
                   return (
                     <div key={group.id}>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
                         {group.label}
                       </p>
 

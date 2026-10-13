@@ -890,7 +890,7 @@ export default function Navbar() {
       {/* ================================================================ */}
       <nav className="hidden lg:block border-t border-gray-100 relative">
         <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16">
-          <ul className="flex items-center justify-center text-[14px] font-semibold tracking-[0.03em] gap-0">
+          <ul className="flex items-center justify-center text-[14px] font-bold tracking-[0.03em] gap-0">
             {categoryNavItems.map((item) => {
               const hasDropdown = item.groups && item.groups.length > 0;
               const isOpen = activeDropdown === item.label;
@@ -1297,7 +1297,7 @@ export default function Navbar() {
                           ) : (
                             <div className="w-9 h-9 rounded-full bg-gray-100 border border-gray-100/60" />
                           )}
-                          <span className="text-[13.5px] font-semibold text-gray-800 group-hover:text-primary transition-colors duration-200">
+                          <span className="text-[13.5px] font-bold text-gray-800 group-hover:text-primary transition-colors duration-200">
                             {item.label}
                           </span>
                         </div>
