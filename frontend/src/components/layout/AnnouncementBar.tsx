@@ -8,7 +8,12 @@ const COOKIE_NAME = 'bar_dismissed';
 const COOKIE_MAX_AGE = 86400;
 
 const FALLBACK_MESSAGES = [
-  { title: 'Free Delivery — Shop Now', cta_link: '' },
+  {
+    title: 'Free Delivery — Shop Now',
+    cta_link: '',
+    bg_color: '#16A34A',
+    text_color: '#FFFFFF',
+  },
 ];
 
 function getCookie(name: string): string | undefined {
@@ -22,7 +27,7 @@ function setCookie(name: string, value: string, maxAge: number) {
 
 const Separator = () => (
   <span
-    className="mx-4 text-white/50 text-[10px] sm:text-xs select-none"
+    className="mx-4 text-[10px] opacity-50 sm:text-xs select-none"
     aria-hidden
   >
     ✦
@@ -47,9 +52,11 @@ export default function AnnouncementBar() {
     setVisible(false);
   }
 
-  const messageStrip = messages.map((msg, i) => (
-    <span key={i} className="inline-flex items-center whitespace-nowrap">
-      {i > 0 && <Separator />}
+  const barBgColor = messages[0]?.bg_color || '#16A34A';
+  const barTextColor = messages[0]?.text_color || '#FFFFFF';
+  const marqueeItems = Array.from({ length: 4 }, () => messages).flat();
+  const messageStrip = marqueeItems.map((msg, i) => (
+    <span key={`${i}-${msg.title}`} className="inline-flex items-center whitespace-nowrap">
       {msg.cta_link ? (
         <Link
           to={msg.cta_link}
@@ -60,25 +67,28 @@ export default function AnnouncementBar() {
       ) : (
         <span>{msg.title}</span>
       )}
+      <Separator />
     </span>
   ));
 
   return (
     <div
-      className="relative w-full h-9 sm:h-[38px] flex items-center overflow-hidden text-white text-[11.5px] sm:text-[12.5px] font-medium tracking-[0.04em]"
-      style={{ backgroundColor: '#16A34A' }}
+      className="relative w-full h-9 sm:h-[38px] flex items-center overflow-hidden text-[11.5px] sm:text-[12.5px] font-medium tracking-[0.04em]"
+      style={{ backgroundColor: barBgColor, color: barTextColor }}
     >
-      <div className="animate-marquee flex items-center whitespace-nowrap">
-        {messageStrip}
-        <Separator />
-        {messageStrip}
-        <Separator />
+      <div className="animate-marquee flex w-max items-center whitespace-nowrap">
+        <div className="flex shrink-0 items-center whitespace-nowrap">
+          {messageStrip}
+        </div>
+        <div className="flex shrink-0 items-center whitespace-nowrap" aria-hidden="true">
+          {messageStrip}
+        </div>
       </div>
 
       <button
         onClick={dismiss}
         aria-label="Close announcement"
-        className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 z-10 w-5 h-5 flex items-center justify-center rounded-full text-white/60 hover:text-white hover:bg-white/15 transition-colors text-sm leading-none"
+        className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 z-10 w-5 h-5 flex items-center justify-center rounded-full opacity-60 hover:opacity-100 hover:bg-white/15 transition text-sm leading-none"
       >
         ×
       </button>

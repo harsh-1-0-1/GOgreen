@@ -1285,7 +1285,7 @@ function BannerDrawer({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Theme Background Color
+                {watchedPlacement === 'announcement' ? 'Announcement Bar Color' : 'Theme Background Color'}
               </label>
               <div className="flex gap-2">
                 <input
@@ -1309,7 +1309,7 @@ function BannerDrawer({
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Banner Text Color
+                {watchedPlacement === 'announcement' ? 'Announcement Text Color' : 'Banner Text Color'}
               </label>
               <div className="flex gap-2">
                 <input
