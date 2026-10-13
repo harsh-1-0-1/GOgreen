@@ -55,14 +55,12 @@ function ProductTile({ product }: { product: Product }) {
 
       </div>
 
-      <div className="flex flex-col flex-1 px-3 sm:px-4 pt-3 pb-3 sm:pb-4 gap-1.5">
+      <div className="flex flex-col flex-1 px-3 sm:px-4 pt-2 pb-3 sm:pb-4 gap-1">
         <h3 className="text-sm sm:text-base font-medium text-gray-800 line-clamp-2 leading-snug">
           {product.name}
         </h3>
 
-        <ProductTagBadges tags={product.tags} maxTags={2} size="sm" />
-
-        <div className="flex items-baseline gap-2 mt-0.5">
+        <div className="flex items-baseline gap-2">
           <span
             className="text-base sm:text-lg font-semibold"
             style={{ color: SECONDARY }}
@@ -74,17 +72,23 @@ function ProductTile({ product }: { product: Product }) {
           </span>
           {product.original_price &&
             product.original_price > product.price && (
-              <span className="text-xs sm:text-sm text-gray-400 line-through">
+              <span className="text-xs text-gray-400 line-through">
                 ₹{product.original_price}
               </span>
             )}
         </div>
 
+        {/* Spacer pushes tags + button to bottom */}
+        <div className="flex-1" />
+
+        {/* Tags visible on all screen sizes, above the button */}
+        <ProductTagBadges tags={product.tags} maxTags={2} size="sm" />
+
         {product.stock_qty === 0 ? (
           <button
             type="button"
             disabled
-            className="mt-auto w-full py-2.5 rounded-lg text-sm font-semibold bg-gray-100 text-gray-400 cursor-not-allowed"
+            className="w-full py-2.5 rounded-lg text-sm font-semibold bg-gray-100 text-gray-400 cursor-not-allowed"
           >
             Out of Stock
           </button>
@@ -92,10 +96,10 @@ function ProductTile({ product }: { product: Product }) {
           <button
             type="button"
             onClick={handleAdd}
-            className="mt-auto w-full py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90"
+            className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90"
             style={{ backgroundColor: SECONDARY }}
           >
-            Add to cart
+            {hasVariants ? 'Choose options' : 'Add to cart'}
           </button>
         )}
       </div>

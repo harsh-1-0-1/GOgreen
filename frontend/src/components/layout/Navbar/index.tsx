@@ -348,6 +348,14 @@ export default function Navbar() {
   // Prevents the input's onBlur from hiding suggestions before the click registers.
   const suggestionMouseDownRef = useRef(false);
 
+  // Close mega-menu and drawer on every route change so they never get stuck
+  // after a navigation (e.g. clicking a link inside the Shop mega-menu).
+  useEffect(() => {
+    setActiveDropdown(null);
+    setDrawerOpen(false);
+    setActiveSubmenu(null);
+  }, [location.pathname, location.search]);
+
   const debouncedQuery = useDebounce(searchQuery, 300);
   const isProductPage = /^\/products\/[^/]+/.test(location.pathname);
 
@@ -401,7 +409,12 @@ export default function Navbar() {
   ];
 
   const shopMegaOpen = activeDropdown === 'SHOP';
-  useBodyScrollLock(drawerOpen || shopMegaOpen);
+  // Only lock body scroll for the mobile drawer.
+  // The desktop Shop mega-menu uses wheel/touchmove event handlers for scroll
+  // containment (see the useEffect below), so applying a body scroll lock
+  // (position:fixed) causes the page to jump and get stuck when clicked while
+  // scrolled down.
+  useBodyScrollLock(drawerOpen);
 
   // Keep wheel/trackpad scroll inside the mega-menu. Without this, reaching the
   // panel's top/bottom (or scrolling over the transparent backdrop) also moves
@@ -438,6 +451,25 @@ export default function Navbar() {
       window.removeEventListener('wheel', onWheel);
       window.removeEventListener('touchmove', onTouchMove);
     };
+  }, [shopMegaOpen]);
+
+  // Close the Shop mega-menu when the user clicks anywhere outside the header.
+  // A fixed backdrop inside the sticky header's stacking context (z-50) is not
+  // reliable for intercepting page-level clicks, so we use a document-level
+  // pointerdown listener instead — the standard pattern for dropdowns.
+  useEffect(() => {
+    if (!shopMegaOpen) return;
+
+    function onPointerDown(e: PointerEvent) {
+      const target = e.target as Node;
+      // Clicks inside the header (navbar + mega-menu) are handled by their
+      // own onClick handlers; ignore them here.
+      if (headerRef.current?.contains(target)) return;
+      setActiveDropdown(null);
+    }
+
+    document.addEventListener('pointerdown', onPointerDown, { capture: true });
+    return () => document.removeEventListener('pointerdown', onPointerDown, { capture: true });
   }, [shopMegaOpen]);
 
   // Cleanup hover timeout on unmount
@@ -975,24 +1007,18 @@ export default function Navbar() {
         </div>
 
         {/* ── Shop mega-menu — outside the <li> so it can span full nav width ── */}
+        {/* Close-on-outside-click is handled by the document pointerdown listener above. */}
         {activeDropdown === 'SHOP' && (
-          <>
-            {/* Backdrop — clicking outside closes the menu */}
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => setActiveDropdown(null)}
-            />
-            <ShopMegaMenu
-              menuItems={mobileMenuItems}
-              mobilePromoBanner={mobilePromoBanner}
-              promoRatio={promoRatio}
-              setPromoRatio={setPromoRatio}
-              user={user}
-              onClose={() => setActiveDropdown(null)}
-              onLogout={() => { logout(); }}
-              onLogin={openAuthModal}
-            />
-          </>
+          <ShopMegaMenu
+            menuItems={mobileMenuItems}
+            mobilePromoBanner={mobilePromoBanner}
+            promoRatio={promoRatio}
+            setPromoRatio={setPromoRatio}
+            user={user}
+            onClose={() => setActiveDropdown(null)}
+            onLogout={() => { logout(); }}
+            onLogin={openAuthModal}
+          />
         )}
       </nav>
 

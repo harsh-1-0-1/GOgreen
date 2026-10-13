@@ -70,60 +70,47 @@ export default function ProductCard({ product }: { product: Product }) {
         Mobile padding  → px-3 pt-3 pb-3  (matches ProductTile)
         Desktop padding → p-4
       */}
-      <div className="flex flex-col flex-1 px-3 pt-3 pb-3 sm:p-4 gap-1.5">
+      <div className="flex flex-col flex-1 px-3 pt-2 pb-3 sm:px-4 sm:pt-3 sm:pb-4 gap-1">
 
-        {/* Product name
-            Mobile  → text-sm, line-clamp-2           (ProductTile)
-            Desktop → text-sm, min-h for two lines
-        */}
-        <h3 className="text-sm font-medium leading-snug text-gray-800 line-clamp-2 sm:min-h-[2.5rem] group-hover:text-primary transition-colors">
+        {/* Product name — no forced min-height so name flows naturally */}
+        <h3 className="text-sm font-medium leading-snug text-gray-800 line-clamp-2 group-hover:text-primary transition-colors">
           {product.name}
         </h3>
 
-        {/* Price row - moved below product name
-            Mobile  → text-lg, font-semibold, color #16A34A
-            Desktop → text-xl, font-bold,      color primary
-        */}
+        {/* Price row */}
         <div className="flex items-baseline gap-1.5 sm:gap-2">
           <span
-            className="font-semibold sm:font-bold text-lg sm:text-xl"
+            className="font-semibold sm:font-bold text-base sm:text-lg"
             style={{ color: SECONDARY }}
           >
             {hasVariants && <span className="text-xs font-normal text-gray-500 mr-0.5">from</span>}
             ₹{product.price}
           </span>
           {product.original_price && product.original_price > product.price && (
-            <span className="text-sm text-gray-400 line-through">
+            <span className="text-xs text-gray-400 line-through">
               ₹{product.original_price}
             </span>
           )}
         </div>
 
-        {/* Low-stock / out-of-stock notice — hidden on mobile, shown sm+ */}
-        {/*
-          stock_qty is exact when there are 0 or 1 variant groups — show the count.
-          With 2+ groups it's a transportation-problem aggregate (min of group sums)
-          that can diverge from any specific combo's availability — show a label only.
-          "Out of Stock" (stock_qty === 0) is safe unconditionally: requires some
-          group's sum to be 0, making every combination unpurchasable.
-        */}
+        {/* Low-stock / out-of-stock notice */}
         {product.stock_qty <= 5 && product.stock_qty > 0 && stockQtyIsExact && (
-          <p className="hidden sm:block text-xs text-red-500">Only {product.stock_qty} left!</p>
+          <p className="text-xs text-red-500">Only {product.stock_qty} left!</p>
         )}
         {product.stock_qty <= 5 && product.stock_qty > 0 && !stockQtyIsExact && (
-          <p className="hidden sm:block text-xs text-amber-600">Low stock</p>
+          <p className="text-xs text-amber-600">Low stock</p>
         )}
         {product.stock_qty === 0 && (
-          <p className="hidden sm:block text-xs text-red-500 font-medium">Out of Stock</p>
+          <p className="text-xs text-red-500 font-medium">Out of Stock</p>
         )}
 
         {/* Spacer to push tags and button to bottom */}
         <div className="flex-1" />
 
-        {/* Tag badges - displayed directly above the button */}
+        {/* Tag badges — always visible, directly above the button */}
         <ProductTagBadges tags={product.tags} maxTags={2} size="sm" />
 
-        {/* Add-to-cart / Out-of-stock button — identical styling to ProductTile */}
+        {/* Add-to-cart / Out-of-stock button */}
         {product.stock_qty === 0 ? (
           <button
             type="button"
