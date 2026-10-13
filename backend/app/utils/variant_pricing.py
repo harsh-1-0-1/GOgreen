@@ -376,9 +376,18 @@ def calculate_variant_price(
                 "price": pot_value,
             })
     
+    image_map = variants.get("image_map") if isinstance(variants.get("image_map"), dict) else {}
+    combo_images = image_map.get(combo_key) if combo_key else None
+    combo_image = None
+    if isinstance(combo_images, list):
+        combo_image = next((img for img in combo_images if img), None)
+    elif isinstance(combo_images, str):
+        combo_image = combo_images
+
     # Determine image to display
     resolved_image = (
-        (selected_option_images[0] if selected_option_images else None)
+        combo_image
+        or (selected_option_images[0] if selected_option_images else None)
         or variants.get("default_image")
         or _get_primary_image(product)
     )

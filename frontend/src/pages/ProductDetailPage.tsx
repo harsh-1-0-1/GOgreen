@@ -1349,7 +1349,7 @@ export default function ProductDetailPage() {
             Falls back to full-width FAQ when no banner is configured. */}
         {productDetailBanner?.image_url ? (
           <div className="mt-8 sm:mt-10 flex flex-col gap-6 lg:gap-8 md:flex-row items-stretch">
-            <div className="hidden md:flex md:w-1/2 shrink-0">
+            <div className="flex md:w-1/2 shrink-0">
               {productDetailBanner.cta_link ? (
                 <Link
                   to={productDetailBanner.cta_link}

@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 # New-format variant products send selected_options as a list of option IDs;
@@ -33,6 +33,12 @@ class CartItemProduct(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("images")
+    def serialize_images(self, images: list[str]) -> list[str]:
+        from app.utils.image_upload import resolve_image_url
+
+        return [url for img in (images or []) if (url := resolve_image_url(img))]
+
 
 class CartItemResponse(BaseModel):
     id: int
@@ -47,6 +53,12 @@ class CartItemResponse(BaseModel):
     stock_warning: bool
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("resolved_image_url")
+    def serialize_resolved_image_url(self, val: str) -> str | None:
+        from app.utils.image_upload import resolve_image_url
+
+        return resolve_image_url(val)
 
 
 class CartResponse(BaseModel):

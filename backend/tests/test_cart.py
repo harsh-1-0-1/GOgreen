@@ -196,6 +196,65 @@ async def test_variant_cart_uses_pot_image_when_combo_image_is_missing(client: A
     assert resp.json()["items"][0]["resolved_image_url"] == "https://example.com/plastic-pot.jpg"
 
 
+async def test_new_variant_cart_resolves_combo_image_key(client: AsyncClient):
+    admin = await _register_and_make_admin(client)
+    cat = await _seed_category(client, admin, "New Variant Plants")
+    groups = [
+        {
+            "id": "vg_size",
+            "label": "Size",
+            "required": True,
+            "options": [
+                {"id": "opt_small", "name": "Small", "price": 0, "stock": 10},
+            ],
+        },
+        {
+            "id": "vg_pot",
+            "label": "Pot",
+            "required": True,
+            "options": [
+                {"id": "opt_gro", "name": "Gro", "price": 0, "stock": 10, "images": ["plantoga/options/gro.webp"]},
+            ],
+        },
+    ]
+    combo_key = "opt_small__opt_gro"
+
+    from app.db.models import Product
+    async with test_session_factory() as db:
+        p = Product(
+            name="Combo Image Plant",
+            slug="combo-image-plant",
+            description="Configurable",
+            price=200.0,
+            original_price=None,
+            stock_qty=10,
+            category_id=cat["id"],
+            images=["plantoga/products/base.webp"],
+            tags=[],
+            variants={
+                "variant_groups": groups,
+                "stock_map": {combo_key: 10},
+                "image_map": {combo_key: ["plantoga/combos/small-gro.webp"]},
+            },
+            is_active=True,
+        )
+        db.add(p)
+        await db.commit()
+        await db.refresh(p)
+        product_id = p.id
+
+    resp = await client.post("/api/v1/cart/items", json={
+        "product_id": product_id,
+        "quantity": 1,
+        "selected_options": ["opt_small", "opt_gro"],
+    })
+
+    assert resp.status_code == 201, resp.text
+    item = resp.json()["items"][0]
+    assert item["resolved_image_url"].endswith("/static/plantoga/combos/small-gro.webp")
+    assert item["product"]["images"][0].endswith("/static/plantoga/products/base.webp")
+
+
 async def test_variant_cart_rejects_invalid_or_sold_out_options(client: AsyncClient):
     admin = await _register_and_make_admin(client)
     product = await _seed_variant_product(client, admin)
