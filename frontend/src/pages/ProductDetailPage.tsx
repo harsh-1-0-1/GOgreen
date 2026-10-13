@@ -891,7 +891,7 @@ export default function ProductDetailPage() {
         <MobileGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} />
       </div>
 
-      <div className="w-full px-2 sm:px-3 lg:px-4 pt-2 pb-4 sm:pt-3 sm:pb-8">
+      <div className="mx-auto w-full max-w-[1720px] px-5 sm:px-8 lg:px-12 xl:px-16 2xl:px-20 pt-2 pb-4 sm:pt-3 sm:pb-8">
         {/* Breadcrumb */}
         <nav className="text-xs sm:text-sm text-gray-400 mb-3 sm:mb-4 flex items-center gap-1.5">
           <Link to="/" className="hover:text-primary">Home</Link>
@@ -979,10 +979,10 @@ export default function ProductDetailPage() {
                   if (visibleOptions.length === 0) {
                     return (
                       <div key={group.id}>
-                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                        <p className="text-sm sm:text-base font-extrabold text-gray-800 uppercase tracking-wide mb-2">
                           {group.label}
                         </p>
-                        <p className="text-xs text-gray-400">
+                        <p className="text-sm font-medium text-gray-400">
                           Not available for the current selection
                         </p>
                       </div>
@@ -991,7 +991,7 @@ export default function ProductDetailPage() {
 
                   return (
                     <div key={group.id}>
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                      <p className="text-sm sm:text-base font-extrabold text-gray-800 uppercase tracking-wide mb-2">
                         {group.label}
                       </p>
 
@@ -1050,7 +1050,7 @@ export default function ProductDetailPage() {
                                 key={opt.id}
                                 type="button"
                                 onClick={() => selectOption(group.id, opt.id)}
-                                className={`relative flex flex-col items-center rounded-xl border-2 p-2 w-[88px] transition focus:outline-none
+                                className={`relative flex flex-col items-center rounded-xl border-2 p-2.5 w-[96px] transition focus:outline-none
                                   ${isSelected
                                     ? 'border-primary bg-primary/5 shadow-sm'
                                     : 'border-gray-200 hover:border-primary/60 bg-white cursor-pointer'
@@ -1079,11 +1079,11 @@ export default function ProductDetailPage() {
                                     </div>
                                   )}
                                 </div>
-                                <span className={`text-[11px] font-semibold text-center leading-tight line-clamp-2 ${isSelected ? 'text-primary' : 'text-gray-800'}`}>
+                                <span className={`text-xs sm:text-sm font-bold text-center leading-tight line-clamp-2 ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
                                   {opt.name}
                                 </span>
                                 {priceLabel && (
-                                  <span className={`text-[10px] mt-0.5 font-medium text-center leading-tight ${isSelected ? 'text-primary/80' : 'text-gray-400'}`}>
+                                  <span className={`text-[11px] sm:text-xs mt-1 font-semibold text-center leading-tight ${isSelected ? 'text-primary/85' : 'text-gray-500'}`}>
                                     {priceLabel}
                                   </span>
                                 )}
@@ -1117,7 +1117,7 @@ export default function ProductDetailPage() {
                                 key={opt.id}
                                 type="button"
                                 onClick={() => selectOption(group.id, opt.id)}
-                                className={`px-4 py-2 rounded-full border-2 text-sm font-semibold transition focus:outline-none inline-flex items-center
+                                className={`px-4 py-2.5 rounded-full border-2 text-base font-bold transition focus:outline-none inline-flex items-center
                                   ${isSelected
                                     ? 'bg-primary border-primary text-white shadow-sm'
                                     : 'border-gray-200 text-gray-700 hover:border-primary hover:text-primary bg-white'
@@ -1126,7 +1126,7 @@ export default function ProductDetailPage() {
                                 {isSelected && <Check size={13} strokeWidth={3} className="mr-1 shrink-0" />}
                                 {opt.name}
                                 {priceLabel && (
-                                  <span className={`ml-1.5 text-xs font-normal ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
+                                  <span className={`ml-1.5 text-sm font-semibold ${isSelected ? 'text-white/85' : 'text-gray-500'}`}>
                                     {priceLabel}
                                   </span>
                                 )}
