@@ -4,11 +4,19 @@ import { useCartStore } from '@/store/cartStore';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
 import ProductImageBadges from '@/components/product/ProductImageBadges';
 import { getApiErrorDetail } from '@/lib/apiError';
+import { fallbackOnError, srcSetFor } from '@/lib/imageVariants';
 import type { Product } from '@/types';
 
 const SECONDARY = '#16A34A';
 
-export default function ProductCard({ product }: { product: Product }) {
+export default function ProductCard({
+  product,
+  priority = false,
+}: {
+  product: Product;
+  /** Above-the-fold cards: eager-load with high fetch priority. */
+  priority?: boolean;
+}) {
   const addItem = useCartStore((s) => s.addItem);
   const navigate = useNavigate();
   const hasVariants = Boolean(
@@ -51,16 +59,26 @@ export default function ProductCard({ product }: { product: Product }) {
         Desktop → aspect-square  (already square on sm+)
       */}
       <div className="relative aspect-square overflow-hidden bg-gray-50">
-        {product.images?.[0] ? (
-          <img
-            src={product.images?.[0]}
-            alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-full h-full bg-gray-100" />
-        )}
+        {(() => {
+          const variants = product.image_urls?.[0];
+          const fallback = product.images?.[0];
+          if (!variants && !fallback) return <div className="w-full h-full bg-gray-100" />;
+          return (
+            <img
+              src={variants?.card ?? fallback}
+              srcSet={srcSetFor(variants)}
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              width={800}
+              height={800}
+              alt={product.name}
+              fetchPriority={priority ? 'high' : 'auto'}
+              loading={priority ? undefined : 'lazy'}
+              decoding="async"
+              onError={fallbackOnError(fallback)}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+          );
+        })()}
 
         <ProductImageBadges product={product} />
       </div>

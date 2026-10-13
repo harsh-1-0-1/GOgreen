@@ -21,10 +21,11 @@ import { useBanners } from '@/hooks/useBanners';
 import { STORE_LEGAL } from '@/lib/branding';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
-import type { Banner, Category, VariantGroup, VariantOption } from '@/types';
+import type { Banner, Category, ImageVariantSet, VariantGroup, VariantOption } from '@/types';
 import { useStories } from '@/hooks/useStories';
 import { StoriesCarousel } from '@/components/stories/StoriesCarousel';
 import { getApiErrorDetail } from '@/lib/apiError';
+import { fallbackOnError, srcSetFor, variantLookup } from '@/lib/imageVariants';
 import { formatPotPrice, potPriceForOption, exactPotPrice, gridGroupIds } from '@/lib/potPrice';
 
 /** Shown when an option genuinely costs nothing. Data-driven rather than a hardcoded
@@ -225,10 +226,12 @@ function MobileGallery({
   images,
   activeIndex,
   onActiveChange,
+  variants,
 }: {
   images: string[];
   activeIndex: number;
   onActiveChange: (i: number) => void;
+  variants?: Record<string, ImageVariantSet>;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -392,7 +395,9 @@ function MobileGallery({
             <div className="w-full aspect-square bg-gray-100" />
           </div>
         ) : (
-          list.map((img, i) => (
+          list.map((img, i) => {
+          const set = variants?.[img];
+          return (
           <div
             key={i}
             role="group"
@@ -402,14 +407,22 @@ function MobileGallery({
             className="w-full shrink-0"
           >
             <img
-              src={img}
+              src={set?.card ?? img}
+              srcSet={srcSetFor(set)}
+              sizes="100vw"
+              width={800}
+              height={800}
               alt={`Product image ${i + 1}`}
               className="w-full aspect-square object-cover"
-              loading="lazy"
+              loading={i === 0 ? 'eager' : 'lazy'}
+              fetchPriority={i === 0 ? 'high' : 'auto'}
+              decoding="async"
+              onError={fallbackOnError(img)}
               draggable={false}
             />
           </div>
-          ))
+          );
+          })
         )}
       </div>
       
@@ -444,19 +457,25 @@ function DesktopGallery({
   images,
   activeIndex,
   onActiveChange,
+  variants,
 }: {
   images: string[];
   activeIndex: number;
   onActiveChange: (i: number) => void;
+  variants?: Record<string, ImageVariantSet>;
 }) {
   const list = images;
+  const active = list[activeIndex];
+  const activeSet = active ? variants?.[active] : undefined;
 
   return (
     <div className="flex gap-3">
       {/* Vertical thumbnail strip — only shown when there are multiple images */}
       {list.length > 1 && (
         <div className="flex flex-col gap-2 overflow-y-auto scrollbar-hide max-h-[520px] lg:max-h-[600px] shrink-0">
-          {list.map((img, i) => (
+          {list.map((img, i) => {
+            const set = variants?.[img];
+            return (
             <button
               key={i}
               onClick={() => onActiveChange(i)}
@@ -464,15 +483,37 @@ function DesktopGallery({
                 i === activeIndex ? 'border-primary' : 'border-transparent hover:border-gray-300'
               }`}
             >
-              <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
+              <img
+                src={set?.thumb ?? img}
+                width={80}
+                height={80}
+                alt=""
+                className="w-full h-full object-cover"
+                loading="lazy"
+                decoding="async"
+                onError={fallbackOnError(img)}
+              />
             </button>
-          ))}
+            );
+          })}
         </div>
       )}
       {/* Main image */}
       <div className="flex-1 aspect-square rounded-2xl overflow-hidden bg-gray-50">
-        {list[activeIndex] ? (
-          <img src={list[activeIndex]} alt="Product" className="w-full h-full object-cover" loading="lazy" />
+        {active ? (
+          <img
+            src={activeSet?.detail ?? active}
+            srcSet={srcSetFor(activeSet)}
+            sizes="(max-width: 1024px) 45vw, 600px"
+            width={800}
+            height={800}
+            alt="Product"
+            className="w-full h-full object-cover"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            onError={fallbackOnError(active)}
+          />
         ) : (
           <div className="w-full h-full bg-gray-100" />
         )}
@@ -793,6 +834,10 @@ export default function ProductDetailPage() {
     galleryImages = product.images ?? [];
   }
 
+  // Product-level image variants, keyed by original URL. Variant-option images
+  // aren't in here, so they simply render at their original size.
+  const galleryVariants = variantLookup(product.image_urls);
+
   // Disable Add to Cart: requires a selection for EVERY group — per-combination stock
   // needs a full combo key, so an unselected group (even a legacy `required: false`
   // one) leaves the configuration incomplete. Zero groups = simple product = enabled.
@@ -888,7 +933,7 @@ export default function ProductDetailPage() {
     <div ref={galleryRef} className="pb-20 md:pb-0 scroll-mt-[100px] sm:scroll-mt-[110px] lg:scroll-mt-[120px]">
       {/* Mobile image gallery */}
       <div className="md:hidden">
-        <MobileGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} />
+        <MobileGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} variants={galleryVariants} />
       </div>
 
       <div className="mx-auto w-full max-w-[1720px] px-5 sm:px-8 lg:px-12 xl:px-16 2xl:px-20 pt-2 pb-4 sm:pt-3 sm:pb-8">
@@ -904,7 +949,7 @@ export default function ProductDetailPage() {
         <div className="grid md:grid-cols-2 gap-6 lg:gap-10 md:items-start">
           {/* Desktop gallery — sticky so it stays in view while the right column scrolls */}
           <div className="hidden md:block md:sticky md:top-[var(--sticky-header-offset,0px)] md:transition-[top] md:duration-300">
-            <DesktopGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} />
+            <DesktopGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} variants={galleryVariants} />
           </div>
 
           <div className="space-y-3.5 sm:space-y-4">

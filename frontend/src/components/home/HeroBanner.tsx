@@ -85,7 +85,7 @@ export default function HeroBanner() {
         }}
       >
         {slides.map((slide, i) => {
-          const slideInner = <ResponsiveBannerImage banner={slide} loading={i === 0 ? 'eager' : 'lazy'} onError={(e) => { e.currentTarget.style.display = 'none'; }} />;
+          const slideInner = <ResponsiveBannerImage banner={slide} loading={i === 0 ? 'eager' : 'lazy'} fetchPriority={i === 0 ? 'high' : undefined} onError={(e) => { e.currentTarget.style.display = 'none'; }} />;
 
           const slideStyle = { backgroundColor: slide.bg_color };
 

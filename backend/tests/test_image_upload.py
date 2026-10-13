@@ -129,6 +129,7 @@ def test_response_serializers_resolve_keys(monkeypatch):
 
     category = CategoryResponse.model_validate(
         {"id": 2, "name": "Plants", "slug": "plants", "parent_id": None,
-         "image_url": "plantoga/categories/2/a.jpg", "is_active": True}
+         "image_url": "plantoga/categories/2/a.jpg", "mobile_image_url": None,
+         "is_active": True, "sort_order": 0}
     )
     assert category.model_dump()["image_url"].startswith("https://cdn.test/")

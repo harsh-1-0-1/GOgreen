@@ -1,5 +1,6 @@
 import type { SyntheticEvent } from 'react';
 
+import { srcSetFromMap } from '@/lib/imageVariants';
 import type { Banner } from '@/types';
 
 // Matches Tailwind's `sm` breakpoint — the same cutoff the storefront layouts
@@ -7,9 +8,13 @@ import type { Banner } from '@/types';
 const DESKTOP_MEDIA = '(min-width: 640px)';
 
 type ResponsiveBannerImageProps = {
-  banner: Pick<Banner, 'image_url' | 'image_url_web'>;
+  banner: Pick<
+    Banner,
+    'image_url' | 'image_url_web' | 'image_urls' | 'image_urls_web'
+  >;
   className?: string;
   loading?: 'eager' | 'lazy';
+  fetchPriority?: 'high' | 'low' | 'auto';
   onLoad?: (e: SyntheticEvent<HTMLImageElement>) => void;
   onError?: (e: SyntheticEvent<HTMLImageElement>) => void;
 };
@@ -29,22 +34,29 @@ export default function ResponsiveBannerImage({
   banner,
   className = 'absolute inset-0 h-full w-full object-cover',
   loading,
+  fetchPriority,
   onLoad,
   onError,
 }: ResponsiveBannerImageProps) {
   const mobileSrc = banner.image_url;
   const webSrc = banner.image_url_web;
+  const webSrcSet = srcSetFromMap(banner.image_urls_web);
 
   if (!mobileSrc && !webSrc) return null;
 
   return (
     <picture className="absolute inset-0 block h-full w-full">
-      {webSrc && <source media={DESKTOP_MEDIA} srcSet={webSrc} />}
+      {webSrc && (
+        <source media={DESKTOP_MEDIA} srcSet={webSrcSet ?? webSrc} />
+      )}
       <img
         src={mobileSrc || (webSrc as string)}
+        srcSet={srcSetFromMap(banner.image_urls)}
         alt=""
         className={className}
         loading={loading}
+        fetchPriority={fetchPriority}
+        decoding="async"
         onLoad={onLoad}
         onError={onError}
       />

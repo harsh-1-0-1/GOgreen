@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, field_serializer, model_validator
 
 
 class BannerBase(BaseModel):
@@ -40,8 +40,29 @@ class BannerOut(BannerBase):
     id: int
     image_url: Optional[str] = None
     image_url_web: Optional[str] = None
+    # Generated WebP variants per image: {original, w1600, w1920}. Empty when the
+    # image is external or not yet migrated.
+    image_urls: dict[str, str] = Field(default_factory=dict)
+    image_urls_web: dict[str, str] = Field(default_factory=dict)
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+    @model_validator(mode="after")
+    def build_variant_maps(self) -> "BannerOut":
+        from app.utils.image_upload import resolve_image_url
+
+        def _map(val: Optional[str]) -> dict[str, str]:
+            if not val:
+                return {}
+            return {
+                "original": resolve_image_url(val),
+                "w1600": resolve_image_url(val, "w1600"),
+                "w1920": resolve_image_url(val, "w1920"),
+            }
+
+        self.image_urls = _map(self.image_url)
+        self.image_urls_web = _map(self.image_url_web)
+        return self
 
     @field_serializer("image_url")
     def serialize_image_url(self, val: Optional[str]) -> Optional[str]:

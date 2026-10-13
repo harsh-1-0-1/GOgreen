@@ -300,6 +300,9 @@ class ProductResponse(BaseModel):
     categories: list[CategoryBrief] = []
     additional_category_ids: list[int] = []
     images: list[str]
+    # Parallel to `images` (same order). Each entry carries the original plus the
+    # generated WebP variant URLs. Empty when no variants exist for an image.
+    image_urls: list[dict[str, str]] = Field(default_factory=list)
     tags: list[str]
     care_tips: list[str]
     how_to_guide: str | None
@@ -331,6 +334,26 @@ class ProductResponse(BaseModel):
     # Applies to: variants.default_image, variants.image_map[*], variants.pot_types[*].image_url
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def build_image_urls(self) -> "ProductResponse":
+        """Derive variant URLs from the raw storage keys in `images`.
+
+        Runs before serialization, so `self.images` still holds relative keys.
+        External URLs pass through unchanged (resolve_image_url is idempotent).
+        """
+        from app.utils.image_upload import resolve_image_url
+
+        self.image_urls = [
+            {
+                "original": resolve_image_url(img),
+                "thumb": resolve_image_url(img, "thumb"),
+                "card": resolve_image_url(img, "card"),
+                "detail": resolve_image_url(img, "detail"),
+            }
+            for img in (self.images or [])
+        ]
+        return self
 
     @field_serializer("images")
     def serialize_images(self, images: list[str]) -> list[str]:

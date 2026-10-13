@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, Field, field_serializer, model_validator
 
 
 class CategoryCreate(BaseModel):
@@ -40,10 +40,31 @@ class CategoryResponse(BaseModel):
     parent_id: int | None
     image_url: str | None
     mobile_image_url: str | None
+    # Generated WebP variants per image: {original, thumb, card}. Empty when the
+    # image is external or not yet migrated.
+    image_urls: dict[str, str] = Field(default_factory=dict)
+    mobile_image_urls: dict[str, str] = Field(default_factory=dict)
     is_active: bool
     sort_order: int
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def build_variant_maps(self) -> "CategoryResponse":
+        from app.utils.image_upload import resolve_image_url
+
+        def _map(val: str | None) -> dict[str, str]:
+            if not val:
+                return {}
+            return {
+                "original": resolve_image_url(val),
+                "thumb": resolve_image_url(val, "thumb"),
+                "card": resolve_image_url(val, "card"),
+            }
+
+        self.image_urls = _map(self.image_url)
+        self.mobile_image_urls = _map(self.mobile_image_url)
+        return self
 
     @field_serializer("image_url")
     def serialize_image_url(self, val: str | None) -> str | None:

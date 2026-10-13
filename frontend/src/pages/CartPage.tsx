@@ -65,9 +65,12 @@ export default function CartPage() {
                 <div className="relative aspect-[4/3] overflow-hidden bg-gray-50 shrink-0">
                   <img
                     src={col.image}
+                    srcSet={col.srcSet}
+                    sizes="(max-width: 768px) 50vw, 33vw"
                     alt={col.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
+                    decoding="async"
                   />
                   <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors" />
                 </div>

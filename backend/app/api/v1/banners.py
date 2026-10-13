@@ -15,7 +15,14 @@ from app.core.security import require_admin
 from app.db.models import Banner
 from app.db.session import get_db
 from app.schemas.banner import BannerOut, BannerReorderRequest
-from app.utils.image_upload import delete_image_file, extract_relative_key, upload_image_file, resolve_image_url, generate_image_key
+from app.utils.image_upload import (
+    build_variants,
+    delete_image_file,
+    extract_relative_key,
+    generate_image_key,
+    upload_image_file,
+    variant_key,
+)
 from app.utils.redis import cache_delete, cache_delete_pattern, cache_get, cache_set
 from fastapi.concurrency import run_in_threadpool
 
@@ -202,7 +209,10 @@ def _crop_and_upload_sync(banner_id: int, old_key: str, x: int, y: int, width: i
         # Generate new key for cropped image (suffix keeps web/mobile apart)
         suffix = "cropped-web" if variant == "web" else "cropped"
         new_key = generate_image_key("banners", banner_id, f"{suffix}{original_ext}")
-        
+
+        # 1600/1920 WebP siblings (clamped to the crop width, never upscaled).
+        variant_blobs = build_variants(cropped_bytes, "banners")
+
         # Upload cropped image
         if is_prod and bucket:
             # Production: Upload to S3
@@ -218,13 +228,39 @@ def _crop_and_upload_sync(banner_id: int, old_key: str, x: int, y: int, width: i
                 ContentType=content_type_map.get(pil_format, "image/png"),
                 CacheControl="public, max-age=31536000, immutable",
             )
+            for name, blob in variant_blobs.items():
+                # Variant failures are non-fatal: the cropped original is
+                # already stored and the client falls back via onError.
+                try:
+                    s3.put_object(
+                        Bucket=bucket,
+                        Key=variant_key(new_key, name),
+                        Body=blob,
+                        ContentType="image/webp",
+                        CacheControl="public, max-age=31536000, immutable",
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Banner variant upload failed for {new_key}.{name}: {exc}"
+                    )
         else:
             # Local/dev: Write to static folder
             dest = Path("static") / new_key
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(cropped_bytes)
-        
-        logger.info(f"Cropped banner image: {old_key} -> {new_key}")
+            for name, blob in variant_blobs.items():
+                try:
+                    variant_dest = Path("static") / variant_key(new_key, name)
+                    variant_dest.parent.mkdir(parents=True, exist_ok=True)
+                    variant_dest.write_bytes(blob)
+                except Exception as exc:
+                    logger.warning(
+                        f"Banner variant write failed for {new_key}.{name}: {exc}"
+                    )
+
+        logger.info(
+            f"Cropped banner image: {old_key} -> {new_key} (+{len(variant_blobs)} variants)"
+        )
         return new_key
         
     except Exception as e:

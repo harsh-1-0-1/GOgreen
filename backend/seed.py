@@ -65,8 +65,8 @@ else:
     engine = None
     async_session_factory = None
 
-UNSPLASH = "https://images.unsplash.com/photo-{id}?w=600&q=80"
-UNSPLASH_BANNER = "https://images.unsplash.com/photo-{id}?w=1400&h=300&fit=crop&crop=center&q=85"
+UNSPLASH = "https://images.unsplash.com/photo-{id}?w=800&auto=format&q=75"
+UNSPLASH_BANNER = "https://images.unsplash.com/photo-{id}?w=1400&h=300&fit=crop&crop=center&auto=format&q=75"
 
 PLANT_IMAGES = [
     UNSPLASH.format(id="1459411552884-841db9b3cc2a"),
@@ -157,15 +157,15 @@ def _make_variants(stock_per_option: int = 10) -> dict:
 
     colors = [
         {"id": oid(), "name": "Terracotta",  "price": 0,   "stock": stock_per_option,
-         "images": ["https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=600&q=80"]},
+         "images": ["https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=800&auto=format&q=75"]},
         {"id": oid(), "name": "Sage Green",  "price": 0,   "stock": stock_per_option,
-         "images": ["https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80"]},
+         "images": ["https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=800&auto=format&q=75"]},
         {"id": oid(), "name": "White",       "price": 0,   "stock": stock_per_option,
-         "images": ["https://images.unsplash.com/photo-1485955900006-d5666c72437d?w=600&q=80"]},
+         "images": ["https://images.unsplash.com/photo-1485955900006-d5666c72437d?w=800&auto=format&q=75"]},
         {"id": oid(), "name": "Charcoal",    "price": 0,   "stock": stock_per_option,
-         "images": ["https://images.unsplash.com/photo-1520412099551-62b6bafeb5bb?w=600&q=80"]},
+         "images": ["https://images.unsplash.com/photo-1520412099551-62b6bafeb5bb?w=800&auto=format&q=75"]},
         {"id": oid(), "name": "Dusty Pink",  "price": 0,   "stock": stock_per_option,
-         "images": ["https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=600&q=80"]},
+         "images": ["https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&auto=format&q=75"]},
     ]
     materials = [
         {"id": oid(), "name": "Plastic",       "price": 0,   "stock": stock_per_option},
@@ -179,7 +179,7 @@ def _make_variants(stock_per_option: int = 10) -> dict:
             {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Pot Colour",   "options": colors},
             {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Pot Material", "options": materials},
         ],
-        "default_image": "https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80",
+        "default_image": "https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=800&auto=format&q=75",
     }
 
 
@@ -195,13 +195,13 @@ def _make_variants_with_sizes(stock_per_option: int = 10) -> dict:
     ]
     colors = [
         {"id": oid(), "name": "Terracotta",  "price": 0,  "stock": stock_per_option,
-         "images": ["https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=600&q=80"]},
+         "images": ["https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=800&auto=format&q=75"]},
         {"id": oid(), "name": "Sage Green",  "price": 0,  "stock": stock_per_option,
-         "images": ["https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80"]},
+         "images": ["https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=800&auto=format&q=75"]},
         {"id": oid(), "name": "White",       "price": 0,  "stock": stock_per_option,
-         "images": ["https://images.unsplash.com/photo-1485955900006-d5666c72437d?w=600&q=80"]},
+         "images": ["https://images.unsplash.com/photo-1485955900006-d5666c72437d?w=800&auto=format&q=75"]},
         {"id": oid(), "name": "Charcoal",    "price": 0,  "stock": stock_per_option,
-         "images": ["https://images.unsplash.com/photo-1520412099551-62b6bafeb5bb?w=600&q=80"]},
+         "images": ["https://images.unsplash.com/photo-1520412099551-62b6bafeb5bb?w=800&auto=format&q=75"]},
     ]
     materials = [
         {"id": oid(), "name": "Plastic",       "price": 0,   "stock": stock_per_option},
@@ -215,7 +215,7 @@ def _make_variants_with_sizes(stock_per_option: int = 10) -> dict:
             {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Pot Colour",   "options": colors},
             {"id": f"vg_{uuid.uuid4().hex[:8]}", "label": "Select Pot Material", "options": materials},
         ],
-        "default_image": "https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=600&q=80",
+        "default_image": "https://images.unsplash.com/photo-1501004318776-cd2ba00a9cee?w=800&auto=format&q=75",
     }
 
 
@@ -356,7 +356,7 @@ BLOG_POSTS = [
         "title": "10 Types of Fertilizers That Help Grow Plants",
         "excerpt": "From vermicompost to liquid seaweed, understand which fertilizer works best for your garden and when to apply it.",
         "category": BlogCategory.GROW,
-        "cover": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1200&q=80",
+        "cover": "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1200&auto=format&q=75",
         "author": "Plantoga Team",
         "content": """## Choosing the Right Fertilizer
 
@@ -388,7 +388,7 @@ Always water the soil before applying fertilizer to avoid root burn.""",
         "title": "13 Ways to Save Your Drying or Dead Plant",
         "excerpt": "Don't give up on your wilting houseplant just yet. Here are 13 proven techniques to revive even the most neglected greenery.",
         "category": BlogCategory.CARE,
-        "cover": "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=1200&q=80",
+        "cover": "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=1200&auto=format&q=75",
         "author": "Plantoga Team",
         "content": """## Is Your Plant Dying? Here's How to Save It
 
@@ -425,7 +425,7 @@ With a little attention, most houseplants bounce back beautifully.""",
         "title": "How to Set Up a Balcony Garden",
         "excerpt": "Transform your apartment balcony into a lush green retreat with this step-by-step guide to container gardening.",
         "category": BlogCategory.DIY,
-        "cover": "https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=1200&q=80",
+        "cover": "https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=1200&auto=format&q=75",
         "author": "Plantoga Team",
         "content": """## Your Balcony Garden, Step by Step
 
@@ -461,7 +461,7 @@ Hang planters on railings, use wall-mounted pockets, or install a trellis for cl
         "title": "5 Plants That Purify Indoor Air",
         "excerpt": "NASA research shows these houseplants actively remove toxins like formaldehyde and benzene from your home.",
         "category": BlogCategory.TIPS,
-        "cover": "https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=1200&q=80",
+        "cover": "https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=1200&auto=format&q=75",
         "author": "Plantoga Team",
         "content": """## Breathe Easier with These Air-Purifying Plants
 
@@ -647,7 +647,7 @@ async def seed(catalog_only: bool = False) -> None:
                     position=0,
                     bg_color="#F5F0E8",
                     text_color="#1B4332",
-                    image_url="https://images.unsplash.com/photo-1545241047-6083a3684587?w=1400&h=600&fit=crop&crop=center",
+                    image_url="https://images.unsplash.com/photo-1545241047-6083a3684587?w=1400&h=600&fit=crop&crop=center&auto=format&q=75",
                 ),
                 Banner(
                     title="Less care. More green.",
@@ -658,7 +658,7 @@ async def seed(catalog_only: bool = False) -> None:
                     position=1,
                     bg_color="#E8F0E8",
                     text_color="#1B4332",
-                    image_url="https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&h=600&fit=crop&crop=center",
+                    image_url="https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=1400&h=600&fit=crop&crop=center&auto=format&q=75",
                 ),
                 Banner(
                     title="New to plants?",
@@ -669,7 +669,7 @@ async def seed(catalog_only: bool = False) -> None:
                     position=2,
                     bg_color="#1B4332",
                     text_color="#FFFFFF",
-                    image_url="https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&h=600&fit=crop&crop=center",
+                    image_url="https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=1400&h=600&fit=crop&crop=center&auto=format&q=75",
                 ),
                 Banner(
                     title="Free Delivery Above ₹499 | Shop Now",

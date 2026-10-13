@@ -14,6 +14,10 @@ export interface Category {
   parent_id: number | null;
   image_url: string | null;
   mobile_image_url: string | null;
+  /** Generated WebP variants for `image_url`: {original, thumb, card}. */
+  image_urls?: Record<string, string>;
+  /** Generated WebP variants for `mobile_image_url`. */
+  mobile_image_urls?: Record<string, string>;
   is_active: boolean;
   sort_order: number;
   children?: Category[];
@@ -78,6 +82,14 @@ export interface ProductCategory {
   parent_id: number | null;
 }
 
+/** Original URL plus generated WebP variant URLs for one image. */
+export interface ImageVariantSet {
+  original: string;
+  thumb: string;
+  card: string;
+  detail: string;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -95,6 +107,8 @@ export interface Product {
   /** Categories beyond the primary one — the editable extra set. */
   additional_category_ids?: number[];
   images: string[];
+  /** Parallel to `images` (same order): original + generated WebP variants. */
+  image_urls?: ImageVariantSet[];
   tags: string[];
   care_tips: string[];
   how_to_guide: string | null;
@@ -498,6 +512,10 @@ export interface Banner {
   image_url?: string;
   /** Wide desktop image. Falls back to `image_url` when not uploaded. */
   image_url_web?: string | null;
+  /** Generated WebP variants for the mobile image: {original, w1600, w1920}. */
+  image_urls?: Record<string, string>;
+  /** Generated WebP variants for the wide image: {original, w1600, w1920}. */
+  image_urls_web?: Record<string, string>;
   badge_text?: string;
   bg_color: string;
   text_color: string;
