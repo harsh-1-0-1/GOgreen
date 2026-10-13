@@ -149,13 +149,13 @@ function ShopMegaMenu({
 
               return (
                 <div key={cat.href}>
-                  <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-emerald-50/60 active:bg-emerald-50/80 transition-all duration-150 group">
+                  <div className="flex items-center gap-3 px-2.5 py-2 rounded-lg hover:bg-emerald-50/60 active:bg-emerald-50/80 transition-all duration-150 group">
                     <Link
                       to={cat.href}
                       onClick={onClose}
-                      className="flex items-center gap-2.5 flex-1"
+                      className="flex items-center gap-3 flex-1"
                     >
-                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 border border-gray-100/60 shrink-0">
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 border border-gray-100/60 shrink-0">
                         {cat.img ? (
                           <img
                             src={cat.img}
@@ -164,10 +164,10 @@ function ShopMegaMenu({
                             loading="lazy"
                           />
                         ) : (
-                          <div className="w-full h-full bg-primary/10 flex items-center justify-center text-xs">🌿</div>
+                          <div className="w-full h-full bg-primary/10 flex items-center justify-center text-sm">🌿</div>
                         )}
                       </div>
-                      <span className="text-[14px] font-semibold text-gray-800 group-hover:text-primary transition-colors leading-tight">
+                      <span className="text-[16px] font-extrabold text-gray-800 group-hover:text-primary transition-colors leading-tight">
                         {cat.label}
                       </span>
                     </Link>
@@ -181,7 +181,7 @@ function ShopMegaMenu({
                         aria-label={isExpanded ? 'Collapse' : 'Expand'}
                       >
                         <ChevronDown
-                          size={14}
+                          size={16}
                           className={clsx(
                             'text-gray-500 transition-transform duration-200',
                             isExpanded && 'rotate-180'
@@ -193,13 +193,13 @@ function ShopMegaMenu({
 
                   {/* Subcategories list */}
                   {hasSubcategories && isExpanded && (
-                    <div className="ml-10 mt-1 mb-2 space-y-0.5 animate-dropdown">
+                    <div className="ml-12 mt-1 mb-2 space-y-0.5 animate-dropdown">
                       {subcategories.map((subcat) => (
                         <Link
                           key={subcat.slug}
                           to={`/products?category=${subcat.slug}`}
                           onClick={onClose}
-                          className="block px-2 py-1 text-[11.5px] font-medium text-gray-600 hover:text-primary hover:bg-emerald-50/40 rounded transition-all"
+                          className="block px-2 py-1 text-[12.5px] font-semibold text-gray-600 hover:text-primary hover:bg-emerald-50/40 rounded transition-all"
                         >
                           {subcat.name}
                         </Link>
@@ -890,7 +890,7 @@ export default function Navbar() {
       {/* ================================================================ */}
       <nav className="hidden lg:block border-t border-gray-100 relative">
         <div className="mx-auto px-4 sm:px-6 lg:px-10 xl:px-16">
-          <ul className="flex items-center justify-center text-[14px] font-bold tracking-[0.03em] gap-0">
+          <ul className="flex items-center justify-center text-[15px] font-extrabold tracking-[0.03em] gap-0">
             {categoryNavItems.map((item) => {
               const hasDropdown = item.groups && item.groups.length > 0;
               const isOpen = activeDropdown === item.label;

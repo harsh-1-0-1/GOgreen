@@ -113,11 +113,11 @@ const CROP_PRESETS: Record<string, CropPreset> = {
     hint: '600×900px — Portrait banner beside the comparison table',
   },
   care_card: {
-    label: '🌿 Care Card (2:1)',
-    aspect: 2 / 1,
-    width: 600,
+    label: '🌿 Care Card (3:1)',
+    aspect: 3 / 1,
+    width: 900,
     height: 300,
-    hint: '600×300px — Plant care info card shown in the product detail buy-box column.',
+    hint: '900×300px — Wide plant care info card shown in the product detail buy-box column.',
   },
   custom: {
     label: 'Custom Size',

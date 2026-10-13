@@ -1627,9 +1627,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                 {/* Care Card Image */}
                 <div className="border-t pt-4 space-y-2">
                   <label className="text-xs font-semibold text-gray-700 block">Care Card Image</label>
-                  <p className="text-[10px] text-gray-400">Optional image displayed above the care card tiles.</p>
+                  <p className="text-[10px] text-gray-400">Optional wide image displayed above the care card tiles. Crops to 3:1.</p>
                   <div className="flex gap-3 items-center">
-                    <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
+                    <div className="h-16 w-48 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
                       {careCardImageUrl
                         ? <img src={careCardImageUrl} alt="Care card" className="h-full w-full object-cover" />
                         : <ImageIcon size={22} className="text-gray-300" />}
