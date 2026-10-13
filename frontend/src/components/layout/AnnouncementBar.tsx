@@ -4,9 +4,6 @@ import { Link } from 'react-router-dom';
 import { useBanners } from '@/hooks/useBanners';
 import { DEFAULT_SHIPPING_SETTINGS, useShippingSettings } from '@/hooks/useSettings';
 
-const COOKIE_NAME = 'bar_dismissed';
-const COOKIE_MAX_AGE = 86400;
-
 const FALLBACK_MESSAGES = [
   {
     title: 'Free Delivery — Shop Now',
@@ -15,15 +12,6 @@ const FALLBACK_MESSAGES = [
     text_color: '#FFFFFF',
   },
 ];
-
-function getCookie(name: string): string | undefined {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match?.[1];
-}
-
-function setCookie(name: string, value: string, maxAge: number) {
-  document.cookie = `${name}=${value}; path=/; max-age=${maxAge}; SameSite=Lax`;
-}
 
 const Separator = () => (
   <span
@@ -37,9 +25,7 @@ const Separator = () => (
 export default function AnnouncementBar() {
   const { data: banners = [] } = useBanners('announcement');
   const { data: shippingSettings = DEFAULT_SHIPPING_SETTINGS } = useShippingSettings();
-  const [visible, setVisible] = useState(
-    () => getCookie(COOKIE_NAME) !== '1',
-  );
+  const [visible, setVisible] = useState(true);
 
   if (!visible) return null;
 
@@ -48,13 +34,13 @@ export default function AnnouncementBar() {
     : [{ ...FALLBACK_MESSAGES[0], title: `Free Delivery Above ₹${shippingSettings.free_shipping_threshold} — Shop Now` }];
 
   function dismiss() {
-    setCookie(COOKIE_NAME, '1', COOKIE_MAX_AGE);
     setVisible(false);
   }
 
   const barBgColor = messages[0]?.bg_color || '#16A34A';
   const barTextColor = messages[0]?.text_color || '#FFFFFF';
-  const marqueeItems = Array.from({ length: 4 }, () => messages).flat();
+  const repeatCount = messages.length === 1 ? 12 : 4;
+  const marqueeItems = Array.from({ length: repeatCount }, () => messages).flat();
   const messageStrip = marqueeItems.map((msg, i) => (
     <span key={`${i}-${msg.title}`} className="inline-flex items-center whitespace-nowrap">
       {msg.cta_link ? (
