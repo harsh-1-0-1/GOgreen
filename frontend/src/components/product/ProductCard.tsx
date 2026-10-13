@@ -73,7 +73,7 @@ export default function ProductCard({ product }: { product: Product }) {
       <div className="flex flex-col flex-1 px-3 pt-2 pb-3 sm:px-4 sm:pt-3 sm:pb-4 gap-1">
 
         {/* Product name — no forced min-height so name flows naturally */}
-        <h3 className="text-sm font-medium leading-snug text-gray-800 line-clamp-2 group-hover:text-primary transition-colors">
+        <h3 className="text-base sm:text-lg font-bold leading-snug text-gray-900 line-clamp-2 group-hover:text-primary transition-colors">
           {product.name}
         </h3>
 

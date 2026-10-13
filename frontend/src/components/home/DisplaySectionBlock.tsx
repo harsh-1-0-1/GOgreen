@@ -56,7 +56,7 @@ function ProductTile({ product }: { product: Product }) {
       </div>
 
       <div className="flex flex-col flex-1 px-3 sm:px-4 pt-2 pb-3 sm:pb-4 gap-1">
-        <h3 className="text-sm sm:text-base font-medium text-gray-800 line-clamp-2 leading-snug">
+        <h3 className="text-base sm:text-lg font-bold text-gray-900 line-clamp-2 leading-snug">
           {product.name}
         </h3>
 

@@ -489,7 +489,7 @@ function CareTips({ tips }: { tips: string[] }) {
     <div className="border border-primary/20 rounded-xl overflow-hidden bg-white">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-4 text-sm font-semibold text-primary hover:bg-primary/5 transition touch-target"
+        className="w-full flex items-center justify-between p-4 text-sm font-semibold bg-primary text-white hover:bg-primary-dark transition touch-target"
       >
         Plant Care Tips
         {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
