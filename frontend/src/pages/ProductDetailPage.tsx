@@ -891,7 +891,7 @@ export default function ProductDetailPage() {
         <MobileGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} />
       </div>
 
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 pt-2 pb-4 sm:pt-3 sm:pb-8">
+      <div className="w-full px-2 sm:px-3 lg:px-4 pt-2 pb-4 sm:pt-3 sm:pb-8">
         {/* Breadcrumb */}
         <nav className="text-xs sm:text-sm text-gray-400 mb-3 sm:mb-4 flex items-center gap-1.5">
           <Link to="/" className="hover:text-primary">Home</Link>
@@ -1300,7 +1300,7 @@ export default function ProductDetailPage() {
                 {/* Scroll row: negative margin lets cards bleed to page edge; padding restores the gap */}
                 <div
                   ref={similarScrollRef}
-                  className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto scrollbar-hide pb-2 scroll-smooth -mx-3 px-3 sm:-mx-4 sm:px-4"
+                  className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto scrollbar-hide pb-2 scroll-smooth -mx-2 px-2 sm:-mx-3 sm:px-3 lg:-mx-4 lg:px-4"
                 >
                   {similarProducts.map((p) => (
                     <div key={p.id} className="shrink-0 w-[47vw] min-w-[160px] sm:w-56 md:w-64">

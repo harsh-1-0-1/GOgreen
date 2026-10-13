@@ -612,7 +612,7 @@ export default function ProductsPage() {
     (maxPrice ? 1 : 0);
 
   return (
-    <div className="w-full px-3 sm:px-6 xl:px-10 py-3 sm:py-4">
+    <div className="w-full px-2 sm:px-3 lg:px-4 py-3 sm:py-4">
       {isTrendingPage && (
         <TrendingPromoBanner
           banners={trendingBanners}
@@ -822,7 +822,7 @@ export default function ProductsPage() {
       {/* ── Product grid (full width) ──────────────────────────────────── */}
       <ErrorBoundary>
         {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
             {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         ) : data?.items.length === 0 ? (
@@ -831,7 +831,7 @@ export default function ProductsPage() {
             <button onClick={resetFilters} className="text-sm text-primary hover:underline">Reset Filters</button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
             {data?.items.map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
         )}
