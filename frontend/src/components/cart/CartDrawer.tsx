@@ -127,8 +127,16 @@ export default function CartDrawer() {
                     <img
                       src={item.resolved_image_url || item.product.images?.[0]}
                       alt={item.product.name}
-                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover shrink-0"
-                      loading="lazy"
+                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover shrink-0 bg-white"
+                      onError={(event) => {
+                        const image = event.currentTarget;
+                        const productImage = item.product.images?.[0];
+                        if (productImage && image.src !== productImage) {
+                          image.src = productImage;
+                        } else {
+                          image.style.visibility = 'hidden';
+                        }
+                      }}
                     />
                   ) : (
                     <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg bg-gray-100 shrink-0" />
