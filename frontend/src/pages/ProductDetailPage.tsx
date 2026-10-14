@@ -1404,7 +1404,7 @@ export default function ProductDetailPage() {
                   <img
                     src={productDetailBanner.image_url}
                     alt={productDetailBanner.title}
-                    className="w-full h-full object-cover rounded-2xl"
+                    className="w-full h-auto object-cover rounded-2xl md:h-full"
                     loading="lazy"
                   />
                 </Link>
@@ -1416,7 +1416,7 @@ export default function ProductDetailPage() {
                   <img
                     src={productDetailBanner.image_url}
                     alt={productDetailBanner.title}
-                    className="w-full h-full object-cover rounded-2xl"
+                    className="w-full h-auto object-cover rounded-2xl md:h-full"
                     loading="lazy"
                   />
                 </div>
