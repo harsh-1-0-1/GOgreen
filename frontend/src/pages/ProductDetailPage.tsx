@@ -919,7 +919,11 @@ export default function ProductDetailPage() {
   const productStripBanner = selectProductTypeBanner(productStripBanners, categories, product.category_id);
   const whyPlantogaBanner = selectProductTypeBanner(whyPlantogaBanners, categories, product.category_id);
   const mrp = displayOriginalPrice ?? displayPrice;
+  const bundleSpecRows = product.is_bundle && product.bundle_description
+    ? [{ label: 'Contents', value: product.bundle_description }]
+    : [];
   const productSpecs = [
+    ...(product.is_bundle ? bundleSpecRows : []),
     { label: 'Name', value: product.name },
     { label: 'Category', value: findCategoryName(categories, product.category_id) },
     { label: 'Country of Origin', value: STORE_LEGAL.countryOfOrigin },
@@ -1314,7 +1318,7 @@ export default function ProductDetailPage() {
 
             <PlantogaPromise bannerImage={product.promise_banner_image} />
 
-            <ProductSpecification specs={productSpecs} />
+            <ProductSpecification specs={productSpecs} title={product.is_bundle ? 'About the Bundle' : 'Product Specification'} />
           </div>
         </div>
 

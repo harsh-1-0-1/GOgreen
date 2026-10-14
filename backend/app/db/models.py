@@ -204,6 +204,12 @@ class Product(Base):
     bestseller_color_override: Mapped[str | None] = mapped_column(
         String(20), nullable=True, default=None
     )
+    # ── Bundle flag ───────────────────────────────────────────────────────
+    # When true, the product is a bundle of multiple items. The product detail
+    # page replaces "Product Specification" with "About the Bundle" and renders
+    # `bundle_description` as the bundle contents / summary.
+    is_bundle: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    bundle_description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     category: Mapped["Category"] = relationship(back_populates="products")
     additional_categories: Mapped[list["Category"]] = relationship(

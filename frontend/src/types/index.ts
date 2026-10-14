@@ -135,6 +135,11 @@ export interface Product {
    */
   bestseller_label_override?: string | null;
   bestseller_color_override?: string | null;
+  // ── Bundle ────────────────────────────────────────────────────────────
+  /** When true this product is a bundle; the detail page shows "About the Bundle" instead of "Product Specification". */
+  is_bundle?: boolean;
+  /** Describes the bundle contents. Rendered in the "About the Bundle" accordion on the product detail page. */
+  bundle_description?: string | null;
   // ── Aggregated review data (computed by API) ──────────────────────────
   avg_rating?: number | null;
   review_count?: number;

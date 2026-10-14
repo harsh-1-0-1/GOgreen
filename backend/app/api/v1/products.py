@@ -205,6 +205,8 @@ async def get_product_raw(
         "is_bestseller": product.is_bestseller,
         "bestseller_label_override": product.bestseller_label_override,
         "bestseller_color_override": product.bestseller_color_override,
+        "is_bundle": product.is_bundle,
+        "bundle_description": product.bundle_description,
         "created_at": product.created_at.isoformat() if product.created_at else None,
     }
 
@@ -374,6 +376,9 @@ async def create_product(
     # Null/blank = follow the category's badge config (see BestsellerOverrideIn).
     bestseller_label_override: Annotated[str | None, Form()] = None,
     bestseller_color_override: Annotated[str | None, Form()] = None,
+    # Bundle fields — must be explicit Form() params or FastAPI silently drops them
+    is_bundle: Annotated[bool, Form()] = False,
+    bundle_description: Annotated[str | None, Form()] = None,
     images: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
@@ -440,6 +445,8 @@ async def create_product(
         is_bestseller=is_bestseller,
         bestseller_label_override=bestseller_label_override,
         bestseller_color_override=bestseller_color_override,
+        is_bundle=is_bundle,
+        bundle_description=bundle_description or None,
     )
 
     # Flush first to get product.id, then upload using that id as the folder namespace.

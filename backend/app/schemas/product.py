@@ -232,6 +232,9 @@ class ProductCreate(BestsellerOverrideIn):
     # deliberately NOT re-declared here: in Pydantic a redeclared field replaces
     # the inherited one outright, silently dropping its length/pattern checks.
     is_bestseller: bool = False
+    # ── Bundle ───────────────────────────────────────────────────────────
+    is_bundle: bool = False
+    bundle_description: str | None = None
 
     @field_validator("variants")
     @classmethod
@@ -269,6 +272,9 @@ class ProductUpdate(BestsellerOverrideIn):
     related_product_ids: Optional[List[int]] = None
     # ── Image overlay badges ──────────────────────────────────────────────
     is_bestseller: bool | None = None
+    # ── Bundle ───────────────────────────────────────────────────────────
+    is_bundle: bool | None = None
+    bundle_description: str | None = None
     # The two `*_override` fields are inherited from BestsellerOverrideIn and must
     # not be redeclared here — that would drop their validation. Their three
     # states are distinct and all reachable from this form:
@@ -324,6 +330,9 @@ class ProductResponse(BaseModel):
     # purpose (see BestsellerOverrideIn): stored values pass straight through.
     bestseller_label_override: str | None = None
     bestseller_color_override: str | None = None
+    # ── Bundle ───────────────────────────────────────────────────────────
+    is_bundle: bool = False
+    bundle_description: str | None = None
     # ── Aggregated review data (computed at query time) ───────────────────
     avg_rating: float | None = None
     review_count: int = 0

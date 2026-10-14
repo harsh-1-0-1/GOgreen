@@ -192,6 +192,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     seo: false,
     related: false,
     badges: false,
+    bundle: false,
   });
 
   const toggleSection = (section: string) => {
@@ -269,6 +270,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
   // Per-product image overlay badge controls
   const [isBestseller, setIsBestseller] = useState(false);
+
+  // Per-product bundle flag and description
+  const [isBundle, setIsBundle] = useState(false);
+  const [bundleDescription, setBundleDescription] = useState('');
 
   // Per-product bestseller badge wording/colour override. A null means "not
   // overridden" and the category config decides — these are held as plain
@@ -572,6 +577,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setRelatedProductIds(p.related_product_ids || []);
     // Reset badge controls (will be overwritten by rawProduct effect on edit)
     setIsBestseller(Boolean(p.is_bestseller));
+    setIsBundle(Boolean(p.is_bundle));
+    setBundleDescription(p.bundle_description ?? '');
     setBestsellerOverrideEnabled(
       p.bestseller_label_override != null || p.bestseller_color_override != null
     );
@@ -681,6 +688,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
       // Seed badge controls from raw product
       setIsBestseller(Boolean(rawProduct.is_bestseller));
+      setIsBundle(Boolean(rawProduct.is_bundle));
+      setBundleDescription(rawProduct.bundle_description ?? '');
       const rawLabelOverride = rawProduct.bestseller_label_override ?? null;
       const rawColorOverride = rawProduct.bestseller_color_override ?? null;
       setBestsellerOverrideEnabled(rawLabelOverride != null || rawColorOverride != null);
@@ -928,6 +937,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           faqs: faqItems.filter(f => f.question.trim() && f.answer.trim()),
           related_product_ids: relatedProductIds.length > 0 ? relatedProductIds : null,
           is_bestseller: isBestseller,
+          is_bundle: isBundle,
+          bundle_description: bundleDescription.trim() || null,
           // Always sent, explicitly null when the toggle is off. The edit form
           // owns both fields, so "off" has to be a deliberate write rather than
           // an omission — omitting would preserve an existing override.
@@ -1000,6 +1011,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         if (cleanFaqs.length) fd.append('faqs', JSON.stringify(cleanFaqs));
         if (relatedProductIds.length) fd.append('related_product_ids', JSON.stringify(relatedProductIds));
         fd.append('is_bestseller', String(isBestseller));
+        fd.append('is_bundle', String(isBundle));
+        if (bundleDescription.trim()) fd.append('bundle_description', bundleDescription.trim());
         // Only appended when set, so "no override" never travels as an empty
         // string that would have to be re-interpreted server-side.
         if (savedBestsellerLabelOverride) fd.append('bestseller_label_override', savedBestsellerLabelOverride);
@@ -2712,6 +2725,52 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     ).length === 0 && (
                       <p className="px-3 py-2 text-xs text-gray-400 italic">No matching products found.</p>
                     )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Section: Bundle */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleSection('bundle')}
+              className="w-full flex items-center justify-between px-5 py-4 font-semibold text-sm text-gray-800 hover:bg-gray-50 text-left"
+            >
+              <span className="flex items-center gap-2">📦 <span>Bundle</span></span>
+              {openSections.bundle ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {openSections.bundle && (
+              <div className="p-5 border-t border-gray-100 space-y-4 bg-white">
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Mark this product as a bundle (e.g. a set of multiple plants). When enabled,
+                  the product detail page shows <strong>About the Bundle</strong> instead of
+                  &ldquo;Product Specification&rdquo;, and displays the description below inside that accordion.
+                </p>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isBundle}
+                    onChange={(e) => setIsBundle(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-xs text-gray-700">This product is a bundle</span>
+                </label>
+
+                {isBundle && (
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-gray-700">
+                      Bundle description
+                      <span className="ml-1 text-gray-400 font-normal">(shown inside the "About the Bundle" accordion)</span>
+                    </label>
+                    <textarea
+                      value={bundleDescription}
+                      onChange={(e) => setBundleDescription(e.target.value)}
+                      rows={6}
+                      placeholder={`e.g.\nSet of 6 Air Purifier Plants:\n1. Snake Plant – Golden\n2. Syngonium White Butterfly\n…`}
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-y"
+                    />
                   </div>
                 )}
               </div>
