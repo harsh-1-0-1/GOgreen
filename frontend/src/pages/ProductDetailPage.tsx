@@ -1322,12 +1322,27 @@ export default function ProductDetailPage() {
         <div className="mt-8 sm:mt-10 flex flex-col md:flex-row gap-6 lg:gap-8 items-stretch">
           {whyPlantogaBanner?.image_url && (
             <div className="hidden md:flex md:w-1/2 shrink-0">
-              <img
-                src={whyPlantogaBanner.image_url}
-                alt={whyPlantogaBanner.title || ''}
-                className="w-full h-full rounded-2xl object-cover"
-                loading="lazy"
-              />
+              {whyPlantogaBanner.cta_link ? (
+                <Link
+                  to={whyPlantogaBanner.cta_link}
+                  className="w-full h-full rounded-2xl overflow-hidden block"
+                  style={{ backgroundColor: whyPlantogaBanner.bg_color || '#F5F0E8' }}
+                >
+                  <img
+                    src={whyPlantogaBanner.image_url}
+                    alt={whyPlantogaBanner.title || ''}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </Link>
+              ) : (
+                <img
+                  src={whyPlantogaBanner.image_url}
+                  alt={whyPlantogaBanner.title || ''}
+                  className="w-full h-full rounded-2xl object-cover"
+                  loading="lazy"
+                />
+              )}
             </div>
           )}
           <div className={whyPlantogaBanner?.image_url ? 'md:w-1/2' : 'w-full'}>
