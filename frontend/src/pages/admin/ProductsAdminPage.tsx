@@ -37,7 +37,7 @@ import BadgeColorField from '@/components/admin/BadgeColorField';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import ImageCropModal from '@/components/admin/ImageCropModal';
-import type { CatalogTag, FAQItem, Product, ProductListResponse, ProductVariants, VariantGroup, VariantOption } from '@/types';
+import type { CatalogTag, ComboItem, FAQItem, Product, ProductListResponse, ProductVariants, VariantGroup, VariantOption } from '@/types';
 
 type ProductFormData = z.infer<typeof productSchema>;
 
@@ -192,7 +192,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     seo: false,
     related: false,
     badges: false,
-    bundle: false,
+    combo: false,
   });
 
   const toggleSection = (section: string) => {
@@ -271,9 +271,13 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // Per-product image overlay badge controls
   const [isBestseller, setIsBestseller] = useState(false);
 
-  // Per-product bundle flag and description
-  const [isBundle, setIsBundle] = useState(false);
-  const [bundleDescription, setBundleDescription] = useState('');
+  // Per-product combo flag, itemised contents list and optional summary.
+  // comboItems holds one entry per combo member; product_id is non-null when the
+  // item was picked from the catalog (name still editable), null for custom names.
+  const [isCombo, setIsCombo] = useState(false);
+  const [comboDescription, setComboDescription] = useState('');
+  const [comboItems, setComboItems] = useState<ComboItem[]>([]);
+  const [comboSearch, setComboSearch] = useState('');
 
   // Per-product bestseller badge wording/colour override. A null means "not
   // overridden" and the category config decides — these are held as plain
@@ -577,8 +581,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setRelatedProductIds(p.related_product_ids || []);
     // Reset badge controls (will be overwritten by rawProduct effect on edit)
     setIsBestseller(Boolean(p.is_bestseller));
-    setIsBundle(Boolean(p.is_bundle));
-    setBundleDescription(p.bundle_description ?? '');
+    setIsCombo(Boolean(p.is_combo));
+    setComboDescription(p.combo_description ?? '');
+    setComboItems(p.combo_items ?? []);
     setBestsellerOverrideEnabled(
       p.bestseller_label_override != null || p.bestseller_color_override != null
     );
@@ -688,8 +693,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
       // Seed badge controls from raw product
       setIsBestseller(Boolean(rawProduct.is_bestseller));
-      setIsBundle(Boolean(rawProduct.is_bundle));
-      setBundleDescription(rawProduct.bundle_description ?? '');
+      setIsCombo(Boolean(rawProduct.is_combo));
+      setComboDescription(rawProduct.combo_description ?? '');
+      setComboItems(rawProduct.combo_items ?? []);
       const rawLabelOverride = rawProduct.bestseller_label_override ?? null;
       const rawColorOverride = rawProduct.bestseller_color_override ?? null;
       setBestsellerOverrideEnabled(rawLabelOverride != null || rawColorOverride != null);
@@ -913,6 +919,12 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         payload.variants = variants;
       }
 
+      // Drop empty rows and trim names; keep product_id only when it is a real
+      // catalog id (custom items carry null). Used by both save paths.
+      const cleanComboItems = comboItems
+        .map((item) => ({ name: item.name.trim(), product_id: item.product_id ?? null }))
+        .filter((item) => item.name);
+
       if (editProduct) {
         // Upload any newly selected files first
         const uploadedUrls: string[] = [];
@@ -937,8 +949,11 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           faqs: faqItems.filter(f => f.question.trim() && f.answer.trim()),
           related_product_ids: relatedProductIds.length > 0 ? relatedProductIds : null,
           is_bestseller: isBestseller,
-          is_bundle: isBundle,
-          bundle_description: bundleDescription.trim() || null,
+          is_combo: isCombo,
+          combo_description: comboDescription.trim() || null,
+          // Always sent so clearing every row persists as an empty list rather
+          // than retaining the previous contents.
+          combo_items: cleanComboItems.length > 0 ? cleanComboItems : null,
           // Always sent, explicitly null when the toggle is off. The edit form
           // owns both fields, so "off" has to be a deliberate write rather than
           // an omission — omitting would preserve an existing override.
@@ -1011,8 +1026,9 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         if (cleanFaqs.length) fd.append('faqs', JSON.stringify(cleanFaqs));
         if (relatedProductIds.length) fd.append('related_product_ids', JSON.stringify(relatedProductIds));
         fd.append('is_bestseller', String(isBestseller));
-        fd.append('is_bundle', String(isBundle));
-        if (bundleDescription.trim()) fd.append('bundle_description', bundleDescription.trim());
+        fd.append('is_combo', String(isCombo));
+        if (comboDescription.trim()) fd.append('combo_description', comboDescription.trim());
+        if (cleanComboItems.length) fd.append('combo_items', JSON.stringify(cleanComboItems));
         // Only appended when set, so "no override" never travels as an empty
         // string that would have to be re-interpreted server-side.
         if (savedBestsellerLabelOverride) fd.append('bestseller_label_override', savedBestsellerLabelOverride);
@@ -2731,46 +2747,152 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             )}
           </div>
 
-          {/* Section: Bundle */}
+          {/* Section: Combo */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <button
               type="button"
-              onClick={() => toggleSection('bundle')}
+              onClick={() => toggleSection('combo')}
               className="w-full flex items-center justify-between px-5 py-4 font-semibold text-sm text-gray-800 hover:bg-gray-50 text-left"
             >
-              <span className="flex items-center gap-2">📦 <span>Bundle</span></span>
-              {openSections.bundle ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              <span className="flex items-center gap-2">📦 <span>Combo</span></span>
+              {openSections.combo ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
-            {openSections.bundle && (
+            {openSections.combo && (
               <div className="p-5 border-t border-gray-100 space-y-4 bg-white">
                 <p className="text-[11px] text-gray-400 leading-relaxed">
-                  Mark this product as a bundle (e.g. a set of multiple plants). When enabled,
-                  the product detail page shows <strong>About the Bundle</strong> instead of
-                  &ldquo;Product Specification&rdquo;, and displays the description below inside that accordion.
+                  Mark this product as a combo (e.g. a set of multiple plants). When enabled,
+                  the product detail page shows <strong>About the Combo</strong> instead of
+                  &ldquo;Product Specification&rdquo;, and lists the items below inside that accordion.
                 </p>
                 <label className="flex items-center gap-2.5 cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    checked={isBundle}
-                    onChange={(e) => setIsBundle(e.target.checked)}
+                    checked={isCombo}
+                    onChange={(e) => setIsCombo(e.target.checked)}
                     className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                   />
-                  <span className="text-xs text-gray-700">This product is a bundle</span>
+                  <span className="text-xs text-gray-700">This product is a combo</span>
                 </label>
 
-                {isBundle && (
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-medium text-gray-700">
-                      Bundle description
-                      <span className="ml-1 text-gray-400 font-normal">(shown inside the "About the Bundle" accordion)</span>
-                    </label>
-                    <textarea
-                      value={bundleDescription}
-                      onChange={(e) => setBundleDescription(e.target.value)}
-                      rows={6}
-                      placeholder={`e.g.\nSet of 6 Air Purifier Plants:\n1. Snake Plant – Golden\n2. Syngonium White Butterfly\n…`}
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-y"
-                    />
+                {isCombo && (
+                  <div className="space-y-4">
+                    {/* Combo items list */}
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div>
+                          <label className="text-xs font-semibold text-gray-700 block">Combo items</label>
+                          <p className="text-[11px] text-gray-400">Each item's name is shown on the product page. Pick from your catalog or add a custom name.</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setComboItems(prev => [...prev, { name: '', product_id: null }])}
+                          className="px-2.5 py-1 text-xs text-primary font-medium hover:bg-primary-light/10 border border-primary/20 rounded transition shrink-0"
+                        >
+                          + Add custom item
+                        </button>
+                      </div>
+
+                      {comboItems.length > 0 && (
+                        <div className="space-y-2">
+                          {comboItems.map((item, index) => (
+                            <div key={index} className="flex items-center gap-2">
+                              <span className="w-5 text-xs text-gray-400 text-right shrink-0">{index + 1}.</span>
+                              <input
+                                value={item.name}
+                                onChange={(e) => setComboItems(prev => prev.map((it, i) => i === index ? { ...it, name: e.target.value } : it))}
+                                placeholder="Item name (e.g. Snake Plant – Golden)"
+                                className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                              />
+                              {item.product_id != null && (
+                                <span
+                                  title="Linked to a catalog product"
+                                  className="shrink-0 inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full bg-primary/5 text-primary border border-primary/20"
+                                >
+                                  <ImageIcon size={11} /> Catalog
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setComboItems(prev => prev.filter((_, i) => i !== index))}
+                                className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Add from catalog */}
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={comboSearch}
+                        onChange={(e) => setComboSearch(e.target.value)}
+                        placeholder="Search products to add to this combo..."
+                        className={`${inputClass} pl-8`}
+                      />
+                    </div>
+                    {comboSearch.trim() && (
+                      <div className="border rounded-lg max-h-48 overflow-y-auto bg-white">
+                        {allProducts
+                          .filter((p) =>
+                            p.name.toLowerCase().includes(comboSearch.toLowerCase()) &&
+                            p.id !== editProduct?.id &&
+                            !comboItems.some((it) => it.product_id === p.id)
+                          )
+                          .slice(0, 20)
+                          .map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                setComboItems(prev => [...prev, { name: p.name, product_id: p.id }]);
+                                setComboSearch('');
+                              }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 border-b border-gray-50 last:border-0"
+                            >
+                              <div className="h-8 w-8 rounded border overflow-hidden bg-gray-100 shrink-0">
+                                {p.images?.[0] ? (
+                                  <img src={p.images[0]} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                  <div className="h-full w-full flex items-center justify-center text-gray-300">
+                                    <ImageIcon size={14} />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-700 truncate">{p.name}</p>
+                                <p className="text-[11px] text-gray-400">₹{p.price}</p>
+                              </div>
+                            </button>
+                          ))}
+                        {allProducts.filter((p) =>
+                          p.name.toLowerCase().includes(comboSearch.toLowerCase()) &&
+                          p.id !== editProduct?.id &&
+                          !comboItems.some((it) => it.product_id === p.id)
+                        ).length === 0 && (
+                          <p className="px-3 py-2 text-xs text-gray-400 italic">No matching products found.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Optional summary */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-gray-700">
+                        Combo description
+                        <span className="ml-1 text-gray-400 font-normal">(optional, shown above the item list)</span>
+                      </label>
+                      <textarea
+                        value={comboDescription}
+                        onChange={(e) => setComboDescription(e.target.value)}
+                        rows={3}
+                        placeholder="Optional summary, e.g. A curated set of air-purifying plants for beginners."
+                        className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-y"
+                      />
+                    </div>
                   </div>
                 )}
               </div>

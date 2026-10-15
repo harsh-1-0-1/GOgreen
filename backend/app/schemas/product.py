@@ -162,6 +162,24 @@ class FAQItem(BaseModel):
     answer: str
 
 
+class ComboItem(BaseModel):
+    """One entry in a combo product's contents list.
+
+    `name` is a snapshot of what the storefront shows, so an item can be renamed
+    independently of the catalog and custom (non-catalog) items need no product.
+    `product_id` is set when the item was picked from the catalog; null otherwise.
+    """
+    name: str
+    product_id: int | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Combo item name cannot be empty")
+        return v.strip()
+
+
 # Same constraint the category badge config uses (app/schemas/badge_config.py), so the
 # admin form's colour picker is validated identically wherever a badge colour is set.
 HEX_RE = r"^#[0-9A-Fa-f]{6}$"
@@ -232,9 +250,10 @@ class ProductCreate(BestsellerOverrideIn):
     # deliberately NOT re-declared here: in Pydantic a redeclared field replaces
     # the inherited one outright, silently dropping its length/pattern checks.
     is_bestseller: bool = False
-    # ── Bundle ───────────────────────────────────────────────────────────
-    is_bundle: bool = False
-    bundle_description: str | None = None
+    # ── Combo ────────────────────────────────────────────────────────────
+    is_combo: bool = False
+    combo_description: str | None = None
+    combo_items: Optional[List[ComboItem]] = None
 
     @field_validator("variants")
     @classmethod
@@ -272,9 +291,13 @@ class ProductUpdate(BestsellerOverrideIn):
     related_product_ids: Optional[List[int]] = None
     # ── Image overlay badges ──────────────────────────────────────────────
     is_bestseller: bool | None = None
-    # ── Bundle ───────────────────────────────────────────────────────────
-    is_bundle: bool | None = None
-    bundle_description: str | None = None
+    # ── Combo ────────────────────────────────────────────────────────────
+    is_combo: bool | None = None
+    combo_description: str | None = None
+    # null → explicitly clears the contents (unlike `variants`, where null means
+    # "leave untouched"): the admin form always owns the whole list, so a combo
+    # with no items must persist as an empty list rather than retain stale ones.
+    combo_items: Optional[List[ComboItem]] = None
     # The two `*_override` fields are inherited from BestsellerOverrideIn and must
     # not be redeclared here — that would drop their validation. Their three
     # states are distinct and all reachable from this form:
@@ -330,9 +353,10 @@ class ProductResponse(BaseModel):
     # purpose (see BestsellerOverrideIn): stored values pass straight through.
     bestseller_label_override: str | None = None
     bestseller_color_override: str | None = None
-    # ── Bundle ───────────────────────────────────────────────────────────
-    is_bundle: bool = False
-    bundle_description: str | None = None
+    # ── Combo ────────────────────────────────────────────────────────────
+    is_combo: bool = False
+    combo_description: str | None = None
+    combo_items: Optional[List[dict]] = None
     # ── Aggregated review data (computed at query time) ───────────────────
     avg_rating: float | None = None
     review_count: int = 0

@@ -11,6 +11,7 @@ from app.core.security import require_admin
 from app.db.models import Product
 from app.db.session import get_db
 from app.schemas.product import (
+    ComboItem,
     FAQItem,
     ProductCreate,
     ProductListResponse,
@@ -205,8 +206,9 @@ async def get_product_raw(
         "is_bestseller": product.is_bestseller,
         "bestseller_label_override": product.bestseller_label_override,
         "bestseller_color_override": product.bestseller_color_override,
-        "is_bundle": product.is_bundle,
-        "bundle_description": product.bundle_description,
+        "is_combo": product.is_combo,
+        "combo_description": product.combo_description,
+        "combo_items": product.combo_items or [],
         "created_at": product.created_at.isoformat() if product.created_at else None,
     }
 
@@ -376,9 +378,10 @@ async def create_product(
     # Null/blank = follow the category's badge config (see BestsellerOverrideIn).
     bestseller_label_override: Annotated[str | None, Form()] = None,
     bestseller_color_override: Annotated[str | None, Form()] = None,
-    # Bundle fields — must be explicit Form() params or FastAPI silently drops them
-    is_bundle: Annotated[bool, Form()] = False,
-    bundle_description: Annotated[str | None, Form()] = None,
+    # Combo fields — must be explicit Form() params or FastAPI silently drops them
+    is_combo: Annotated[bool, Form()] = False,
+    combo_description: Annotated[str | None, Form()] = None,
+    combo_items: Annotated[str | None, Form()] = None,  # JSON string: [{name, product_id}, ...]
     images: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
@@ -445,8 +448,9 @@ async def create_product(
         is_bestseller=is_bestseller,
         bestseller_label_override=bestseller_label_override,
         bestseller_color_override=bestseller_color_override,
-        is_bundle=is_bundle,
-        bundle_description=bundle_description or None,
+        is_combo=is_combo,
+        combo_description=combo_description or None,
+        combo_items=[ComboItem(**i) for i in json.loads(combo_items)] if combo_items else None,
     )
 
     # Flush first to get product.id, then upload using that id as the folder namespace.

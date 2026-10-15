@@ -27,7 +27,7 @@ export default function ProductSpecification({ specs, title = 'Product Specifica
               <div className="px-4 py-3 bg-primary/8 text-sm font-semibold text-primary">
                 {label}
               </div>
-              <div className="px-4 py-3 bg-white text-sm text-gray-700 leading-relaxed border-b border-primary/10 last:border-b-0">
+              <div className="px-4 py-3 bg-white text-sm text-gray-700 leading-relaxed border-b border-primary/10 last:border-b-0 whitespace-pre-line">
                 {value}
               </div>
             </div>

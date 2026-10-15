@@ -74,6 +74,14 @@ export interface FAQItem {
   answer: string;
 }
 
+/** One entry in a combo product's contents list. */
+export interface ComboItem {
+  /** Display name — a snapshot, editable independently of the catalog. */
+  name: string;
+  /** Set when picked from the catalog; null/absent for custom names. */
+  product_id?: number | null;
+}
+
 /** Trimmed category shape embedded in product payloads. */
 export interface ProductCategory {
   id: number;
@@ -135,11 +143,13 @@ export interface Product {
    */
   bestseller_label_override?: string | null;
   bestseller_color_override?: string | null;
-  // ── Bundle ────────────────────────────────────────────────────────────
-  /** When true this product is a bundle; the detail page shows "About the Bundle" instead of "Product Specification". */
-  is_bundle?: boolean;
-  /** Describes the bundle contents. Rendered in the "About the Bundle" accordion on the product detail page. */
-  bundle_description?: string | null;
+  // ── Combo ─────────────────────────────────────────────────────────────
+  /** When true this product is a combo; the detail page shows "About the Combo" instead of "Product Specification". */
+  is_combo?: boolean;
+  /** Optional free-text summary. Rendered in the "About the Combo" accordion on the product detail page. */
+  combo_description?: string | null;
+  /** Structured combo contents. Each item carries a name snapshot and an optional linked product id. */
+  combo_items?: ComboItem[] | null;
   // ── Aggregated review data (computed by API) ──────────────────────────
   avg_rating?: number | null;
   review_count?: number;

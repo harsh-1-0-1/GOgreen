@@ -204,12 +204,16 @@ class Product(Base):
     bestseller_color_override: Mapped[str | None] = mapped_column(
         String(20), nullable=True, default=None
     )
-    # ── Bundle flag ───────────────────────────────────────────────────────
-    # When true, the product is a bundle of multiple items. The product detail
-    # page replaces "Product Specification" with "About the Bundle" and renders
-    # `bundle_description` as the bundle contents / summary.
-    is_bundle: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
-    bundle_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ── Combo flag ────────────────────────────────────────────────────────
+    # When true, the product is a combo of multiple items. The product detail
+    # page replaces "Product Specification" with "About the Combo" and renders
+    # `combo_items` (plus the optional `combo_description` summary) as contents.
+    is_combo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    combo_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Structured contents: list of {"name": str, "product_id": int | null}.
+    # `name` is a snapshot (the storefront renders it without a lookup);
+    # `product_id` links to the catalog entry when picked from it, else null.
+    combo_items: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     category: Mapped["Category"] = relationship(back_populates="products")
     additional_categories: Mapped[list["Category"]] = relationship(

@@ -919,11 +919,23 @@ export default function ProductDetailPage() {
   const productStripBanner = selectProductTypeBanner(productStripBanners, categories, product.category_id);
   const whyPlantogaBanner = selectProductTypeBanner(whyPlantogaBanners, categories, product.category_id);
   const mrp = displayOriginalPrice ?? displayPrice;
-  const bundleSpecRows = product.is_bundle && product.bundle_description
-    ? [{ label: 'Contents', value: product.bundle_description }]
+  // Combo contents: prefer the structured item list; fall back to the free-text
+  // summary for older combos saved before items existed. When both are present,
+  // the summary becomes a second "Description" row rather than duplicating.
+  const comboItems = (product.combo_items ?? []).filter((it) => it.name?.trim());
+  const comboContents = comboItems.length
+    ? comboItems.map((it, i) => `${i + 1}. ${it.name.trim()}`).join('\n')
+    : (product.combo_description ?? '');
+  const comboSpecRows = product.is_combo
+    ? [
+        ...(comboContents ? [{ label: 'Contents', value: comboContents }] : []),
+        ...(comboItems.length && product.combo_description
+          ? [{ label: 'Description', value: product.combo_description }]
+          : []),
+      ]
     : [];
   const productSpecs = [
-    ...(product.is_bundle ? bundleSpecRows : []),
+    ...(product.is_combo ? comboSpecRows : []),
     { label: 'Name', value: product.name },
     { label: 'Category', value: findCategoryName(categories, product.category_id) },
     { label: 'Country of Origin', value: STORE_LEGAL.countryOfOrigin },
@@ -1318,7 +1330,7 @@ export default function ProductDetailPage() {
 
             <PlantogaPromise bannerImage={product.promise_banner_image} />
 
-            <ProductSpecification specs={productSpecs} title={product.is_bundle ? 'About the Bundle' : 'Product Specification'} />
+            <ProductSpecification specs={productSpecs} title={product.is_combo ? 'About the Combo' : 'Product Specification'} />
           </div>
         </div>
 
