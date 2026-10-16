@@ -235,7 +235,17 @@ function MobileGallery({
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Clamp activeIndex so an out-of-bounds value (e.g. after a variant switch
+  // shrinks the image array) never renders the wrong or missing image.
+  const safeActiveIndex = Math.min(activeIndex, Math.max(0, images.length - 1));
   const list = images;
+
+  // Keep a ref to the latest safe index so settle() never closes over a stale value.
+  const activeIndexRef = useRef(safeActiveIndex);
+  useEffect(() => {
+    activeIndexRef.current = safeActiveIndex;
+  });
 
   const EASING = 'transform 380ms cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 
@@ -268,9 +278,9 @@ function MobileGallery({
     // Re-enable transition, then let React re-render drive the transform.
     // For snap-back (toIndex === currentIndex), also force the pixel position
     // so the animation plays — React won't re-render since index didn't change.
-    // We receive currentIndex as a parameter (not from closure) to avoid
-    // stale-closure bugs if a re-render happens before transitionend fires.
-    const currentIndex = activeIndex;
+    // Use activeIndexRef (not the prop directly) to avoid stale-closure bugs
+    // when a variant switch triggers a re-render while a gesture is in flight.
+    const currentIndex = activeIndexRef.current;
     if (!trackRef.current || !containerRef.current) return;
     const el = trackRef.current;
     el.style.transition = EASING;
@@ -326,7 +336,7 @@ function MobileGallery({
     lastMoveTime.current = e.timeStamp;
     lastMoveX.current = e.touches[0].clientX;
 
-    const base = -activeIndex * containerRef.current.offsetWidth;
+    const base = -activeIndexRef.current * containerRef.current.offsetWidth;
     trackRef.current.style.transform = `translateX(${base + dx}px)`;
   }
 
@@ -337,24 +347,27 @@ function MobileGallery({
     const width = containerRef.current.offsetWidth;
     const dist = touchDeltaX.current;
     const vel = velocityX.current; // px/ms
+    // Use the ref to avoid stale closure — activeIndex prop may have changed
+    // if a variant switch triggered a re-render while the gesture was in flight.
+    const curIdx = activeIndexRef.current;
 
     // Advance if: fast flick (>0.3px/ms) OR dragged past 25% of width
-    const isFlickLeft  = vel < -0.3 && activeIndex < list.length - 1;
-    const isFlickRight = vel >  0.3 && activeIndex > 0;
-    const isDragLeft   = dist < -width * 0.25 && activeIndex < list.length - 1;
-    const isDragRight  = dist >  width * 0.25 && activeIndex > 0;
+    const isFlickLeft  = vel < -0.3 && curIdx < list.length - 1;
+    const isFlickRight = vel >  0.3 && curIdx > 0;
+    const isDragLeft   = dist < -width * 0.25 && curIdx < list.length - 1;
+    const isDragRight  = dist >  width * 0.25 && curIdx > 0;
 
-    if (isFlickLeft  || isDragLeft)  { settle(activeIndex + 1); return; }
-    if (isFlickRight || isDragRight) { settle(activeIndex - 1); return; }
-    settle(activeIndex); // snap back
+    if (isFlickLeft  || isDragLeft)  { settle(curIdx + 1); return; }
+    if (isFlickRight || isDragRight) { settle(curIdx - 1); return; }
+    settle(curIdx); // snap back
   }
 
   function scrollPrev() {
-    if (activeIndex > 0) onActiveChange(activeIndex - 1);
+    if (safeActiveIndex > 0) onActiveChange(safeActiveIndex - 1);
   }
 
   function scrollNext() {
-    if (activeIndex < list.length - 1) onActiveChange(activeIndex + 1);
+    if (safeActiveIndex < list.length - 1) onActiveChange(safeActiveIndex + 1);
   }
 
   // Keyboard navigation for desktop / accessibility
@@ -386,7 +399,7 @@ function MobileGallery({
         onTouchEnd={handleTouchEnd}
         className="flex will-change-transform"
         style={{
-          transform: `translateX(${-activeIndex * 100}%)`,
+          transform: `translateX(${-safeActiveIndex * 100}%)`,
           transition: EASING,
         }}
       >
@@ -403,7 +416,7 @@ function MobileGallery({
             role="group"
             aria-roledescription="slide"
             aria-label={`Image ${i + 1} of ${list.length}`}
-            aria-hidden={i !== activeIndex}
+            aria-hidden={i !== safeActiveIndex}
             className="w-full shrink-0"
           >
             <img
@@ -429,9 +442,9 @@ function MobileGallery({
       {list.length > 1 && (
         <button 
           onClick={scrollPrev}
-          disabled={activeIndex === 0}
+          disabled={safeActiveIndex === 0}
           className={`absolute top-1/2 -translate-y-1/2 left-0 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center -ml-2 z-10 touch-target text-gray-800 transition-opacity ${
-            activeIndex === 0 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
+            safeActiveIndex === 0 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
           }`}
         >
           <ChevronLeft size={20} />
@@ -441,9 +454,9 @@ function MobileGallery({
       {list.length > 1 && (
         <button 
           onClick={scrollNext}
-          disabled={activeIndex === list.length - 1}
+          disabled={safeActiveIndex === list.length - 1}
           className={`absolute top-1/2 -translate-y-1/2 right-0 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center -mr-2 z-10 touch-target text-gray-800 transition-opacity ${
-            activeIndex === list.length - 1 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
+            safeActiveIndex === list.length - 1 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
           }`}
         >
           <ChevronRight size={20} />
@@ -465,7 +478,10 @@ function DesktopGallery({
   variants?: Record<string, ImageVariantSet>;
 }) {
   const list = images;
-  const active = list[activeIndex];
+  // Clamp so an out-of-bounds activeIndex (e.g. right after a variant switch
+  // that shrinks the image array) never reads list[undefined].
+  const safeActiveIndex = Math.min(activeIndex, Math.max(0, list.length - 1));
+  const active = list[safeActiveIndex];
   const activeSet = active ? variants?.[active] : undefined;
 
   return (
@@ -480,7 +496,7 @@ function DesktopGallery({
               key={i}
               onClick={() => onActiveChange(i)}
               className={`shrink-0 w-[68px] h-[68px] lg:w-[76px] lg:h-[76px] rounded-xl overflow-hidden border-2 transition ${
-                i === activeIndex ? 'border-primary' : 'border-transparent hover:border-gray-300'
+                i === safeActiveIndex ? 'border-primary' : 'border-transparent hover:border-gray-300'
               }`}
             >
               <img
@@ -640,12 +656,12 @@ export default function ProductDetailPage() {
     }
   }
 
-  // Reset gallery when selection changes (guarded render-time adjustment).
-  const [lastSelectedOptions, setLastSelectedOptions] = useState(selectedOptions);
-  if (lastSelectedOptions !== selectedOptions) {
-    setLastSelectedOptions(selectedOptions);
+  // Reset gallery to index 0 whenever the variant selection changes.
+  // useEffect (not render-time setState) so the reset is batched properly and
+  // galleryImages is already updated when the gallery re-renders.
+  useEffect(() => {
     setGalleryActive(0);
-  }
+  }, [selectedOptions]);
 
   if (isLoading) return <Spinner className="py-32" />;
   if (isError || !product) {
