@@ -1,21 +1,21 @@
+import { useMemo } from 'react';
 import { Leaf, RotateCcw, Truck, HeartHandshake } from 'lucide-react';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import HeroBanner from '@/components/home/HeroBanner';
-import MobileCategoryNav from '@/components/home/MobileCategoryNav';
+import CategoryNavBanners from '@/components/home/CategoryNavBanners';
 import QuickAccessStrip from '@/components/home/QuickAccessStrip';
 import CategoryHighlightGrid from '@/components/home/CategoryHighlightGrid';
-import TrendingProductsGrid from '@/components/home/TrendingProductsGrid';
-import NewArrivalsGrid from '@/components/home/NewArrivalsGrid';
-import ExoticFindsGrid from '@/components/home/ExoticFindsGrid';
-import PlantCareGrid from '@/components/home/PlantCareGrid';
-import DecorPotsGrid from '@/components/home/DecorPotsGrid';
+import DisplaySectionBlock from '@/components/home/DisplaySectionBlock';
 import BlogSection from '@/components/home/BlogSection';
 import PromoCTASection from '@/components/home/PromoCTASection';
 import AboutSection from '@/components/home/AboutSection';
+import { useDisplaySections } from '@/hooks/useDisplaySections';
+import { DEFAULT_SHIPPING_SETTINGS, useShippingSettings } from '@/hooks/useSettings';
 
 function FeatureStrip() {
+  const { data: shippingSettings = DEFAULT_SHIPPING_SETTINGS } = useShippingSettings();
   const features = [
-    { icon: Truck, title: 'Free Delivery', desc: 'On orders above ₹499' },
+    { icon: Truck, title: 'Free Delivery', desc: `On orders above ₹${shippingSettings.free_shipping_threshold}` },
     { icon: RotateCcw, title: 'Easy Returns', desc: '7-day return policy' },
     { icon: Leaf, title: 'Expert Plant Care', desc: 'Free care guides' },
     { icon: HeartHandshake, title: 'Plant Guarantee', desc: 'Healthy plants or replace' },
@@ -40,31 +40,24 @@ function FeatureStrip() {
 }
 
 export default function HomePage() {
+  const { data: allSections } = useDisplaySections();
+  const displaySections = useMemo(
+    () => (allSections ?? []).filter((section) => section.is_active),
+    [allSections],
+  );
+
   return (
     <div>
-      <MobileCategoryNav />
+      <ErrorBoundary><CategoryNavBanners /></ErrorBoundary>
       <ErrorBoundary><HeroBanner /></ErrorBoundary>
       <QuickAccessStrip />
       <ErrorBoundary><CategoryHighlightGrid /></ErrorBoundary>
-      <ErrorBoundary>
-        <TrendingProductsGrid title="Trending Now" limit={8} />
-      </ErrorBoundary>
-      
-      <ErrorBoundary>
-        <NewArrivalsGrid />
-      </ErrorBoundary>
 
-      <ErrorBoundary>
-        <ExoticFindsGrid />
-      </ErrorBoundary>
-
-      <ErrorBoundary>
-        <PlantCareGrid />
-      </ErrorBoundary>
-
-      <ErrorBoundary>
-        <DecorPotsGrid />
-      </ErrorBoundary>
+      {displaySections.map((section) => (
+        <ErrorBoundary key={section.id}>
+          <DisplaySectionBlock section={section} />
+        </ErrorBoundary>
+      ))}
 
       <FeatureStrip />
       <ErrorBoundary><BlogSection /></ErrorBoundary>

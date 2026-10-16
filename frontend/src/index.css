@@ -1,7 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
 @import "tailwindcss";
 
 @theme {
+  --font-sans: 'Poppins', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+
   --color-primary: #2D6A4F;
   --color-primary-light: #52B788;
   --color-secondary: #16A34A;
@@ -16,7 +18,7 @@ html {
 
 body {
   @apply bg-bg text-text antialiased;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Poppins', system-ui, -apple-system, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -29,6 +31,11 @@ input, select, textarea {
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
   .scrollbar-none::-webkit-scrollbar { display: none; }
   .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+  
+  .touch-pan-x {
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+  }
 
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -53,6 +60,7 @@ input, select, textarea {
 }
 
 /* prevent body scroll when modal/drawer is open */
+html:has(body.overflow-hidden),
 body.overflow-hidden {
   overflow: hidden;
 }
@@ -73,12 +81,12 @@ body.overflow-hidden {
 }
 
 .animate-marquee {
-  animation: marquee 30s linear infinite;
+  animation: marquee 60s linear infinite;
 }
 
 @media (max-width: 640px) {
   .animate-marquee {
-    animation-duration: 20s;
+    animation-duration: 50s;
   }
 }
 

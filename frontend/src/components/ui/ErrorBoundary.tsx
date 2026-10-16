@@ -19,6 +19,11 @@ export default class ErrorBoundary extends Component<Props, State> {
     return { hasError: true };
   }
 
+  componentDidCatch(error: Error, info: { componentStack: string }) {
+    // Log to console so errors are visible in devtools instead of silently swallowed
+    console.error('[ErrorBoundary]', error, info.componentStack);
+  }
+
   render() {
     if (this.state.hasError) {
       return (

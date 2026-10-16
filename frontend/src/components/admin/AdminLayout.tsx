@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
-import { FolderTree, Image, LayoutDashboard, MoreHorizontal, Package, ShoppingCart, Users, X, FileText, Briefcase, Tag, Settings } from 'lucide-react';
+import { FolderTree, Image, LayoutDashboard, List, MoreHorizontal, Package, ShoppingCart, Users, X, FileText, Briefcase, Tag, Settings, PlaySquare, ShieldAlert, AlertCircle, Menu as MenuIcon, Award } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
@@ -8,17 +8,23 @@ const NAV = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/admin/products', icon: Package, label: 'Products' },
   { to: '/admin/categories', icon: FolderTree, label: 'Categories' },
+  { to: '/admin/badges', icon: Award, label: 'Image Badges' },
   { to: '/admin/orders', icon: ShoppingCart, label: 'Orders' },
   { to: '/admin/users', icon: Users, label: 'Users' },
   { to: '/admin/banners', icon: Image, label: 'Banners' },
+  { to: '/admin/stories', icon: PlaySquare, label: 'Stories' },
   { to: '/admin/blog', icon: FileText, label: 'Blog' },
   { to: '/admin/corporate', icon: Briefcase, label: 'Inquiries' },
+  { to: '/admin/damage-claims', icon: ShieldAlert, label: 'Damage Claims' },
+  { to: '/admin/do-not-forget', icon: AlertCircle, label: 'Do Not Forget' },
+  { to: '/admin/navigation', icon: MenuIcon, label: 'Navigation' },
+  { to: '/admin/display-sections', icon: List, label: 'Display Sections' },
   { to: '/admin/coupons', icon: Tag, label: 'Coupons' },
   { to: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
 const MOBILE_TABS = NAV.slice(0, 3); // Dashboard, Products, Categories
-const MORE_ITEMS = NAV.slice(3); // Orders, Users, Banners, Blog, Corporate, Coupons, Settings
+const MORE_ITEMS = NAV.slice(3);
 
 export default function AdminLayout() {
   const { user } = useAuthStore();

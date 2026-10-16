@@ -1,6 +1,5 @@
 import { WhatsAppIcon } from '@/components/layout/Navbar/WhatsAppIcon';
-
-const WHATSAPP_NUMBER = '917083883105';
+import { WHATSAPP_NUMBER } from '@/components/layout/Navbar/navData';
 
 export default function FloatingWhatsAppButton() {
   return (

@@ -1,12 +1,9 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import type { FAQItem } from '@/types';
+import { SUPPORT_PHONE_DISPLAY } from '@/components/layout/Navbar/navData';
 
-interface FAQItem {
-  question: string;
-  answer: string;
-}
-
-const FAQ_DATA: FAQItem[] = [
+const DEFAULT_FAQS: FAQItem[] = [
   {
     question: "What is the Plantoga quality guarantee?",
     answer: "We offer a 100% Thrive Guarantee. If any plant or pot arrives damaged, withered, or incorrect, simply submit our Damage Replacement form with a photo within 48 hours, and we'll ship a replacement immediately, completely free of charge. No return shipment required!"
@@ -29,21 +26,38 @@ const FAQ_DATA: FAQItem[] = [
   },
   {
     question: "Can I cancel or modify my order?",
-    answer: "You can cancel or modify your order within 2 hours of placing it. Please call or WhatsApp our support team at +91 7083883105 to request changes."
+    answer: `You can cancel or modify your order within 2 hours of placing it. Please call or WhatsApp our support team at ${SUPPORT_PHONE_DISPLAY} to request changes.`
   }
 ];
 
-export default function ProductFaq() {
+interface ProductFaqProps {
+  faqs?: FAQItem[] | null;
+  /**
+   * Renders the section without its own top margin, divider or centred
+   * max-width. Use when the section sits inside a parent grid (e.g. beside the
+   * product detail banner) that already owns the spacing and column width —
+   * otherwise the inner `max-w-3xl mx-auto` opens a second gutter and the two
+   * columns stop lining up.
+   */
+  embedded?: boolean;
+}
+
+export default function ProductFaq({ faqs, embedded = false }: ProductFaqProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const items = faqs && faqs.length > 0 ? faqs : DEFAULT_FAQS;
 
   const toggleExpand = (index: number) => {
     setExpandedIndex(expandedIndex === index ? null : index);
   };
 
   return (
-    <section id="product-faqs" className="mt-10 border-t border-gray-100 pt-10 sm:mt-16 sm:pt-12" aria-labelledby="product-faqs-title">
-      <div className="mx-auto w-full max-w-3xl px-0">
-        <div className="mx-auto max-w-2xl text-center mb-8">
+    <section
+      id="product-faqs"
+      className={embedded ? '' : 'border-t border-gray-100 pt-8 sm:pt-10'}
+      aria-labelledby="product-faqs-title"
+    >
+      <div className={embedded ? 'w-full' : 'mx-auto w-full max-w-3xl px-0'}>
+        <div className={`mb-8 ${embedded ? '' : 'mx-auto max-w-2xl text-center'}`}>
           <h2
             id="product-faqs-title"
             className="text-2xl font-bold tracking-normal text-gray-950 sm:text-3xl"
@@ -52,12 +66,12 @@ export default function ProductFaq() {
             Frequently Asked Questions
           </h2>
           <p className="mt-2 text-sm text-gray-500">
-            Got questions about orders, shipping, or care? We've got you covered.
+            Got questions about orders, shipping, or care? We&apos;ve got you covered.
           </p>
         </div>
 
-        <div className="space-y-4">
-          {FAQ_DATA.map((faq, index) => {
+        <div className="space-y-3 sm:space-y-4">
+          {items.map((faq, index) => {
             const isExpanded = expandedIndex === index;
             return (
               <article

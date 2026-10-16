@@ -2,11 +2,17 @@ import json
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
+from app.db.models import Product
 from app.db.session import get_db
 from app.schemas.product import (
+    ComboItem,
+    FAQItem,
     ProductCreate,
     ProductListResponse,
     ProductResponse,
@@ -19,6 +25,7 @@ from app.utils.image_upload import (
     resolve_image_url,
     upload_image_file,
 )
+from app.utils.pot_price_migration import PotPriceConflictError, project_or_raise
 from app.utils.redis import cache_get, cache_set
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -33,17 +40,27 @@ async def list_products(
     response: Response,
     db: AsyncSession = Depends(get_db),
     category_slug: str | None = None,
+    categories: str | None = None,
     search: str | None = None,
     min_price: float | None = None,
     max_price: float | None = None,
     tags: str | None = None,
     sort_by: str | None = None,
+    display_section: str | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ):
+    """List active products.
+
+    `category_slug` filters by one category; `categories` takes a comma-separated
+    list of slugs and matches products in ANY of them (a product can sit in several
+    categories, so the storefront's category facet is a multi-select). Both are
+    combined, and a parent category also matches its children.
+    """
     response.headers["Cache-Control"] = "no-cache"
     cache_key = product_service.make_list_cache_key(
-        category_slug, search, min_price, max_price, tags, sort_by, page, limit,
+        category_slug, categories, search, min_price, max_price, tags, sort_by,
+        display_section, page, limit,
     )
     cached = await cache_get(cache_key)
     if cached:
@@ -52,11 +69,13 @@ async def list_products(
     items, total, pages = await product_service.list_products(
         db,
         category_slug=category_slug,
+        categories=categories,
         search=search,
         min_price=min_price,
         max_price=max_price,
         tags=tags,
         sort_by=sort_by,
+        display_section=display_section,
         page=page,
         limit=limit,
     )
@@ -105,7 +124,7 @@ async def upload_product_image(
     _admin=Depends(require_admin),
 ):
     """Upload a product image.
-    
+
     Returns both the relative storage key and the resolved full URL.
     The key should be stored in the database; the URL is for display only.
     """
@@ -124,6 +143,21 @@ async def upload_product_image(
     return {"key": key, "url": resolve_image_url(key)}
 
 
+@router.delete("/image/{key:path}")
+async def delete_product_image(
+    key: str,
+    _admin=Depends(require_admin),
+):
+    """Delete a product image by its storage key.
+
+    Admin-only. Used to remove the previous default/variant image when it is
+    replaced with a newly uploaded one. Deleting a remote URL is a no-op; the
+    old image file (S3 key or local static path) is removed here.
+    """
+    await delete_image_file(key)
+    return {"ok": True, "key": key}
+
+
 
 @router.get("/admin/{product_id}/raw")
 async def get_product_raw(
@@ -132,16 +166,16 @@ async def get_product_raw(
     _admin=Depends(require_admin),
 ):
     """Return product raw data for admin editing.
-    
+
     Returns relative image keys exactly as stored in DB, not resolved URLs.
     Used by admin edit form to seed state without URL→key round-trip.
-    
+
     ⚠️ Keep field list in sync with Product model when schema changes.
     """
     product = await product_service.get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
     # Explicit dict to avoid SQLAlchemy __dict__ leakage and datetime encoding issues
     return {
         "id": product.id,
@@ -152,17 +186,149 @@ async def get_product_raw(
         "original_price": product.original_price,
         "stock_qty": product.stock_qty,
         "category_id": product.category_id,
+        "category_ids": product.category_ids,
+        "categories": product.categories,
+        "additional_category_ids": product.additional_category_ids,
         "images": product.images or [],  # relative keys, not resolved URLs
         "tags": product.tags or [],
         "care_tips": product.care_tips or [],
         "how_to_guide": product.how_to_guide,
         "sunlight": product.sunlight,
         "watering": product.watering,
-        "badge": product.badge,
+        "display_section": product.display_section,
         "is_active": product.is_active,
         "variants": product.variants,  # raw dict with relative keys in image fields
+        "promise_banner_image": product.promise_banner_image,  # raw relative key
+        "why_plantoga_banner_image": product.why_plantoga_banner_image,  # raw relative key
+        "care_card_image": product.care_card_image,  # raw relative key
+        "faqs": product.faqs,  # raw list of {question, answer}
+        "related_product_ids": product.related_product_ids or [],  # list of product IDs
+        "is_bestseller": product.is_bestseller,
+        "bestseller_label_override": product.bestseller_label_override,
+        "bestseller_color_override": product.bestseller_color_override,
+        "is_combo": product.is_combo,
+        "combo_description": product.combo_description,
+        "combo_items": product.combo_items or [],
         "created_at": product.created_at.isoformat() if product.created_at else None,
     }
+
+
+class PotPriceProjectionRequest(BaseModel):
+    """§5.8 migration request: project the product's stored price_map onto a subset grid.
+
+    The admin sends the axes it wants to keep priced; the backend derives the cells. Doing
+    this server-side is deliberate: a client-side copy of the projection rules would be a
+    second implementation of the same decision, and the two would drift — the exact class
+    of bug that makes a card advertise one price while checkout charges another.
+    """
+
+    group_ids: list[str] = Field(min_length=1)
+
+
+@router.post("/{product_id}/pot-price/projection")
+async def project_pot_price(
+    product_id: int,
+    payload: PotPriceProjectionRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Preview the subset grid implied by this product's existing price_map.
+
+    Read-only. A conflicting projection is a 422 rather than a best guess: silently picking
+    one of the disagreeing values would hide a live pricing error, and the merchant is the
+    only one who can say which is right. The admin resolves each conflict in the UI, then
+    saves the grid and `price_map: null` together in one request.
+    """
+    product = await product_service.get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    variants = product.variants if isinstance(product.variants, dict) else {}
+    price_map = variants.get("price_map")
+    if not isinstance(price_map, dict) or not price_map:
+        raise HTTPException(
+            status_code=400,
+            detail="This product has no per-combination price table to project from.",
+        )
+    groups = variants.get("variant_groups") or []
+    known = {g.get("id") for g in groups if isinstance(g, dict)}
+    unknown = [g for g in payload.group_ids if g not in known]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown variant type(s): {', '.join(unknown)}",
+        )
+
+    try:
+        grid = project_or_raise(price_map, payload.group_ids, groups)
+    except PotPriceConflictError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"{len(exc.conflicts)} cell(s) have conflicting values in the existing "
+                    "price table. Choose which to keep for each."
+                ),
+                "conflicts": [
+                    {"key": key, "values": values}
+                    for key, values in exc.conflicts.items()
+                ],
+            },
+        ) from exc
+
+    return {"group_ids": payload.group_ids, "map": grid, "conflicts": {}}
+
+
+@router.get("/admin/all", response_model=ProductListResponse)
+async def admin_get_all_products(
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_admin),
+    limit: Annotated[int, Query(ge=1, le=5000)] = 1000,
+):
+    """Admin endpoint to fetch all products without pagination limit.
+
+    Used by admin panels that need to show full product lists for selection.
+    """
+    items, total, pages = await product_service.list_products(
+        db,
+        page=1,
+        limit=limit,
+    )
+
+    return ProductListResponse(
+        items=[ProductResponse.model_validate(p) for p in items],
+        total=total,
+        page=1,
+        pages=pages,
+        limit=limit,
+    )
+
+
+@router.get("/by-ids", response_model=list[ProductResponse])
+async def get_products_by_ids(
+    ids: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch multiple products by comma-separated IDs (public endpoint).
+
+    Used by the product detail page to render admin-curated 'You May Also Like' products.
+    Only returns active products; missing/inactive IDs are silently omitted.
+    """
+    try:
+        id_list = [int(i.strip()) for i in ids.split(",") if i.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ids must be comma-separated integers")
+    if not id_list:
+        return []
+    result = await db.execute(
+        select(Product).where(Product.id.in_(id_list), Product.is_active == True)  # noqa: E712
+    )
+    products = list(result.scalars().all())
+    await product_service.attach_review_stats(db, products)
+    await product_service.attach_category_briefs(db, products)
+    # Preserve the admin-specified order
+    id_to_product = {p.id: p for p in products}
+    return [ProductResponse.model_validate(id_to_product[i]) for i in id_list if i in id_to_product]
 
 
 @router.get("/{slug}", response_model=ProductResponse)
@@ -192,12 +358,30 @@ async def create_product(
     stock_qty: Annotated[int, Form()] = 0,
     tags: Annotated[str, Form()] = "[]",
     care_tips: Annotated[str, Form()] = "[]",
+    # JSON string: [category_id, ...] — categories beyond the primary one.
+    additional_category_ids: Annotated[str | None, Form()] = None,
+    display_section: Annotated[str | None, Form()] = None,
     how_to_guide: Annotated[str | None, Form()] = None,
     sunlight: Annotated[str | None, Form()] = None,
     watering: Annotated[str | None, Form()] = None,
-    badge: Annotated[str | None, Form()] = None,
     variants: Annotated[str | None, Form()] = None,
+    promise_banner_image: Annotated[str | None, Form()] = None,  # relative key from prior /upload-image call
+    why_plantoga_banner_image: Annotated[str | None, Form()] = None,  # relative key from prior /upload-image call
+    care_card_image: Annotated[str | None, Form()] = None,  # relative key from prior /upload-image call
+    faqs: Annotated[str | None, Form()] = None,  # JSON string: [{question, answer}, ...]
+    related_product_ids: Annotated[str | None, Form()] = None,  # JSON string: [id1, id2, ...]
     image_urls: Annotated[str, Form()] = "[]",
+    # Per-product bestseller badge. `is_bestseller` has always been sent here by
+    # the admin form but was never declared as a parameter, so FastAPI silently
+    # dropped it and every newly created product landed with the flag off.
+    is_bestseller: Annotated[bool, Form()] = False,
+    # Null/blank = follow the category's badge config (see BestsellerOverrideIn).
+    bestseller_label_override: Annotated[str | None, Form()] = None,
+    bestseller_color_override: Annotated[str | None, Form()] = None,
+    # Combo fields — must be explicit Form() params or FastAPI silently drops them
+    is_combo: Annotated[bool, Form()] = False,
+    combo_description: Annotated[str | None, Form()] = None,
+    combo_items: Annotated[str | None, Form()] = None,  # JSON string: [{name, product_id}, ...]
     images: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
@@ -228,6 +412,19 @@ async def create_product(
                 detail="Each product image must be 5MB or smaller",
             )
 
+    try:
+        submitted_extra_category_ids = json.loads(additional_category_ids or "[]")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400, detail="Additional category ids must be a valid JSON list"
+        ) from exc
+    if not isinstance(submitted_extra_category_ids, list) or not all(
+        isinstance(cid, int) for cid in submitted_extra_category_ids
+    ):
+        raise HTTPException(
+            status_code=400, detail="Additional category ids must be a list of integers"
+        )
+
     payload = ProductCreate(
         name=name,
         description=description,
@@ -235,13 +432,25 @@ async def create_product(
         original_price=original_price,
         stock_qty=stock_qty,
         category_id=category_id,
+        additional_category_ids=submitted_extra_category_ids,
         tags=json.loads(tags),
         care_tips=json.loads(care_tips),
+        display_section=display_section or None,
         how_to_guide=how_to_guide,
         sunlight=sunlight,
         watering=watering,
-        badge=badge,
         variants=json.loads(variants) if variants else None,
+        promise_banner_image=promise_banner_image or None,
+        why_plantoga_banner_image=why_plantoga_banner_image or None,
+        care_card_image=care_card_image or None,
+        faqs=[FAQItem(**f) for f in json.loads(faqs)] if faqs else None,
+        related_product_ids=json.loads(related_product_ids) if related_product_ids else None,
+        is_bestseller=is_bestseller,
+        bestseller_label_override=bestseller_label_override,
+        bestseller_color_override=bestseller_color_override,
+        is_combo=is_combo,
+        combo_description=combo_description or None,
+        combo_items=[ComboItem(**i) for i in json.loads(combo_items)] if combo_items else None,
     )
 
     # Flush first to get product.id, then upload using that id as the folder namespace.
@@ -266,6 +475,15 @@ async def create_product(
             for key in uploaded_keys:
                 await delete_image_file(key)
             raise
+    except IntegrityError as exc:
+        orig = str(exc.orig) if exc.orig else str(exc)
+        detail = orig.split("\n")[0] if "unique" in orig.lower() else "Could not save product due to a data conflict."
+        raise HTTPException(status_code=409, detail=detail) from exc
+    except product_service.PotPriceAmbiguityError as e:
+        # 422, not 400: the request is well-formed but semantically unprocessable. Kept
+        # distinct from 409 so the admin UI can tell "this grid would misprice" apart from
+        # "a slug collided".
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -294,6 +512,12 @@ async def update_product(
 
     try:
         product = await product_service.update_product(db, product, body)
+    except IntegrityError as exc:
+        orig = str(exc.orig) if exc.orig else str(exc)
+        detail = orig.split("\n")[0] if "unique" in orig.lower() else "Could not save product due to a data conflict."
+        raise HTTPException(status_code=409, detail=detail) from exc
+    except product_service.PotPriceAmbiguityError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

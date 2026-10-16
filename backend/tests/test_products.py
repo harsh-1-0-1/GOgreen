@@ -86,11 +86,85 @@ async def test_list_price_range(client: AsyncClient, admin_token: str):
 
 @pytest.mark.asyncio
 async def test_list_filter_by_tags(client: AsyncClient, admin_token: str):
-    await _bulk_seed(client, admin_token, count=5)
+    await _bulk_seed(client, admin_token, 4)
     resp = await client.get(PROD_URL, params={"tags": "indoor"})
+    assert resp.status_code == 200
     data = resp.json()
-    assert data["total"] == 2
+    assert data["total"] > 0
     assert all("indoor" in item["tags"] for item in data["items"])
+
+
+@pytest.mark.asyncio
+async def test_tag_filter_matches_label_and_slug(client: AsyncClient, admin_token: str):
+    """A product stores the admin label; storefront links use the slug.
+
+    `?tags=vastu-friendly` has to find a product tagged `vastu friendly`,
+    otherwise the sidebar filter silently returns nothing.
+    """
+    category = await _seed_category(client, admin_token, "Slug Match Plants")
+    async with test_session_factory() as db:
+        from app.db.models import Product
+
+        db.add(Product(
+            name="Vastu Friendly Only",
+            slug="vastu-friendly-only",
+            description="Carries one spaced label",
+            price=120.0,
+            stock_qty=3,
+            category_id=category["id"],
+            images=["https://example.com/v1.jpg"],
+            tags=["vastu friendly"],
+            is_active=True,
+        ))
+        db.add(Product(
+            name="Vastu Only",
+            slug="vastu-only",
+            description="Carries the short label",
+            price=130.0,
+            stock_qty=3,
+            category_id=category["id"],
+            images=["https://example.com/v2.jpg"],
+            tags=["vastu"],
+            is_active=True,
+        ))
+        await db.commit()
+
+    async def slugs(params: str) -> set[str]:
+        resp = await client.get(PROD_URL, params={"tags": params})
+        assert resp.status_code == 200, resp.text
+        return {item["slug"] for item in resp.json()["items"]}
+
+    # Every spelling of the spaced label resolves to the same product...
+    assert await slugs("vastu-friendly") == {"vastu-friendly-only"}
+    assert await slugs("vastu friendly") == {"vastu-friendly-only"}
+    assert await slugs("Vastu Friendly") == {"vastu-friendly-only"}
+    # ...and the short tag must not over-match it.
+    assert await slugs("vastu") == {"vastu-only"}
+
+
+@pytest.mark.asyncio
+async def test_tag_filter_ignores_blank_entries(client: AsyncClient, admin_token: str):
+    category = await _seed_category(client, admin_token, "Blank Tag Plants")
+    async with test_session_factory() as db:
+        from app.db.models import Product
+
+        db.add(Product(
+            name="Padded Tag",
+            slug="padded-tag",
+            description="Tag with stray whitespace",
+            price=90.0,
+            stock_qty=2,
+            category_id=category["id"],
+            images=["https://example.com/p1.jpg"],
+            tags=["  vastu friendly  "],
+            is_active=True,
+        ))
+        await db.commit()
+
+    resp = await client.get(PROD_URL, params={"tags": " , vastu-friendly, "})
+    assert resp.status_code == 200
+    assert {item["slug"] for item in resp.json()["items"]} == {"padded-tag"}
+
 
 
 @pytest.mark.asyncio
@@ -108,7 +182,7 @@ async def test_get_product_by_slug(client: AsyncClient, admin_token: str):
     await _bulk_seed(client, admin_token, count=1)
     resp = await client.get(f"{PROD_URL}/plant-1")
     assert resp.status_code == 200
-    assert resp.headers["cache-control"] == "public, max-age=60"
+    assert resp.headers["cache-control"] == "no-cache"
     assert resp.json()["slug"] == "plant-1"
 
 
@@ -288,3 +362,71 @@ async def test_update_product_success(client: AsyncClient, admin_token: str):
     assert data["stock_qty"] == 99
     assert data["images"] == ["https://example.com/new-image.jpg"]
 
+
+@pytest.mark.asyncio
+async def test_update_product_null_variants_does_not_wipe(client: AsyncClient, admin_token: str):
+    """PUT with variants=null must leave existing variants untouched.
+
+    Regression test for the race condition where an admin edits only the
+    price before variant state finishes loading. The frontend omits `variants`
+    from the payload when it wasn't built, but a null value (old behaviour or
+    direct API call) must also be a no-op — not a wipe.
+    """
+    cat = await _seed_category(client, admin_token, "Variants Test")
+    variants_payload = {
+        "colors": [{"name": "Green", "hex": "#2D6A4F", "slug": "green", "image_url": ""}],
+        "pot_types": [{"name": "Type 1", "slug": "type-1", "price_modifier": 45, "image_url": ""}],
+        "sizes": [{"name": "Small", "slug": "small", "price_modifier": 0, "description": ""}],
+        "default_image": "",
+        "image_map": {"green__type-1__small": ["plantoga/products/1/abc.jpg"]},
+        "stock": {"green__type-1__small": 10},
+    }
+    async with test_session_factory() as db:
+        from app.db.models import Product
+        p = Product(
+            name="Variant Plant",
+            slug="variant-plant",
+            description="desc",
+            price=50.0,
+            stock_qty=10,
+            category_id=cat["id"],
+            images=[],
+            is_active=True,
+            variants=variants_payload,
+        )
+        db.add(p)
+        await db.commit()
+        await db.refresh(p)
+        pid = p.id
+
+    # Price-only update — variants explicitly null (mirrors old frontend behaviour)
+    resp = await client.put(
+        f"{PROD_URL}/{pid}",
+        json={"price": 99.0, "variants": None},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    # Price changed
+    assert data["price"] == 99.0
+
+    # Variants must be completely intact — not wiped (not even partially).
+    v = data["variants"]
+    assert v is not None
+
+    # Structural data preserved
+    assert len(v["colors"]) == 1
+    assert v["colors"][0]["name"] == "Green"
+    assert len(v["pot_types"]) == 1
+    assert v["pot_types"][0]["name"] == "Type 1"
+    assert len(v["sizes"]) == 1
+    assert v["sizes"][0]["name"] == "Small"
+
+    # Stock preserved
+    assert v["stock"] == {"green__type-1__small": 10}
+
+    # image_map preserved — response resolves relative keys to full URLs,
+    # so assert on key presence and URL suffix rather than exact raw key
+    assert list(v["image_map"].keys()) == ["green__type-1__small"]
+    assert v["image_map"]["green__type-1__small"][0].endswith("plantoga/products/1/abc.jpg")

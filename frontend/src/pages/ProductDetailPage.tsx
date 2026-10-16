@@ -1,25 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronUp, Droplets, Minus, Plus, ShoppingCart, Sun, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Minus, Plus, ShoppingCart, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useProduct, useProducts } from '@/hooks/useProducts';
+import { useProduct, useProducts, useProductsByIds } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useProductReviews } from '@/hooks/useReviews';
 import { useCartStore } from '@/store/cartStore';
-import { useAuthStore } from '@/store/authStore';
 import ProductCard from '@/components/product/ProductCard';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
 import ProductReviews, { ProductRatingInline } from '@/components/product/ProductReviews';
+import PlantCareCard from '@/components/product/PlantCareCard';
 import PlantogaPromise from '@/components/product/PlantogaPromise';
 import HowToGuide from '@/components/product/HowToGuide';
+import CareEssentials from '@/components/product/CareEssentials';
 import ProductSpecification from '@/components/product/ProductSpecification';
 import WhyPlantoga from '@/components/product/WhyPlantoga';
 import HappyPlanters from '@/components/product/HappyPlanters';
 import ProductFaq from '@/components/product/ProductFaq';
+import { useBanners } from '@/hooks/useBanners';
 import { STORE_LEGAL } from '@/lib/branding';
 import Spinner from '@/components/ui/Spinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
-import type { Category } from '@/types';
+import type { Banner, Category, ImageVariantSet, VariantGroup, VariantOption } from '@/types';
+import { useStories } from '@/hooks/useStories';
+import { StoriesCarousel } from '@/components/stories/StoriesCarousel';
+import { getApiErrorDetail } from '@/lib/apiError';
+import { fallbackOnError, srcSetFor, variantLookup } from '@/lib/imageVariants';
+import { formatPotPrice, potPriceForOption, exactPotPrice, gridGroupIds } from '@/lib/potPrice';
+
+/** Shown when an option genuinely costs nothing. Data-driven rather than a hardcoded
+ *  English literal in the render tree, so it can be changed or localised in one place. */
+const NO_PRICE_LABEL = 'No charge';
 
 
 function findCategoryName(categories: Category[] | undefined, categoryId: number): string {
@@ -39,54 +50,401 @@ function findCategoryName(categories: Category[] | undefined, categoryId: number
   return (search(categories) || 'Plants').toUpperCase();
 }
 
-function MobileGallery({ images }: { images: string[] }) {
-  const [active, setActive] = useState(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const list = images.length ? images : ['https://placehold.co/600x600?text=Plant'];
+// Full cartesian product of variant groups → combo rows (cap guards pathological products,
+// matching the admin combos table cap). Each row carries the per-group option map so
+// visibility/auto-select can be computed without re-walking the matrix.
+function buildComboRows(
+  groups: VariantGroup[],
+  cap = 50,
+): { key: string; groupOption: Record<string, string> }[] {
+  let rows: { key: string; groupOption: Record<string, string> }[] = [{ key: '', groupOption: {} }];
+  outer: for (const group of groups) {
+    const options = group?.options ?? [];
+    const next: { key: string; groupOption: Record<string, string> }[] = [];
+    for (const row of rows) {
+      for (const opt of options) {
+        if (next.length >= cap) break outer;
+        next.push({
+          key: row.key ? `${row.key}__${opt.id}` : opt.id,
+          groupOption: { ...row.groupOption, [group.id]: opt.id },
+        });
+      }
+    }
+    rows = next;
+  }
+  return rows;
+}
 
-  function handleScroll() {
-    const el = scrollRef.current;
-    if (!el) return;
-    const idx = Math.round(el.scrollLeft / el.clientWidth);
-    setActive(idx);
+function isColourLabel(label: string): boolean {
+  return /colou?r/i.test(label);
+}
+
+// Level-wise selection flow: Size (level 0) → Pot type (level 1) → Colour (level 2).
+// `always_show_options` groups (sizes) rank first, colour groups rank last, everything
+// else keeps its admin-defined order in between. Stable sort → ties keep admin order.
+// Drives display order, auto-select and the direction of option filtering only —
+// combo keys / stock_map / price_map keep using the admin (variant_groups) order.
+function flowRank(group: VariantGroup): number {
+  // Size groups rank first whether flagged in admin or merely label-matched (the admin
+  // page uses the same /size/i heuristic for its flag hint), so a drag-reordered group
+  // list can't demote the size level below pot type.
+  if (group.always_show_options || /size/i.test(group.label)) return 0;
+  return isColourLabel(group.label) ? 2 : 1;
+}
+
+function findCategoryTrail(categories: Category[] | undefined, categoryId: number): Category[] {
+  if (!categories?.length) return [];
+
+  const search = (list: Category[], trail: Category[]): Category[] | null => {
+    for (const cat of list) {
+      const nextTrail = [...trail, cat];
+      if (cat.id === categoryId) return nextTrail;
+      if (cat.children?.length) {
+        const match = search(cat.children, nextTrail);
+        if (match) return match;
+      }
+    }
+    return null;
+  };
+
+  return search(categories, []) ?? [];
+}
+
+function normalizeBannerTarget(value: string | number | null | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+/, '')
+    .replace(/^products\?category=/, '')
+    .replace(/^products\//, '')
+    .replace(/^category\//, '')
+    .replace(/^(product_detail|category|type):/, '')
+    .replace(/\s+/g, '-');
+}
+
+function selectProductTypeBanner(
+  banners: Banner[],
+  categories: Category[] | undefined,
+  categoryId: number,
+): Banner | null {
+  if (!banners.length) return null;
+
+  const trail = findCategoryTrail(categories, categoryId);
+  const currentCategory = trail.at(-1);
+  const rootCategory = trail[0];
+  const currentTargets = currentCategory
+    ? [
+        normalizeBannerTarget(currentCategory.id),
+        normalizeBannerTarget(currentCategory.slug),
+        normalizeBannerTarget(currentCategory.name),
+      ]
+    : [];
+  const rootTargets = rootCategory
+    ? [
+        normalizeBannerTarget(rootCategory.id),
+        normalizeBannerTarget(rootCategory.slug),
+        normalizeBannerTarget(rootCategory.name),
+      ]
+    : [];
+
+  const findByTargets = (targets: string[]) =>
+    banners.find((banner) => targets.includes(normalizeBannerTarget(banner.target_path)));
+
+  return (
+    findByTargets(currentTargets) ||
+    findByTargets(rootTargets) ||
+    banners.find((banner) => {
+      const target = normalizeBannerTarget(banner.target_path);
+      return !target || target === '*';
+    }) ||
+    null
+  );
+}
+
+function ProductDescription({ description }: { description: string | null }) {
+  if (!description?.trim()) return null;
+
+  const blocks: Array<{ type: 'paragraph'; text: string } | { type: 'list'; items: string[] }> = [];
+  let paragraphLines: string[] = [];
+  let bulletItems: string[] = [];
+
+  const flushParagraph = () => {
+    if (!paragraphLines.length) return;
+    blocks.push({ type: 'paragraph', text: paragraphLines.join(' ') });
+    paragraphLines = [];
+  };
+
+  const flushList = () => {
+    if (!bulletItems.length) return;
+    blocks.push({ type: 'list', items: bulletItems });
+    bulletItems = [];
+  };
+
+  description.split(/\r?\n/).forEach((rawLine) => {
+    const line = rawLine.trim();
+    const bulletMatch = line.match(/^(?:[-*•])\s+(.+)$/);
+
+    if (!line) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+
+    if (bulletMatch) {
+      flushParagraph();
+      bulletItems.push(bulletMatch[1].trim());
+      return;
+    }
+
+    flushList();
+    paragraphLines.push(line);
+  });
+
+  flushParagraph();
+  flushList();
+
+  return (
+    <div className="space-y-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+      {blocks.map((block, index) => {
+        if (block.type === 'list') {
+          return (
+            <ul key={index} className="list-disc pl-5 space-y-1 marker:text-primary">
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>{item}</li>
+              ))}
+            </ul>
+          );
+        }
+
+        return <p key={index}>{block.text}</p>;
+      })}
+    </div>
+  );
+}
+
+function MobileGallery({
+  images,
+  activeIndex,
+  onActiveChange,
+  variants,
+}: {
+  images: string[];
+  activeIndex: number;
+  onActiveChange: (i: number) => void;
+  variants?: Record<string, ImageVariantSet>;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Clamp activeIndex so an out-of-bounds value (e.g. after a variant switch
+  // shrinks the image array) never renders the wrong or missing image.
+  const safeActiveIndex = Math.min(activeIndex, Math.max(0, images.length - 1));
+  const list = images;
+
+  // Keep a ref to the latest safe index so settle() never closes over a stale value.
+  const activeIndexRef = useRef(safeActiveIndex);
+  useEffect(() => {
+    activeIndexRef.current = safeActiveIndex;
+  });
+
+  const EASING = 'transform 380ms cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+
+  // Touch gesture state — all refs so touch handlers never close over stale values
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const touchDeltaX = useRef(0);
+  // null = intent not yet determined, 'h' = horizontal (we own it), 'v' = vertical (pass through)
+  const gestureIntent = useRef<'h' | 'v' | null>(null);
+  // Velocity tracking: record last two move events to compute px/ms on touchend
+  const lastMoveTime = useRef(0);
+  const lastMoveX = useRef(0);
+  const velocityX = useRef(0); // px/ms, positive = moving right
+
+  // React's synthetic onTouchMove is passive by default (can't call preventDefault).
+  // Attach the move listener manually as { passive: false } so we can block
+  // page scroll when the gesture is determined to be horizontal.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const onMove = (e: TouchEvent) => {
+      // Only block scroll if intent is confirmed horizontal
+      if (gestureIntent.current === 'h') e.preventDefault();
+    };
+    track.addEventListener('touchmove', onMove, { passive: false });
+    return () => track.removeEventListener('touchmove', onMove);
+  }, []);
+
+  function settle(toIndex: number) {
+    // Re-enable transition, then let React re-render drive the transform.
+    // For snap-back (toIndex === currentIndex), also force the pixel position
+    // so the animation plays — React won't re-render since index didn't change.
+    // Use activeIndexRef (not the prop directly) to avoid stale-closure bugs
+    // when a variant switch triggers a re-render while a gesture is in flight.
+    const currentIndex = activeIndexRef.current;
+    if (!trackRef.current || !containerRef.current) return;
+    const el = trackRef.current;
+    el.style.transition = EASING;
+    if (toIndex === currentIndex) {
+      el.style.transform = `translateX(${-currentIndex * containerRef.current.offsetWidth}px)`;
+      const onEnd = () => {
+        el.style.transform = '';
+        el.style.transition = '';
+        el.removeEventListener('transitionend', onEnd);
+      };
+      el.addEventListener('transitionend', onEnd);
+    } else {
+      // React re-render will apply the correct percentage transform with transition
+      el.style.transform = '';
+      onActiveChange(toIndex);
+    }
+  }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchDeltaX.current = 0;
+    gestureIntent.current = null;
+    lastMoveTime.current = e.timeStamp;
+    lastMoveX.current = e.touches[0].clientX;
+    velocityX.current = 0;
+    // Disable transition so the track follows the finger with zero lag
+    if (trackRef.current) trackRef.current.style.transition = 'none';
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (!containerRef.current || !trackRef.current) return;
+
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+
+    // Determine gesture intent on the first few pixels of movement
+    if (gestureIntent.current === null) {
+      if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return; // not moved enough yet
+      gestureIntent.current = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+    }
+
+    // Vertical intent — do nothing, let the page scroll normally
+    if (gestureIntent.current === 'v') return;
+
+    // Horizontal intent — drive the track (preventDefault handled by the
+    // non-passive native listener registered in useEffect)
+    touchDeltaX.current = dx;
+
+    // Velocity: px/ms over the last move interval
+    const dt = e.timeStamp - lastMoveTime.current;
+    if (dt > 0) velocityX.current = (e.touches[0].clientX - lastMoveX.current) / dt;
+    lastMoveTime.current = e.timeStamp;
+    lastMoveX.current = e.touches[0].clientX;
+
+    const base = -activeIndexRef.current * containerRef.current.offsetWidth;
+    trackRef.current.style.transform = `translateX(${base + dx}px)`;
+  }
+
+  function handleTouchEnd() {
+    // If intent was vertical (or never determined), nothing to do
+    if (gestureIntent.current !== 'h' || !containerRef.current) return;
+
+    const width = containerRef.current.offsetWidth;
+    const dist = touchDeltaX.current;
+    const vel = velocityX.current; // px/ms
+    // Use the ref to avoid stale closure — activeIndex prop may have changed
+    // if a variant switch triggered a re-render while the gesture was in flight.
+    const curIdx = activeIndexRef.current;
+
+    // Advance if: fast flick (>0.3px/ms) OR dragged past 25% of width
+    const isFlickLeft  = vel < -0.3 && curIdx < list.length - 1;
+    const isFlickRight = vel >  0.3 && curIdx > 0;
+    const isDragLeft   = dist < -width * 0.25 && curIdx < list.length - 1;
+    const isDragRight  = dist >  width * 0.25 && curIdx > 0;
+
+    if (isFlickLeft  || isDragLeft)  { settle(curIdx + 1); return; }
+    if (isFlickRight || isDragRight) { settle(curIdx - 1); return; }
+    settle(curIdx); // snap back
   }
 
   function scrollPrev() {
-    if (active > 0) {
-      scrollRef.current?.scrollBy({ left: -window.innerWidth, behavior: 'smooth' });
-    }
+    if (safeActiveIndex > 0) onActiveChange(safeActiveIndex - 1);
   }
 
   function scrollNext() {
-    if (active < list.length - 1) {
-      scrollRef.current?.scrollBy({ left: window.innerWidth, behavior: 'smooth' });
-    }
+    if (safeActiveIndex < list.length - 1) onActiveChange(safeActiveIndex + 1);
+  }
+
+  // Keyboard navigation for desktop / accessibility
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); scrollPrev(); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); scrollNext(); }
   }
 
   return (
-    <div className="relative px-4">
+    // touch-action: pan-y tells the browser "I'm claiming horizontal gestures;
+    // vertical scroll is yours." This is the CSS-level contract that backs up
+    // the intent-detection logic above and prevents flicker on fast diagonals.
+    <div
+      className="relative overflow-hidden rounded-2xl"
+      ref={containerRef}
+      style={{ touchAction: 'pan-y' }}
+      // aria: region label + roledescription so screen readers announce "Image carousel"
+      role="region"
+      aria-label={`Product images, ${list.length} total`}
+      aria-roledescription="carousel"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
+      {/* Track — slides side by side, driven by transform */}
       <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="flex overflow-x-auto snap-x-mandatory scrollbar-hide gap-4"
+        ref={trackRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="flex will-change-transform"
+        style={{
+          transform: `translateX(${-safeActiveIndex * 100}%)`,
+          transition: EASING,
+        }}
       >
-        {list.map((img, i) => (
-          <img
+        {list.length === 0 ? (
+          <div className="w-full shrink-0">
+            <div className="w-full aspect-square bg-gray-100" />
+          </div>
+        ) : (
+          list.map((img, i) => {
+          const set = variants?.[img];
+          return (
+          <div
             key={i}
-            src={img}
-            alt={`Product ${i + 1}`}
-            className="w-full shrink-0 snap-center aspect-square object-cover rounded-2xl"
-            loading="lazy"
-          />
-        ))}
+            role="group"
+            aria-roledescription="slide"
+            aria-label={`Image ${i + 1} of ${list.length}`}
+            aria-hidden={i !== safeActiveIndex}
+            className="w-full shrink-0"
+          >
+            <img
+              src={set?.card ?? img}
+              srcSet={srcSetFor(set)}
+              sizes="100vw"
+              width={800}
+              height={800}
+              alt={`Product image ${i + 1}`}
+              className="w-full aspect-square object-cover"
+              loading={i === 0 ? 'eager' : 'lazy'}
+              fetchPriority={i === 0 ? 'high' : 'auto'}
+              decoding="async"
+              onError={fallbackOnError(img)}
+              draggable={false}
+            />
+          </div>
+          );
+          })
+        )}
       </div>
       
       {list.length > 1 && (
         <button 
           onClick={scrollPrev}
-          disabled={active === 0}
+          disabled={safeActiveIndex === 0}
           className={`absolute top-1/2 -translate-y-1/2 left-0 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center -ml-2 z-10 touch-target text-gray-800 transition-opacity ${
-            active === 0 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
+            safeActiveIndex === 0 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
           }`}
         >
           <ChevronLeft size={20} />
@@ -96,9 +454,9 @@ function MobileGallery({ images }: { images: string[] }) {
       {list.length > 1 && (
         <button 
           onClick={scrollNext}
-          disabled={active === list.length - 1}
+          disabled={safeActiveIndex === list.length - 1}
           className={`absolute top-1/2 -translate-y-1/2 right-0 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center -mr-2 z-10 touch-target text-gray-800 transition-opacity ${
-            active === list.length - 1 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
+            safeActiveIndex === list.length - 1 ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-gray-50'
           }`}
         >
           <ChevronRight size={20} />
@@ -108,28 +466,74 @@ function MobileGallery({ images }: { images: string[] }) {
   );
 }
 
-function DesktopGallery({ images }: { images: string[] }) {
-  const [active, setActive] = useState(0);
-  const list = images.length ? images : ['https://placehold.co/600x600?text=Plant'];
+function DesktopGallery({
+  images,
+  activeIndex,
+  onActiveChange,
+  variants,
+}: {
+  images: string[];
+  activeIndex: number;
+  onActiveChange: (i: number) => void;
+  variants?: Record<string, ImageVariantSet>;
+}) {
+  const list = images;
+  // Clamp so an out-of-bounds activeIndex (e.g. right after a variant switch
+  // that shrinks the image array) never reads list[undefined].
+  const safeActiveIndex = Math.min(activeIndex, Math.max(0, list.length - 1));
+  const active = list[safeActiveIndex];
+  const activeSet = active ? variants?.[active] : undefined;
 
   return (
-    <div className="space-y-3">
-      <div className="aspect-square rounded-2xl overflow-hidden bg-gray-50">
-        <img src={list[active]} alt="Product" className="w-full h-full object-cover" loading="lazy" />
-      </div>
+    <div className="flex gap-3">
+      {/* Vertical thumbnail strip — only shown when there are multiple images */}
       {list.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-          {list.map((img, i) => (
+        <div className="flex flex-col gap-2 overflow-y-auto scrollbar-hide max-h-[520px] lg:max-h-[600px] shrink-0">
+          {list.map((img, i) => {
+            const set = variants?.[img];
+            return (
             <button
               key={i}
-              onClick={() => setActive(i)}
-              className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition ${i === active ? 'border-primary' : 'border-transparent'}`}
+              onClick={() => onActiveChange(i)}
+              className={`shrink-0 w-[68px] h-[68px] lg:w-[76px] lg:h-[76px] rounded-xl overflow-hidden border-2 transition ${
+                i === safeActiveIndex ? 'border-primary' : 'border-transparent hover:border-gray-300'
+              }`}
             >
-              <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
+              <img
+                src={set?.thumb ?? img}
+                width={80}
+                height={80}
+                alt=""
+                className="w-full h-full object-cover"
+                loading="lazy"
+                decoding="async"
+                onError={fallbackOnError(img)}
+              />
             </button>
-          ))}
+            );
+          })}
         </div>
       )}
+      {/* Main image */}
+      <div className="flex-1 aspect-square rounded-2xl overflow-hidden bg-gray-50">
+        {active ? (
+          <img
+            src={activeSet?.detail ?? active}
+            srcSet={srcSetFor(activeSet)}
+            sizes="(max-width: 1024px) 45vw, 600px"
+            width={800}
+            height={800}
+            alt="Product"
+            className="w-full h-full object-cover"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            onError={fallbackOnError(active)}
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-100" />
+        )}
+      </div>
     </div>
   );
 }
@@ -139,20 +543,20 @@ function CareTips({ tips }: { tips: string[] }) {
   if (!tips?.length) return null;
 
   return (
-    <div className="border rounded-xl overflow-hidden">
+    <div className="border border-primary/20 rounded-xl overflow-hidden bg-white">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-4 text-sm font-semibold hover:bg-gray-50 transition touch-target"
+        className="w-full flex items-center justify-between p-4 text-sm font-semibold bg-primary text-white hover:bg-primary-dark transition touch-target"
       >
         Plant Care Tips
         {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
       </button>
       {open && (
-        <div className="px-4 pb-4">
-          <ul className="space-y-2">
+        <div className="px-4 pb-4 pt-1 border-t border-primary/15 bg-[#FAFAF7]">
+          <ul className="space-y-2.5 mt-2">
             {tips.map((tip, i) => (
-              <li key={i} className="text-sm text-gray-600 flex gap-2">
-                <span className="text-primary-light mt-0.5">•</span>{tip}
+              <li key={i} className="text-sm text-gray-700 flex gap-2.5 items-start">
+                <span className="text-primary-light mt-0.5 text-base leading-none">🌿</span>{tip}
               </li>
             ))}
           </ul>
@@ -162,74 +566,102 @@ function CareTips({ tips }: { tips: string[] }) {
   );
 }
 
+
+
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading, isError } = useProduct(slug!);
   const { data: categories } = useCategories();
   const addItem = useCartStore((s) => s.addItem);
-  const { user, openAuthModal } = useAuthStore();
   const navigate = useNavigate();
   const [qty, setQty] = useState(1);
-  const [selectedColor, setSelectedColor] = useState<string | null>(null);
-  const [selectedPot, setSelectedPot] = useState<string | null>(null);
-  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  // New: selectedOptions maps groupId → optionId for the new flexible variant system
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+  const [galleryActive, setGalleryActive] = useState(0);
 
   const galleryRef = useRef<HTMLDivElement>(null);
   const isInitialized = useRef(false);
+  const similarScrollRef = useRef<HTMLDivElement>(null);
 
   const { data: similar } = useProducts({ limit: 5 });
+  const { data: curatedRelated } = useProductsByIds(product?.related_product_ids ?? []);
   const { data: reviewPreview } = useProductReviews(product?.id, { limit: 1 });
+  const productCategorySlug = (() => {
+    if (!product || !categories) return undefined;
+    const trail = findCategoryTrail(categories, product.category_id);
+    return trail[0]?.slug || trail.at(-1)?.slug;
+  })();
+  const { data: productDetailBanners = [] } = useBanners('product_detail', productCategorySlug);
+  const { data: productSpecBanners = [] } = useBanners('product_spec', productCategorySlug);
+  const { data: productStripBanners = [] } = useBanners('product_strip', productCategorySlug);
+  const { data: whyPlantogaBanners = [] } = useBanners('why_plantoga', productCategorySlug);
+  const { data: stories = [] } = useStories();
 
   useEffect(() => {
     isInitialized.current = false;
   }, [slug]);
 
-  useEffect(() => {
-    if (!product) return;
-
-    const colors = product.variants?.colors || [];
-    const pots = product.variants?.pot_types || [];
-    const sizes = product.variants?.sizes || [];
-
-    const hasColors = colors.length > 0;
-    const hasPots = pots.length > 0;
-    const hasSizes = sizes.length > 0;
-
-    const colorOk = !hasColors || selectedColor !== null;
-    const potOk = !hasPots || selectedPot !== null;
-    const sizeOk = !hasSizes || selectedSize !== null;
-
-    if (colorOk && potOk && sizeOk) {
-      if (!isInitialized.current) {
-        isInitialized.current = true;
-      } else {
-        galleryRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // Auto-select the default (already-included) full combo when the product loads:
+  // among in-stock rows pick the lowest final price — so the ₹0 set (e.g. Small +
+  // Grow pot) wins and the customer immediately sees what the base price includes —
+  // ties broken by admin-defined order (first row). Falls back to the very first row
+  // when nothing is in stock, keeping the honest "Out of Stock" state. The level-wise
+  // flow still applies afterwards: picking a higher level clears stranded lower ones.
+  // Run during render (guarded by product id) instead of an effect to avoid the
+  // set-state-in-effect hook violation.
+  const [lastAutoSelectedProductId, setLastAutoSelectedProductId] = useState<number | null>(null);
+  if (product && lastAutoSelectedProductId !== product.id) {
+    const groups = product.variants?.variant_groups;
+    if (!Array.isArray(groups) || groups.length === 0) {
+      setLastAutoSelectedProductId(product.id);
+      setSelectedOptions({});
+      setQty(1);
+    } else {
+      const stockMap = product.variants?.stock_map ?? null;
+      const rows = buildComboRows(groups);
+      // Final price of a combo — mirrors the display chain below: a price_map row
+      // wins; otherwise base + non-grid option deltas + pot grid cell.
+      const axes = gridGroupIds(product.variants?.pot_price);
+      const base = Number(product.price ?? 0);
+      const priceMap = product.variants?.price_map ?? null;
+      const comboTotal = (row: { key: string; groupOption: Record<string, string> }): number => {
+        const mapped = priceMap ? Number(priceMap[row.key]) : NaN;
+        if (Number.isFinite(mapped)) return mapped;
+        const deltas = groups.reduce(
+          (sum, g) =>
+            axes.includes(g.id)
+              ? sum
+              : sum + Number((g.options ?? []).find((o) => o.id === row.groupOption[g.id])?.price ?? 0),
+          0,
+        );
+        return base + deltas + (exactPotPrice(axes, product.variants?.pot_price?.map, row.groupOption) ?? 0);
+      };
+      const inStock = stockMap ? rows.filter((r) => Number(stockMap[r.key] ?? 0) > 0) : rows;
+      const candidates = inStock.length > 0 ? inStock : rows.slice(0, 1);
+      let chosen = candidates[0];
+      let bestTotal = chosen ? comboTotal(chosen) : 0;
+      for (const row of candidates) {
+        const total = comboTotal(row);
+        // Strict < → on ties the earlier (admin-defined) row keeps winning.
+        if (total < bestTotal) {
+          bestTotal = total;
+          chosen = row;
+        }
+      }
+      if (chosen) {
+        setLastAutoSelectedProductId(product.id);
+        setSelectedOptions(chosen.groupOption);
+        setQty(1);
       }
     }
-  }, [selectedColor, selectedPot, selectedSize, product]);
+  }
 
+  // Reset gallery to index 0 whenever the variant selection changes.
+  // useEffect (not render-time setState) so the reset is batched properly and
+  // galleryImages is already updated when the gallery re-renders.
   useEffect(() => {
-    if (!product) return;
-    if (!product.variants) {
-      setSelectedColor(null);
-      setSelectedPot(null);
-      setSelectedSize(null);
-      setQty(1);
-      return;
-    }
-    const colors = product.variants.colors || [];
-    const pots = product.variants.pot_types || [];
-    const sizes = product.variants.sizes || [];
-    const firstInStockKey = Object.entries(product.variants.stock || {})
-      .find(([, stock]) => Number(stock) > 0)?.[0];
-    const inStockParts = firstInStockKey?.split('__') || [];
-    setSelectedColor(colors.length ? (inStockParts[0] || colors[0].slug) : null);
-    setSelectedPot(pots.length ? (inStockParts[1] || pots[0].slug) : null);
-    setSelectedSize(sizes.length
-      ? (colors.length && pots.length ? inStockParts[2] : inStockParts[0]) || sizes[0].slug
-      : null);
-    setQty(1);
-  }, [product]);
+    setGalleryActive(0);
+  }, [selectedOptions]);
 
   if (isLoading) return <Spinner className="py-32" />;
   if (isError || !product) {
@@ -241,78 +673,285 @@ export default function ProductDetailPage() {
     );
   }
 
-  const variants = product.variants;
-  const sizes = variants?.sizes || [];
-  const hasColorPotVariants = Boolean(variants?.colors?.length && variants?.pot_types?.length);
-  const isSizeOnly = Boolean(sizes.length && !variants?.colors?.length && !variants?.pot_types?.length);
-  const hasVariants = hasColorPotVariants || isSizeOnly;
+  const variantGroups = product.variants?.variant_groups ?? [];
+  const hasGroups = variantGroups.length > 0;
 
-  // Build combo key depending on variant mode
-  let comboKey = '';
-  if (hasColorPotVariants && sizes.length) {
-    if (selectedColor && selectedPot && selectedSize) comboKey = `${selectedColor}__${selectedPot}__${selectedSize}`;
-  } else if (hasColorPotVariants) {
-    if (selectedColor && selectedPot) comboKey = `${selectedColor}__${selectedPot}`;
-  } else if (isSizeOnly) {
-    if (selectedSize) comboKey = selectedSize;
+  // Level order for the level-wise flow (Size → Pot type → Colour, see flowRank).
+  const orderedGroups = [...variantGroups].sort((a, b) => flowRank(a) - flowRank(b));
+  const levelIndex: Record<string, number> = {};
+  orderedGroups.forEach((g, i) => {
+    levelIndex[g.id] = i;
+  });
+
+  // Axis IDs the pot grid prices. Read straight off the product — no group is named,
+  // counted or special-cased here, so a two-axis or four-axis grid runs the same code.
+  const gridAxes = gridGroupIds(product.variants?.pot_price);
+
+  // Build option lookup: optionId → option data
+  const optionById: Record<string, VariantOption> = {};
+  for (const group of variantGroups) {
+    for (const opt of group.options ?? []) {
+      optionById[opt.id] = opt;
+    }
   }
 
-  const selectedPotType = variants?.pot_types?.find((p) => p.slug === selectedPot);
-  const selectedSizeType = sizes.find((s) => s.slug === selectedSize);
-  const selectedStock = hasVariants ? Number(variants?.stock?.[comboKey] ?? 0) : product.stock_qty;
-  const selectedPriceModifier =
-    (selectedPotType?.price_modifier || 0) + (selectedSizeType?.price_modifier || 0);
-  const displayPrice = product.price + selectedPriceModifier;
-  const displayOriginalPrice = product.original_price
-    ? product.original_price + selectedPriceModifier
+  // Combo key = selected optionIds joined by '__' in variant_group order.
+  // Only generated when ALL groups have a selection — prevents partial keys (e.g. "opt1")
+  // from incorrectly matching image_map/price_map entries meant for full combinations ("opt1__opt2").
+  const allGroupsHaveSelection = variantGroups.every((g) => selectedOptions[g.id]);
+  const comboKey = allGroupsHaveSelection
+    ? variantGroups
+        .map((g) => selectedOptions[g.id])
+        .filter(Boolean)
+        .join('__')
+    : '';
+
+  // Price: preference order is
+  //   1. variants.price_map[comboKey] — per-combination price set in the admin
+  //      "Variant Combinations & Images" table (e.g. Small/Krish ₹300 ≠ Medium/Krish ₹350).
+  //   2. Sum of the selected option prices (fallback for products without a price_map).
+  //   3. product.price — only when no group has a selection yet (briefly on first render
+  //      before the auto-select fires, or if all groups are optional and nothing was picked).
+  // NOTE: do NOT use `> 0` as the guard — a legitimately free option/combination (price=0)
+  // would incorrectly fall through to product.price.
+  const hasAnySelection = Object.keys(selectedOptions).length > 0;
+  // Deltas from groups the grid does NOT price. Counting a grid group's own `options[].price`
+  // on top of its matrix cell would double-charge it — the exact defect the server-side
+  // gate exists to prevent. Excluded BY MEMBERSHIP, not by value, so a ₹0 delta in a grid
+  // group is still excluded.
+  const nonGridOptionDeltas = Object.entries(selectedOptions).reduce((sum, [gid, optId]) => {
+    if (gridAxes.includes(gid)) return sum;
+    return sum + Number(optionById[optId]?.price ?? 0);
+  }, 0);
+  const priceMap: Record<string, number> | null = hasGroups
+    ? product.variants?.price_map ?? null
     : null;
-  const discount =
-    displayOriginalPrice && displayOriginalPrice > displayPrice
-      ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
+  const comboPrice = comboKey && priceMap ? Number(priceMap[comboKey]) : null;
+  const hasComboPrice = comboPrice !== null && Number.isFinite(comboPrice);
+  const gridPotPrice = exactPotPrice(
+    gridAxes,
+    product.variants?.pot_price?.map,
+    selectedOptions,
+  );
+  // ONE total, mirroring calculate_variant_price exactly. A legacy `price_map` row wins
+  // outright; otherwise it is the base price plus the non-grid deltas plus the grid cell.
+  //
+  // When the cell is blank (`gridPotPrice` is null — an unfilled cell, or a RANGED value
+  // across pots where the exact price is not yet determined) the pot simply drops out and
+  // the customer sees the base price. That is intentional on both sides: a ranged value must
+  // never be charged, since silently taking the minimum under-charges the expensive pots.
+  //
+  // There is deliberately no second formula here. A `total_mode: display_only` branch used
+  // to price this card without charging the cell, so the page could advertise "+₹300" on an
+  // order it then billed ₹0. The backend has one chain and so does this page.
+  //
+  // The `+` in the card label is load-bearing: it marks a component, so a bare ₹200 under a
+  // pot name can never be misread as the total.
+  const displayPrice = hasGroups && hasAnySelection
+    ? hasComboPrice
+      ? comboPrice
+      : Number(product.price ?? 0) + nonGridOptionDeltas + (gridPotPrice ?? 0)
+    : product.price;
+  const basePrice = Number(product.price ?? 0);
+  const baseOriginalPrice = Number(product.original_price ?? 0);
+  const scaledVariantOriginalPrice = hasGroups && basePrice > 0 && baseOriginalPrice > basePrice
+    ? Math.round(displayPrice * (baseOriginalPrice / basePrice))
+    : null;
+  const displayOriginalPrice = baseOriginalPrice > displayPrice
+    ? baseOriginalPrice
+    : scaledVariantOriginalPrice && scaledVariantOriginalPrice > displayPrice
+      ? scaledVariantOriginalPrice
       : null;
-  const displayImage = hasVariants
-    ? variants?.image_map?.[comboKey] || selectedPotType?.image_url || variants?.default_image || product.images?.[0]
-    : product.images?.[0];
-  const galleryImages = displayImage
-    ? [displayImage, ...(product.images || []).filter((img) => img !== displayImage)]
-    : product.images || [];
+  const discount = displayOriginalPrice && displayOriginalPrice > displayPrice
+    ? Math.round(((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100)
+    : null;
 
-  // Build selectedOptions for cart
-  let selectedOptions: Record<string, string> | null = null;
-  if (hasColorPotVariants && selectedColor && selectedPot) {
-    selectedOptions = { color: selectedColor, pot_type: selectedPot };
-    if (sizes.length && selectedSize) selectedOptions.size = selectedSize;
-  } else if (isSizeOnly && selectedSize) {
-    selectedOptions = { size: selectedSize };
+  // Per-combination stock: dense stock_map keyed by combo_key (option IDs joined by "__").
+  // Source of truth for availability. Old-format products have no variant_groups / stock_map.
+  const stockMap: Record<string, number> | null = hasGroups
+    ? product.variants?.stock_map ?? null
+    : null;
+  const missingStockMap = hasGroups && !stockMap;
+  // Combo rows (with per-group option maps + stock) — used for per-combo visibility.
+  const comboRows = buildComboRows(variantGroups).map((row) => ({
+    ...row,
+    stock: Number(stockMap?.[row.key] ?? 0),
+  }));
+
+  // Option visibility — level-wise and ONE-directional: an option is filtered only by
+  // selections of HIGHER levels (size filters pot types, pot type filters colours),
+  // never by a level below it, so picking a colour can no longer hide sizes/pot types.
+  // With no higher level selected the group renders unfiltered (aside from the global
+  // "stocked in some combo" check). Size groups (flowRank 0 / always_show_options) always
+  // render every defined option regardless of stock. Recomputed on every render.
+  function isOptionVisible(group: VariantGroup, opt: VariantOption): boolean {
+    if (flowRank(group) === 0) return true;
+    if (!stockMap) return true;
+    const myLevel = levelIndex[group.id] ?? 0;
+    return comboRows.some((row) => {
+      if (row.groupOption[group.id] !== opt.id) return false;
+      if (row.stock <= 0) return false;
+      for (const g of variantGroups) {
+        // Own level and every level below never constrain this option.
+        if ((levelIndex[g.id] ?? 0) >= myLevel) continue;
+        const sel = selectedOptions[g.id];
+        if (sel && row.groupOption[g.id] !== sel) return false;
+      }
+      return true;
+    });
   }
 
-  const selectionIncomplete =
-    (hasColorPotVariants && (!selectedColor || !selectedPot || (sizes.length > 0 && !selectedSize)))
-    || (isSizeOnly && !selectedSize);
-  const isUnavailable = selectionIncomplete || selectedStock <= 0;
+  // Image swapping — mirrors old image_map[comboKey] system, adapted for new opt-ID keys.
+  //
+  // Priority chain:
+  //   1. image_map[optId1__optId2__...] — exact combo match (set in admin combinations table)
+  //   2. Selected option's per-option images — the photo of any chosen option/colour
+  //   3. default_image — catch-all variant fallback
+  //   4. product.images — plain product gallery
+  //
+  // Stock: per-combination — the matched combo row's stock (no per-option min).
+  // Old-format products fall back to the product-level stock_qty.
+  const effectiveStock = hasGroups
+    ? Number(stockMap?.[comboKey] ?? 0)
+    : product.stock_qty;
+
+  const imageMap: Record<string, string[]> = product.variants?.image_map ?? {};
+  const comboImages: string[] = (imageMap[comboKey] ?? []).filter(Boolean);
+
+  // Option-image fallback: images on any selected option, in variant-group order,
+  // deduped. Unlike the previous colour-only rule, this lets the photo of ANY
+  // selected option (size/type/style/… not just colour) drive the gallery.
+  const optionFallbackImages: string[] = [
+    ...new Set(
+      variantGroups.flatMap((g) => {
+        const optId = selectedOptions[g.id];
+        return optId ? (optionById[optId]?.images ?? []).filter(Boolean) : [];
+      }),
+    ),
+  ];
+
+  const defaultVariantImage: string = product.variants?.default_image ?? '';
+
+  let galleryImages: string[];
+  if (comboImages.length > 0) {
+    // Combo image(s) first, rest of product gallery appended (deduped)
+    galleryImages = [
+      ...comboImages,
+      ...(product.images ?? []).filter((img) => !comboImages.includes(img)),
+    ];
+  } else if (optionFallbackImages.length > 0) {
+    galleryImages = [
+      ...optionFallbackImages,
+      ...(product.images ?? []).filter((img) => !optionFallbackImages.includes(img)),
+    ];
+  } else if (defaultVariantImage) {
+    galleryImages = [defaultVariantImage, ...(product.images ?? [])];
+  } else {
+    galleryImages = product.images ?? [];
+  }
+
+  // Product-level image variants, keyed by original URL. Variant-option images
+  // aren't in here, so they simply render at their original size.
+  const galleryVariants = variantLookup(product.image_urls);
+
+  // Disable Add to Cart: requires a selection for EVERY group — per-combination stock
+  // needs a full combo key, so an unselected group (even a legacy `required: false`
+  // one) leaves the configuration incomplete. Zero groups = simple product = enabled.
+  const allGroupsSelected = hasGroups
+    ? variantGroups.every((g) => selectedOptions[g.id])
+    : true;
+  const isUnavailable = (hasGroups && !allGroupsSelected) || missingStockMap || effectiveStock <= 0;
+
+  // Cart options: flat array of selected option IDs (Task 6)
+  const cartSelectedOptions: string[] = Object.values(selectedOptions);
+
+  function selectOption(groupId: string, optionId: string) {
+    const next: Record<string, string> = { ...selectedOptions, [groupId]: optionId };
+
+    // Level-wise cleanup: a selection may strand LOWER levels (pot type / colour) with
+    // no in-stock combo. Clear — never silently re-pick — those stale picks, walking the
+    // levels top-down so one stale pick cascades to everything below it. A lower level's
+    // validity is judged against the selections up to and including itself, so an
+    // unaffected deeper pick is judged independently of an already-cleared middle one.
+    // Levels above the click are constraints, never touched. Without a stockMap there is
+    // no combo truth to validate against, so nothing is cleared.
+    if (stockMap) {
+      const myLevel = levelIndex[groupId] ?? 0;
+      let blocked = false;
+      for (const g of orderedGroups) {
+        const gLevel = levelIndex[g.id] ?? 0;
+        if (gLevel <= myLevel) continue;
+        if (!next[g.id]) continue;
+        const stillValid =
+          !blocked &&
+          comboRows.some(
+            (row) =>
+              row.stock > 0 &&
+              Object.entries(next).every(
+                ([gid, oid]) => (levelIndex[gid] ?? 0) > gLevel || row.groupOption[gid] === oid,
+              ),
+          );
+        if (!stillValid) {
+          delete next[g.id];
+          blocked = true;
+        }
+      }
+    }
+
+    setSelectedOptions(next);
+    setQty(1);
+    // On mobile the gallery sits above the variant selector and scrolls out of view.
+    // Scroll back to the top of the page (galleryRef) so the image update is visible.
+    // Skip on md+ breakpoints where the gallery is always in the left column.
+    if (window.innerWidth < 768) {
+      galleryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
 
   async function handleAddToCart() {
     try {
-      await addItem(product!.id, qty, product!, selectedOptions);
+      await addItem(product!.id, qty, product!, cartSelectedOptions.length ? cartSelectedOptions : null);
       toast.success(`${product!.name} added to cart`);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to add');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to add'));
     }
   }
 
   async function handleBuyNow() {
     try {
-      await addItem(product!.id, 1, product!, selectedOptions);
+      await addItem(product!.id, 1, product!, cartSelectedOptions.length ? cartSelectedOptions : null);
       useCartStore.getState().closeDrawer();
       navigate('/cart');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to process');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to process'));
     }
   }
 
-  const similarProducts = similar?.items.filter((p) => p.id !== product.id).slice(0, 4) ?? [];
+  const similarProducts = curatedRelated && curatedRelated.length > 0
+    ? curatedRelated.filter((p) => p.id !== product.id)
+    : similar?.items.filter((p) => p.id !== product.id).slice(0, 8) ?? [];
+  const productDetailBanner = selectProductTypeBanner(productDetailBanners, categories, product.category_id);
+  const productSpecBanner = selectProductTypeBanner(productSpecBanners, categories, product.category_id);
+  const productStripBanner = selectProductTypeBanner(productStripBanners, categories, product.category_id);
+  const whyPlantogaBanner = selectProductTypeBanner(whyPlantogaBanners, categories, product.category_id);
   const mrp = displayOriginalPrice ?? displayPrice;
+  // Combo contents: prefer the structured item list; fall back to the free-text
+  // summary for older combos saved before items existed. When both are present,
+  // the summary becomes a second "Description" row rather than duplicating.
+  const comboItems = (product.combo_items ?? []).filter((it) => it.name?.trim());
+  const comboContents = comboItems.length
+    ? comboItems.map((it, i) => `${i + 1}. ${it.name.trim()}`).join('\n')
+    : (product.combo_description ?? '');
+  const comboSpecRows = product.is_combo
+    ? [
+        ...(comboContents ? [{ label: 'Contents', value: comboContents }] : []),
+        ...(comboItems.length && product.combo_description
+          ? [{ label: 'Description', value: product.combo_description }]
+          : []),
+      ]
+    : [];
   const productSpecs = [
+    ...(product.is_combo ? comboSpecRows : []),
     { label: 'Name', value: product.name },
     { label: 'Category', value: findCategoryName(categories, product.category_id) },
     { label: 'Country of Origin', value: STORE_LEGAL.countryOfOrigin },
@@ -326,12 +965,12 @@ export default function ProductDetailPage() {
     <div ref={galleryRef} className="pb-20 md:pb-0 scroll-mt-[100px] sm:scroll-mt-[110px] lg:scroll-mt-[120px]">
       {/* Mobile image gallery */}
       <div className="md:hidden">
-        <MobileGallery images={galleryImages} />
+        <MobileGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} variants={galleryVariants} />
       </div>
 
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+      <div className="mx-auto w-full max-w-[1720px] px-5 sm:px-8 lg:px-12 xl:px-16 2xl:px-20 pt-2 pb-4 sm:pt-3 sm:pb-8">
         {/* Breadcrumb */}
-        <nav className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6 flex items-center gap-1.5">
+        <nav className="text-xs sm:text-sm text-gray-400 mb-3 sm:mb-4 flex items-center gap-1.5">
           <Link to="/" className="hover:text-primary">Home</Link>
           <span>/</span>
           <Link to="/products" className="hover:text-primary">Products</Link>
@@ -339,22 +978,18 @@ export default function ProductDetailPage() {
           <span className="text-gray-600 line-clamp-1">{product.name}</span>
         </nav>
 
-        <div className="grid md:grid-cols-2 gap-6 lg:gap-10">
-          {/* Desktop gallery */}
-          <div className="hidden md:block">
-            <DesktopGallery images={galleryImages} />
+        <div className="grid md:grid-cols-2 gap-6 lg:gap-10 md:items-start">
+          {/* Desktop gallery — sticky so it stays in view while the right column scrolls */}
+          <div className="hidden md:block md:sticky md:top-[var(--sticky-header-offset,0px)] md:transition-[top] md:duration-300">
+            <DesktopGallery images={galleryImages} activeIndex={galleryActive} onActiveChange={setGalleryActive} variants={galleryVariants} />
           </div>
 
-          <div className="space-y-4 sm:space-y-6">
-            {product.badge && (
-              <span className="inline-block bg-primary text-white text-xs font-medium px-3 py-1 rounded-full">
-                {product.badge}
-              </span>
-            )}
+          <div className="space-y-3.5 sm:space-y-4">
             <h1 className="text-2xl sm:text-3xl font-bold">{product.name}</h1>
 
             <ProductTagBadges
               tags={product.tags}
+             
               size="md"
               asLinks
               className="mt-1"
@@ -366,7 +1001,7 @@ export default function ProductDetailPage() {
               <span className="text-2xl sm:text-3xl font-bold text-primary">₹{displayPrice}</span>
               {displayOriginalPrice && displayOriginalPrice > displayPrice && (
                 <>
-                  <span className="text-base sm:text-lg text-gray-400 line-through">₹{displayOriginalPrice}</span>
+                  <span className="text-base sm:text-lg text-red-500 line-through">₹{displayOriginalPrice}</span>
                   <span className="text-xs sm:text-sm font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded">
                     {discount}% OFF
                   </span>
@@ -374,155 +1009,215 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {selectedStock > 0 ? (
+            {missingStockMap ? (
+              <p className="text-sm text-amber-600 font-medium">
+                This product isn&apos;t configured correctly (missing stock information).
+              </p>
+            ) : hasGroups && !allGroupsSelected ? (
+              <p className="text-sm text-gray-400 font-medium">—</p>
+            ) : effectiveStock > 0 ? (
               <p className="text-sm text-green-600 font-medium">
-                In Stock {selectedStock <= 5 && `(Only ${selectedStock} left)`}
+                In Stock {effectiveStock <= 5 && `(Only ${effectiveStock} left)`}
               </p>
             ) : (
               <p className="text-sm text-red-500 font-medium">Out of Stock</p>
             )}
 
-            {hasVariants && variants && (
+            {/* Flexible Variant Picker — smart rendering per group type */}
+            {hasGroups && (
+              missingStockMap ? (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 flex gap-2 items-start text-xs text-amber-800">
+                  <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                  <span>
+                    Variant options are temporarily unavailable for this product. Please check back later.
+                  </span>
+                </div>
+              ) : (
               <div className="space-y-4">
-                {/* Plant Size Selector */}
-                {sizes.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        Select Plant Size
-                        {selectedSizeType?.description && (
-                          <span className="ml-2 text-primary normal-case font-normal">— {selectedSizeType.description}</span>
-                        )}
+                {/* Level-wise flow: Size → Pot type → Colour (see flowRank). All levels
+                    stay visible; a level is filtered only by higher-level picks. Combo
+                    keys / stock_map keep using variantGroups (admin) order. */}
+                {orderedGroups.map((group) => {
+                  const isColourGroup = isColourLabel(group.label);
+                  const definedOptions = group.options ?? [];
+                  // Options with at least one in-stock combo consistent with the
+                  // HIGHER-level selections — never filtered by lower levels.
+                  const visibleOptions = definedOptions.filter((o) => isOptionVisible(group, o));
+                  const hasOptionImages = visibleOptions.some((o) => o.images?.[0]);
+                  // Render mode: colour → circular swatches; has images → image cards; else → pill chips
+                  const renderMode: 'colour' | 'image-card' | 'pill' =
+                    isColourGroup ? 'colour' : hasOptionImages ? 'image-card' : 'pill';
+
+                  // Degenerate group with no defined options — nothing to render at all.
+                  if (definedOptions.length === 0) return null;
+
+                  // Every level stays visible; if nothing here is purchasable for the
+                  // current higher-level picks, say so instead of hiding the section.
+                  if (visibleOptions.length === 0) {
+                    return (
+                      <div key={group.id}>
+                        <p className="text-sm sm:text-base font-extrabold text-gray-800 uppercase tracking-wide mb-2">
+                          {group.label}
+                        </p>
+                        <p className="text-sm font-medium text-gray-400">
+                          Not available for the current selection
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={group.id}>
+                      <p className="text-sm sm:text-base font-extrabold text-gray-800 uppercase tracking-wide mb-2">
+                        {group.label}
                       </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {sizes.map((size) => {
-                        const sizeCombo = isSizeOnly
-                          ? size.slug
-                          : (selectedColor && selectedPot ? `${selectedColor}__${selectedPot}__${size.slug}` : '');
-                        const stockForSize = sizeCombo ? Number(variants?.stock?.[sizeCombo] ?? 0) : 0;
-                        const disabled = isSizeOnly
-                          ? stockForSize <= 0
-                          : (selectedColor && selectedPot ? stockForSize <= 0 : false);
-                        const isActive = selectedSize === size.slug;
-                        return (
-                          <button
-                            key={size.slug}
-                            type="button"
-                            disabled={disabled}
-                            onClick={() => {
-                              setSelectedSize(size.slug);
-                              setQty(1);
-                            }}
-                            className={`px-5 py-2 rounded-full border-2 text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed ${
-                              isActive
-                                ? 'bg-primary border-primary text-white shadow-sm'
-                                : 'border-gray-300 text-gray-700 hover:border-primary hover:text-primary bg-white'
-                            }`}
-                          >
-                            {size.name}
-                            {size.price_modifier > 0 && (
-                              <span className={`ml-1 text-xs ${isActive ? 'text-white/80' : 'text-gray-400'}`}>
-                                +₹{size.price_modifier}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
 
-                {/* Color Selector */}
-                {hasColorPotVariants && (
-                  <>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Color</p>
-                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                        {variants!.colors.map((color) => {
-                          const colorCombo = selectedPot
-                            ? `${color.slug}__${selectedPot}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`
-                            : '';
-                          const disabled = colorCombo ? Number(variants?.stock?.[colorCombo] ?? 0) <= 0 : false;
-                          return (
-                            <button
-                              key={color.slug}
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => {
-                                setSelectedColor(color.slug);
-                                setQty(1);
-                              }}
-                              className={`w-9 h-9 rounded-full border-2 transition disabled:opacity-30 disabled:cursor-not-allowed ${
-                                selectedColor === color.slug ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200'
-                              }`}
-                              title={color.name}
-                              aria-label={color.name}
-                              style={{ backgroundColor: color.hex }}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pot Type</p>
-                      <div className="flex flex-wrap gap-2">
-                        {variants!.pot_types.map((pot) => {
-                          const potCombo = selectedColor
-                            ? `${selectedColor}__${pot.slug}${sizes.length && selectedSize ? `__${selectedSize}` : ''}`
-                            : '';
-                          const disabled = potCombo ? Number(variants?.stock?.[potCombo] ?? 0) <= 0 : false;
-                          return (
-                            <button
-                              key={pot.slug}
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => {
-                                setSelectedPot(pot.slug);
-                                setQty(1);
-                              }}
-                              className={`w-24 min-h-24 shrink-0 px-2 py-2 rounded-xl border text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${
-                                selectedPot === pot.slug ? 'border-primary bg-primary text-white shadow-sm' : 'border-gray-200 bg-white hover:border-primary/40'
-                              }`}
-                            >
-                              <span className="flex h-11 items-center justify-center mb-1">
-                                {pot.image_url ? (
-                                  <img src={pot.image_url} alt="" className="h-11 w-14 object-contain" loading="lazy" />
-                                ) : (
-                                  <span className={`text-2xl ${selectedPot === pot.slug ? 'text-white/70' : 'text-gray-300'}`}>♧</span>
+                      {/* ── Colour swatches ─────────────────────────────── */}
+                      {renderMode === 'colour' && (
+                        <div className="flex flex-wrap gap-2.5">
+                          {visibleOptions.map((opt) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            const hex: string = opt.color_hex || '';
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => selectOption(group.id, opt.id)}
+                                title={opt.name}
+                                aria-label={opt.name}
+                                className={`relative h-9 w-9 rounded-full border-2 transition focus:outline-none
+                                  ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200 hover:border-primary/40'}
+                                  cursor-pointer
+                                `}
+                                style={{ backgroundColor: hex || '#e5e7eb' }}
+                              >
+                                {isSelected && (
+                                  <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-white ring-2 ring-white">
+                                    <Check size={9} strokeWidth={4} />
+                                  </span>
                                 )}
-                              </span>
-                              <span className="block truncate">{pot.name}</span>
-                              <span className={`block mt-0.5 ${selectedPot === pot.slug ? 'text-white/80' : 'text-gray-500'}`}>
-                                {pot.price_modifier > 0 ? `+₹${pot.price_modifier}` : 'Included'}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* ── Image cards (pot type, style, etc.) ─────────── */}
+                      {renderMode === 'image-card' && (
+                        <div className="flex flex-wrap gap-2">
+                          {visibleOptions.map((opt) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            // Grid groups show the resolved pot price (exact or ranged); every
+                            // other group falls back to its own delta. The `+` marks a
+                            // component, so it can never be misread as the total.
+                            const potLabel = formatPotPrice(
+                              potPriceForOption(
+                                gridAxes,
+                                product.variants?.pot_price?.map,
+                                selectedOptions,
+                                group.id,
+                                opt.id,
+                              ),
+                            );
+                            const priceDelta = Number(opt.price ?? 0);
+                            const priceLabel =
+                              potLabel ?? (priceDelta > 0 ? `+₹${priceDelta}` : NO_PRICE_LABEL);
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => selectOption(group.id, opt.id)}
+                                className={`relative flex flex-col items-center rounded-xl border-2 p-2.5 w-[96px] transition focus:outline-none
+                                  ${isSelected
+                                    ? 'border-primary bg-primary/5 shadow-sm'
+                                    : 'border-gray-200 hover:border-primary/60 bg-white cursor-pointer'
+                                  }`}
+                              >
+                                {isSelected && (
+                                  <span className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white shadow-sm">
+                                    <Check size={12} strokeWidth={3} />
+                                  </span>
+                                )}
+                                <div className="h-14 w-14 rounded-lg overflow-hidden bg-gray-50 mb-1.5 shrink-0">
+                                  {opt.images?.[0] ? (
+                                    <img
+                                      src={opt.images[0]}
+                                      alt={opt.name}
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="h-full w-full flex items-center justify-center text-gray-300">
+                                      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                                        <path d="M21 15l-5-5L5 21"/>
+                                      </svg>
+                                    </div>
+                                  )}
+                                </div>
+                                <span className={`text-xs sm:text-sm font-bold text-center leading-tight line-clamp-2 ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
+                                  {opt.name}
+                                </span>
+                                {priceLabel && (
+                                  <span className={`text-[11px] sm:text-xs mt-1 font-semibold text-center leading-tight ${isSelected ? 'text-primary/85' : 'text-gray-500'}`}>
+                                    {priceLabel}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* ── Pill chips (size, weight, etc.) ─────────────── */}
+                      {renderMode === 'pill' && (
+                        <div className="flex flex-wrap gap-2">
+                          {visibleOptions.map((opt) => {
+                            const isSelected = selectedOptions[group.id] === opt.id;
+                            const potLabel = formatPotPrice(
+                              potPriceForOption(
+                                gridAxes,
+                                product.variants?.pot_price?.map,
+                                selectedOptions,
+                                group.id,
+                                opt.id,
+                              ),
+                            );
+                            const priceDelta = Number(opt.price ?? 0);
+                            // A ₹0 pill must not render as a bare chip — that reads as
+                            // "free / included" with nothing to back it up.
+                            const priceLabel =
+                              potLabel ?? (priceDelta > 0 ? `+₹${priceDelta}` : NO_PRICE_LABEL);
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => selectOption(group.id, opt.id)}
+                                className={`px-4 py-2.5 rounded-full border-2 text-base font-bold transition focus:outline-none inline-flex items-center
+                                  ${isSelected
+                                    ? 'bg-primary border-primary text-white shadow-sm'
+                                    : 'border-gray-200 text-gray-700 hover:border-primary hover:text-primary bg-white'
+                                  }`}
+                              >
+                                {isSelected && <Check size={13} strokeWidth={3} className="mr-1 shrink-0" />}
+                                {opt.name}
+                                {priceLabel && (
+                                  <span className={`ml-1.5 text-sm font-semibold ${isSelected ? 'text-white/85' : 'text-gray-500'}`}>
+                                    {priceLabel}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  </>
-                )}
+                  );
+                })}
               </div>
+              )
             )}
-
-            {product.description && (
-              <p className="text-sm sm:text-base text-gray-600 leading-relaxed">{product.description}</p>
-            )}
-
-            <div className="flex gap-4 sm:gap-6">
-              {product.sunlight && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Sun size={18} className="text-accent" />{product.sunlight}
-                </div>
-              )}
-              {product.watering && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Droplets size={18} className="text-blue-400" />{product.watering}
-                </div>
-              )}
-            </div>
 
             {/* Desktop add to cart */}
             {!isUnavailable && (
@@ -532,13 +1227,13 @@ export default function ProductDetailPage() {
                     <Minus size={16} />
                   </button>
                   <span className="px-4 font-medium">{qty}</span>
-                  <button onClick={() => setQty(Math.min(selectedStock, qty + 1))} className="p-3 hover:bg-gray-50 transition touch-target">
+                  <button onClick={() => setQty(Math.min(effectiveStock, qty + 1))} className="p-3 hover:bg-gray-50 transition touch-target">
                     <Plus size={16} />
                   </button>
                 </div>
                 <button
                   onClick={handleAddToCart}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90 flex items-center justify-center gap-2"
+                  className="flex-1 py-3.5 rounded-xl text-sm font-semibold text-white transition active:scale-[0.98] hover:opacity-90 flex items-center justify-center gap-2"
                   style={{ backgroundColor: '#16A34A' }}
                 >
                   <ShoppingCart size={18} />
@@ -546,7 +1241,7 @@ export default function ProductDetailPage() {
                 </button>
                 <button
                   onClick={handleBuyNow}
-                  className="flex-1 py-3.5 border-2 border-primary text-primary bg-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-primary/5 transition"
+                  className="flex-1 py-3.5 border-2 border-primary text-primary bg-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 hover:bg-primary/5 transition active:scale-[0.98]"
                 >
                   Buy It Now
                 </button>
@@ -560,7 +1255,7 @@ export default function ProductDetailPage() {
                     <Minus size={14} />
                   </button>
                   <span className="min-w-10 px-3 text-center text-sm font-medium">{qty}</span>
-                  <button onClick={() => setQty(Math.min(selectedStock, qty + 1))} className="px-4 py-3 touch-target">
+                  <button onClick={() => setQty(Math.min(effectiveStock, qty + 1))} className="px-4 py-3 touch-target">
                     <Plus size={14} />
                   </button>
                 </div>
@@ -580,29 +1275,157 @@ export default function ProductDetailPage() {
               </div>
             )}
 
+            {productStripBanner && (
+              <div className="mt-3">
+                {productStripBanner.cta_link ? (
+                  <Link
+                    to={productStripBanner.cta_link}
+                    className="block overflow-hidden rounded-xl"
+                    style={{ backgroundColor: productStripBanner.bg_color || '#F5F0E8' }}
+                  >
+                    <img
+                      src={productStripBanner.image_url || ''}
+                      alt={productStripBanner.title}
+                      className="w-full h-auto object-cover"
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </Link>
+                ) : (
+                  <div
+                    className="overflow-hidden rounded-xl"
+                    style={{ backgroundColor: productStripBanner.bg_color || '#F5F0E8' }}
+                  >
+                    <img
+                      src={productStripBanner.image_url || ''}
+                      alt={productStripBanner.title}
+                      className="w-full h-auto object-cover"
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Care essentials + how-to guide — dense, always-visible content that
+                fills the buy-box column alongside the gallery so the two columns end
+                at roughly the same height on desktop. */}
+            <CareEssentials sunlight={product.sunlight} watering={product.watering} />
+
+            <HowToGuide product={product} />
+
+            {/* Spec / promotional banner — in-column card, shown below the care guide.
+                Capped height so a square upload can't turn into a full-column slab. */}
+            {productSpecBanner?.image_url && (
+              <div className="rounded-xl overflow-hidden">
+                {productSpecBanner.cta_link ? (
+                  <Link to={productSpecBanner.cta_link} className="block" style={{ backgroundColor: productSpecBanner.bg_color || '#F5F0E8' }}>
+                    <img src={productSpecBanner.image_url} alt={productSpecBanner.title} className="w-full max-h-[380px] object-cover" loading="lazy" />
+                  </Link>
+                ) : (
+                  <div style={{ backgroundColor: productSpecBanner.bg_color || '#F5F0E8' }}>
+                    <img src={productSpecBanner.image_url} alt={productSpecBanner.title} className="w-full max-h-[380px] object-cover" loading="lazy" />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {product.description?.trim() && (
+              <div>
+                <h2 className="mb-2 text-base font-bold text-gray-900 sm:text-lg" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
+                  Description
+                </h2>
+                <ProductDescription description={product.description} />
+              </div>
+            )}
+
             <CareTips tips={product.care_tips || []} />
+
+            <PlantCareCard careCardImage={product.care_card_image} />
+
+            <PlantogaPromise bannerImage={product.promise_banner_image} />
+
+            <ProductSpecification specs={productSpecs} title={product.is_combo ? 'About the Combo' : 'Product Specification'} />
           </div>
         </div>
 
-        <PlantogaPromise />
-
-        <HowToGuide product={product} />
-
-        <ProductSpecification specs={productSpecs} />
-
-        <WhyPlantoga />
+        {/* WhyPlantoga — two-column split: category banner LEFT, comparison table RIGHT */}
+        <div className="mt-8 sm:mt-10 flex flex-col md:flex-row gap-6 lg:gap-8 items-stretch">
+          {whyPlantogaBanner?.image_url && (
+            <div className="hidden md:flex md:w-1/2 shrink-0">
+              {whyPlantogaBanner.cta_link ? (
+                <Link
+                  to={whyPlantogaBanner.cta_link}
+                  className="w-full h-full rounded-2xl overflow-hidden block"
+                  style={{ backgroundColor: whyPlantogaBanner.bg_color || '#F5F0E8' }}
+                >
+                  <img
+                    src={whyPlantogaBanner.image_url}
+                    alt={whyPlantogaBanner.title || ''}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </Link>
+              ) : (
+                <img
+                  src={whyPlantogaBanner.image_url}
+                  alt={whyPlantogaBanner.title || ''}
+                  className="w-full h-full rounded-2xl object-cover"
+                  loading="lazy"
+                />
+              )}
+            </div>
+          )}
+          <div className={whyPlantogaBanner?.image_url ? 'md:w-1/2' : 'w-full'}>
+            <WhyPlantoga bannerImage={product.why_plantoga_banner_image} />
+          </div>
+        </div>
 
         {/* Similar products */}
         {similarProducts.length > 0 && (
           <ErrorBoundary>
-            <section className="mt-10 sm:mt-16">
+            <section className="mt-6 sm:mt-8">
               <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">You May Also Like</h2>
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-hide snap-x-mandatory pb-4 -mx-3 sm:-mx-4 px-3 sm:px-4 md:grid md:grid-cols-4 md:overflow-visible md:mx-0 md:px-0">
-                {similarProducts.map((p) => (
-                  <div key={p.id} className="shrink-0 w-[70vw] sm:w-56 md:w-auto snap-start">
-                    <ProductCard product={p} />
-                  </div>
-                ))}
+              {/* Outer: relative so arrow buttons can be positioned, no overflow clip */}
+              <div className="relative">
+                {/* Scroll row: negative margin lets cards bleed to page edge; padding restores the gap */}
+                <div
+                  ref={similarScrollRef}
+                  className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto scrollbar-hide pb-2 scroll-smooth -mx-2 px-2 sm:-mx-3 sm:px-3 lg:-mx-4 lg:px-4"
+                >
+                  {similarProducts.map((p) => (
+                    <div key={p.id} className="shrink-0 w-[47vw] min-w-[160px] sm:w-56 md:w-64">
+                      <ProductCard product={p} />
+                    </div>
+                  ))}
+                </div>
+                {similarProducts.length > 3 && (
+                  <>
+                    <button
+                      onClick={() => {
+                        if (similarScrollRef.current) {
+                          similarScrollRef.current.scrollBy({ left: -160 * 3, behavior: 'smooth' });
+                        }
+                      }}
+                      aria-label="Previous products"
+                      className="hidden lg:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl items-center justify-center text-gray-700 hover:scale-110 hover:bg-gray-50 transition-all z-10"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (similarScrollRef.current) {
+                          similarScrollRef.current.scrollBy({ left: 160 * 3, behavior: 'smooth' });
+                        }
+                      }}
+                      aria-label="Next products"
+                      className="hidden lg:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white shadow-xl items-center justify-center text-gray-700 hover:scale-110 hover:bg-gray-50 transition-all z-10"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  </>
+                )}
               </div>
             </section>
           </ErrorBoundary>
@@ -610,9 +1433,51 @@ export default function ProductDetailPage() {
 
         <HappyPlanters fallbackImages={galleryImages} />
 
+        <StoriesCarousel stories={stories} />
+
         <ProductReviews productId={product.id} />
 
-        <ProductFaq />
+        {/* FAQ + detail banner — image LEFT (capped height, sticky), FAQ RIGHT.
+            Falls back to full-width FAQ when no banner is configured. */}
+        {productDetailBanner?.image_url ? (
+          <div className="mt-8 sm:mt-10 flex flex-col gap-6 lg:gap-8 md:flex-row items-stretch">
+            <div className="flex md:w-1/2 shrink-0">
+              {productDetailBanner.cta_link ? (
+                <Link
+                  to={productDetailBanner.cta_link}
+                  className="block w-full rounded-2xl overflow-hidden"
+                  style={{ backgroundColor: productDetailBanner.bg_color || '#1B4332' }}
+                >
+                  <img
+                    src={productDetailBanner.image_url}
+                    alt={productDetailBanner.title}
+                    className="w-full h-auto object-cover rounded-2xl md:h-full"
+                    loading="lazy"
+                  />
+                </Link>
+              ) : (
+                <div
+                  className="w-full rounded-2xl overflow-hidden"
+                  style={{ backgroundColor: productDetailBanner.bg_color || '#1B4332' }}
+                >
+                  <img
+                    src={productDetailBanner.image_url}
+                    alt={productDetailBanner.title}
+                    className="w-full h-auto object-cover rounded-2xl md:h-full"
+                    loading="lazy"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="md:w-1/2">
+              <ProductFaq faqs={product.faqs} embedded />
+            </div>
+          </div>
+        ) : (
+          <div className="mt-8 sm:mt-10">
+            <ProductFaq faqs={product.faqs} />
+          </div>
+        )}
       </div>
 
     </div>

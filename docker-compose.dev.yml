@@ -1,0 +1,43 @@
+# Local development services — Postgres + Redis only.
+# Starts the DB and cache so you can run the backend with `uvicorn` directly.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d      # start
+#   docker compose -f docker-compose.dev.yml down        # stop (keeps data)
+#   docker compose -f docker-compose.dev.yml down -v     # stop + wipe volumes
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: plantoga
+      POSTGRES_USER: plantoga
+      POSTGRES_PASSWORD: plantoga
+    ports:
+      - "5433:5432"       # host:5433 → matches DATABASE_URL in backend/.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plantoga -d plantoga"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"       # matches REDIS_URL in backend/.env
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:

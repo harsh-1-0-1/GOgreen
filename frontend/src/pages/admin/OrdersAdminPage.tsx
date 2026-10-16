@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useAdminOrders, useUpdateOrderStatus } from '@/hooks/useAdmin';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import type { Order } from '@/types';
+import { formatSelectedOptions } from '@/lib/variantDisplay';
 
 const STATUSES = ['', 'pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 const STATUS_LABELS: Record<string, string> = {
@@ -30,26 +31,17 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   cancelled: 'Order has been voided. If payment was made, initiate refund in gateway.',
 };
 
-// Realistic Mock Address Generator based on IDs since backend SQLite schema excludes address nesting in OrderResponse
-function getMockAddress(addressId: number, userId: number) {
-  const names = ['Rajesh Kumar', 'Priya Patel', 'Vikram Singh', 'Anjali Sharma', 'Rohan Mehta', 'Sneha Reddy', 'Amit Joshi'];
-  const cities = ['New Delhi', 'Mumbai', 'Bangalore', 'Chennai', 'Hyderabad', 'Pune', 'Kolkata'];
-  const states = ['Delhi', 'Maharashtra', 'Karnataka', 'Tamil Nadu', 'Telangana', 'Maharashtra', 'West Bengal'];
-  
-  const name = names[userId % names.length] || 'Valued Client';
-  const city = cities[addressId % cities.length] || 'Mumbai';
-  const state = states[addressId % states.length] || 'Maharashtra';
-  const pin = 400001 + (addressId * 13) % 4000;
+function paymentLabel(order: Order) {
+  if (order.payment_method === 'cod') {
+    return order.payment_status === 'paid' ? 'COD Collected' : 'COD Pending';
+  }
+  return order.payment_status;
+}
 
-  return {
-    full_name: name,
-    phone: `+91 98765 ${10000 + (userId * 17) % 89999}`,
-    line1: `${12 + (addressId * 7) % 80}, Green Enclave Road`,
-    line2: 'Sector 4, Near Botanical Garden Gate',
-    city: city,
-    state: state,
-    pincode: String(pin),
-  };
+function paymentBadgeClass(order: Order) {
+  if (order.payment_status === 'paid') return 'bg-green-50 text-green-700';
+  if (order.payment_method === 'cod') return 'bg-orange-50 text-orange-700';
+  return 'bg-amber-50 text-amber-700';
 }
 
 function OrderDrawer({ order, onClose }: { order: Order; onClose: () => void }) {
@@ -70,7 +62,9 @@ function OrderDrawer({ order, onClose }: { order: Order; onClose: () => void }) 
 
   const steps = ['pending', 'confirmed', 'shipped', 'delivered'];
   const currentStepIdx = steps.indexOf(order.status);
-  const addr = getMockAddress(order.address_id, order.user_id);
+  const addr = order.address;
+  const customerName = addr?.full_name || order.user?.full_name || 'Customer';
+  const customerPhone = addr?.phone || order.user?.phone || 'Not provided';
 
   return (
     <>
@@ -132,15 +126,18 @@ function OrderDrawer({ order, onClose }: { order: Order; onClose: () => void }) 
             </div>
             <div className="bg-white p-3 rounded-xl border border-gray-100">
               <span className="text-gray-400 block text-[10px] font-bold uppercase">Payment Gateway Status</span>
-              <span className={`inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${
-                order.payment_status === 'paid' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-              }`}>
-                {order.payment_status}
+              <span className={`inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${paymentBadgeClass(order)}`}>
+                {paymentLabel(order)}
               </span>
             </div>
             <div className="bg-white p-3 rounded-xl border border-gray-100">
               <span className="text-gray-400 block text-[10px] font-bold uppercase">Total Billable Amount</span>
               <p className="font-bold text-base text-primary mt-0.5">₹{order.total_amount}</p>
+              {order.coupon_code && (
+                <span className="block text-[10px] font-semibold text-emerald-600 mt-1">
+                  Coupon {order.coupon_code} · −₹{order.coupon_discount.toFixed(0)}
+                </span>
+              )}
             </div>
             <div className="bg-white p-3 rounded-xl border border-gray-100">
               <span className="text-gray-400 block text-[10px] font-bold uppercase">Order Placed Date</span>
@@ -155,14 +152,21 @@ function OrderDrawer({ order, onClose }: { order: Order; onClose: () => void }) 
               <span>Customer Shipping Information</span>
             </div>
             <div className="text-xs space-y-1 text-gray-700">
-              <p className="font-bold text-sm text-gray-900">{addr.full_name}</p>
-              <p className="flex items-center gap-1 text-gray-500">📞 Phone: {addr.phone}</p>
+              <p className="font-bold text-sm text-gray-900">{customerName}</p>
+              <p className="flex items-center gap-1 text-gray-500">Phone: {customerPhone}</p>
+              {order.user?.email && <p className="text-gray-500">Email: {order.user.email}</p>}
               <div className="flex items-start gap-1.5 mt-2 pt-2 border-t text-gray-600">
                 <MapPin size={14} className="shrink-0 text-gray-400 mt-0.5" />
                 <div>
-                  <p>{addr.line1}</p>
-                  <p>{addr.line2}</p>
-                  <p>{addr.city}, {addr.state} - {addr.pincode}</p>
+                  {addr ? (
+                    <>
+                      <p>{addr.line1}</p>
+                      {addr.line2 && <p>{addr.line2}</p>}
+                      <p>{addr.city}, {addr.state} - {addr.pincode}</p>
+                    </>
+                  ) : (
+                    <p>Shipping address unavailable</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -184,10 +188,11 @@ function OrderDrawer({ order, onClose }: { order: Order; onClose: () => void }) 
                       <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center shrink-0 border"><ShoppingBag size={12} className="text-gray-300" /></div>
                     )}
                     <div>
-                      <span className="font-semibold text-gray-800">Product ID: #{item.product_id}</span>
+                      <span className="font-semibold text-gray-800">{item.product_name || `Product #${item.product_id}`}</span>
+                      <p className="text-[10px] text-gray-400">Product ID: #{item.product_id}</p>
                       {item.selected_options && (
                         <p className="text-[10px] text-gray-400">
-                          {Object.entries(item.selected_options).map(([k, v]) => `${k}: ${v}`).join(' | ')}
+                          {formatSelectedOptions(item.selected_options, null)}
                         </p>
                       )}
                     </div>
@@ -295,7 +300,7 @@ export default function OrdersAdminPage() {
               <th className="px-5 py-3.5 font-semibold text-xs">Order ID</th>
               <th className="px-5 py-3.5 font-semibold text-xs">Customer Name</th>
               <th className="px-5 py-3.5 font-semibold text-xs">Delivery Status</th>
-              <th className="px-5 py-3.5 font-semibold text-xs">Payment Gateway</th>
+              <th className="px-5 py-3.5 font-semibold text-xs">Payment Method</th>
               <th className="px-5 py-3.5 font-semibold text-xs">Order Amount</th>
               <th className="px-5 py-3.5 font-semibold text-xs">Purchased On</th>
             </tr>
@@ -307,7 +312,7 @@ export default function OrdersAdminPage() {
               <tr><td colSpan={6} className="px-5 py-12 text-center text-gray-400">No orders registered under this status.</td></tr>
             ) : (
               data?.items?.map((o: Order) => {
-                const addr = getMockAddress(o.address_id, o.user_id);
+                const customerName = o.address?.full_name || o.user?.full_name || 'Customer';
                 return (
                   <tr
                     key={o.id}
@@ -316,7 +321,8 @@ export default function OrdersAdminPage() {
                   >
                     <td className="px-5 py-3.5 font-semibold text-gray-900">#{o.id}</td>
                     <td className="px-5 py-3.5">
-                      <span className="font-semibold text-gray-800">{addr.full_name}</span>
+                      <span className="font-semibold text-gray-800">{customerName}</span>
+                      {o.user?.email && <p className="text-[10px] text-gray-400 mt-0.5">{o.user.email}</p>}
                     </td>
                     <td className="px-5 py-3.5">
                       <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border capitalize ${STATUS_COLORS[o.status] || 'bg-gray-100'}`}>
@@ -324,10 +330,8 @@ export default function OrdersAdminPage() {
                       </span>
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded capitalize ${
-                        o.payment_status === 'paid' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-                      }`}>
-                        {o.payment_status}
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded capitalize ${paymentBadgeClass(o)}`}>
+                        {paymentLabel(o)}
                       </span>
                     </td>
                     <td className="px-5 py-3.5 font-bold text-gray-950">₹{o.total_amount}</td>
@@ -348,7 +352,7 @@ export default function OrdersAdminPage() {
           <p className="text-center text-gray-400 py-8 text-sm">No orders found.</p>
         ) : (
           data?.items?.map((o: Order) => {
-            const addr = getMockAddress(o.address_id, o.user_id);
+            const customerName = o.address?.full_name || o.user?.full_name || 'Customer';
             return (
               <button
                 key={o.id}
@@ -358,14 +362,14 @@ export default function OrdersAdminPage() {
                 <div className="flex items-start justify-between mb-1.5">
                   <div>
                     <span className="text-sm font-semibold text-gray-900">#{o.id}</span>
-                    <p className="text-xs text-gray-700 font-medium mt-0.5">{addr.full_name}</p>
+                    <p className="text-xs text-gray-700 font-medium mt-0.5">{customerName}</p>
                   </div>
                   <span className={`text-[9px] font-bold px-2 py-0.5 rounded border capitalize ${STATUS_COLORS[o.status] || 'bg-gray-100'}`}>
                     {o.status}
                   </span>
                 </div>
                 <div className="flex items-end justify-between mt-2 pt-2 border-t border-gray-100">
-                  <p className="text-[10px] text-gray-400">{new Date(o.created_at).toLocaleDateString()}</p>
+                  <p className="text-[10px] text-gray-400">{new Date(o.created_at).toLocaleDateString()} · {paymentLabel(o)}</p>
                   <p className="text-sm font-bold text-primary">₹{o.total_amount}</p>
                 </div>
               </button>

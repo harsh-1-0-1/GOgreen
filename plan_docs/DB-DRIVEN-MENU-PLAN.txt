@@ -1,0 +1,288 @@
+============================================================
+DB-DRIVEN CATEGORIES & MENU — CONCRETE PLAN (GOgreen / Plantoga)
+============================================================
+Status: ALL PHASES IMPLEMENTED (1-4) AND VERIFIED.
+
+WHAT CHANGED (final, compared to what the plan originally asked):
+- sort_order + image_url live in the DB, seeded, and driven everywhere.
+- menu_banner override system DELETED; categories are the single source
+  of truth for navbar / mobile menu / footer / suggestion tiles.
+- seed.py: 30 categories (sort_order + image_url) and 26 products
+  (exactly 1 per subcategory, flagship kept by badge priority).
+- seed.py now supports TWO modes:
+    python seed.py                  # FULL reset (wipes ALL tables)
+    python seed.py --only-catalog   # categories + products only
+  (--only-catalog keeps banners, blog posts, users, orders, addresses,
+  carts; it clears cart_items, order_items, product_reviews and nulls
+  stories.linked_product_id because re-seeded products get new IDs.)
+- seed.py FK-order BUGFIX: the full wipe now also deletes damage_claims
+  and stories. Previously the wipe crashed on any DB that had damage
+  claims (FK from damage_claims.order_id -> orders) or stories
+  (stories.linked_product_id -> products).
+- Local dev config: backend/.env DATABASE_URL was pointing at port 5433
+  (the "shebliss" project's postgres) and auth-failed. Corrected to
+  port 5434, GOgreen's own docker postgres (plantoga/plantoga).
+- LIVE DB (port 5434) WAS full re-seeded at the user's request:
+  it now holds exactly 1 admin, 30 categories, 26 products,
+  4 blog posts, 7 banners. The old extra "epic" category (id=31)
+  was wiped away by that full reset.
+
+Doc keeps the original per-phase plan below for reference. Items marked
+[DONE] below are completed.
+
+KEY FACT: GET /api/v1/categories already returns the full category
+tree. useCategories() already exists and is the single shared source
+(react-query dedupes/caches — no NavProvider needed).
+
+DECISIONS — RESOLVED
+------------------------------------------------------------
+A. sort_order:  ADD IT NOW (same pass, not retrofitted later).
+   Rationale: once NAV_ITEMS/MOBILE_COLLECTIONS are deleted, ordering
+   falls back to creation order/id which is invisible and unpredictable
+   to admins. Retrofitting later = second migration + touching every
+   wired-up surface (navbar, footer, mobile collections, cart tiles)
+   again to add .sort(). ~30 extra minutes now vs 5+ files later.
+
+B. menu_banner chips: DELETE the override system entirely.
+   DB categories become the SINGLE source of truth. No parallel
+   banner override in Navbar / MobileCollectionList / MobileCategoryNav.
+   menu_banner stays valid in the backend placement whitelist but is no
+   longer consumed for menu items. If a real "promo pill" need appears
+   later, add a small dedicated feature then — easier to add small than
+   to unwind two competing systems.
+
+------------------------------------------------------------
+PHASE 1 — Backend sort_order + Navbar (the core)
+------------------------------------------------------------
+
+1. BACKEND: sort_order column
+   - New Alembic migration: categories.sort_order INT, default 0.
+   - backend/app/db/models.py  Category: add sort_order column.
+   - backend/app/schemas/category.py: add sort_order to
+     CategoryCreate / CategoryUpdate / CategoryResponse.
+   - backend/app/services/category_service.py: default sort_order=0 on
+     create; get_all_categories orders roots and children by
+     (sort_order asc, name asc, id asc).
+   - MIGRATION BACKFILL (not plain 0): set sort_order = existing row
+     order (e.g. ROW_NUMBER() OVER (ORDER BY id)) so the CURRENT live
+     DB keeps its existing menu order on deploy — a plain 0 backfill
+     would tie everything and reshuffle to alphabetical (name asc).
+   - Cache cats:all already invalidated on every write (categories.py
+     68/90/109/126) — no change needed.
+
+2. frontend/src/hooks/useCategories.ts
+   - Add staleTime: 5 * 60 * 1000 and placeholderData: [] to match
+     useBanners. React-query already shares the data across consumers.
+
+3. frontend/src/components/layout/Navbar/navData.ts
+   - DELETE the data arrays:
+       NAV_ITEMS            (lines 20-119)
+       MOBILE_COLLECTIONS   (lines 130-187)
+       bannerToCollection   (menu_banner path is being deleted)
+   - KEEP the type shapes: NavItemDef, DropdownLink, DropdownGroup,
+     MobileCollection.
+   - ADD STATIC_LINKS — the non-category menu items (kept separate,
+     merged at render time):
+       GIFTING            -> /products?tags=gifting
+       CORPORATE GIFTS    -> /corporate-gifting
+       GARDEN SERVICES    -> /products?tags=garden-services
+       BLOG               -> /blog
+       OFFERS             -> /products?tags=offers   (highlight)
+     These are NOT categories and are NOT forced into the table.
+   - ADD pure mappers:
+       categoryTreeToNavItems(categories, staticLinks)
+         -> roots with children become mega-dropdown NavItemDefs
+            (children -> one DropdownGroup column), sorted by sort_order
+         -> childless roots become simple links
+         -> static links appended after (STATIC_LINKS carries its own
+            order via the config array)
+       categoryTreeToMobileCollections(categories, staticLinks)
+         -> roots + children (with image_url) become MobileCollection,
+            sorted by sort_order
+         -> static links appended after
+   - REBUILD LABEL_TO_NAV against the tree (not NAV_ITEMS). Add
+     tree-aware submenu-group resolution for children (currently only
+     roots get groups). LABEL_TO_NAV is used by MobileCollectionList.
+
+4. frontend/src/components/layout/Navbar/index.tsx
+   - DELETE FALLBACK_MOBILE_MENU_ITEMS (lines 34-45).
+   - REMOVE menu_banner usage: useBanners('menu_banner') + the
+     banner-or-fallback ternary for mobileMenuItems (lines 78-88).
+   - ADD:  const { data: categories = [] } = useCategories();
+   - Desktop row 2 (line 430): NAV_ITEMS.map -> navItems.map where
+     navItems = categoryTreeToNavItems(...). isNavActive, hover
+     dropdowns, wide layout keep working (same shape produced).
+   - REWRITE getSubcategories(label) (line 190) to resolve from the
+     tree: root -> "All X" + its children; Gifting keeps its special
+     static submenu list.
+     ** RISK / TEST FIRST ** — getSubcategories feeds BOTH the desktop
+     dropdown and the mobile submenu screen. Implement and test it in
+     ISOLATION before wiring both call sites (a bug silently breaks two
+     UI surfaces at once).
+
+5. frontend/src/components/layout/Navbar/MobileCollectionList.tsx
+   - rows (line 142): banner-or-fallback ->
+     categoryTreeToMobileCollections(categories, staticLinks).
+   - Remove menu_banner import/usage.
+
+------------------------------------------------------------
+PHASE 2 — other hardcoded slug surfaces
+------------------------------------------------------------
+
+1. frontend/src/components/home/MobileCategoryNav.tsx
+   - DELETE hardcoded CATEGORIES (lines 5-36) and the mobile_category
+     banner fallback path; drive from the DB tree (roots + children,
+     first N).
+   - NOTE: it currently uses slugs best-sellers, pots, air-purifying
+     that DO NOT exist in the DB — those links hit empty pages.
+     DB-driven is a strict improvement.
+   - BEFORE REMOVING the old links: confirm none of best-sellers,
+     pots, air-purifying URLs are indexed/bookmarked anywhere
+     (analytics, ads, saved links). If they are, note redirect needs.
+
+2. frontend/src/components/layout/Footer.tsx
+   - LINK_COLUMNS "Plants" / "Seeds & Pots" columns -> derive from
+     the tree (children + root links), sorted by sort_order.
+     Keep "Company" / "Help" columns static.
+
+3. frontend/src/pages/CartPage.tsx (lines 60-98) and
+   frontend/src/components/cart/CartDrawer.tsx (lines 90-113)
+   - suggestion tiles -> derive from DB roots/children with images,
+     sorted by sort_order; keep the Offers tile static.
+
+4. frontend/src/components/home/AboutSection.tsx
+   - inline editorial copy links — LEAVE AS-IS (not structural nav).
+
+------------------------------------------------------------
+PHASE 3 — Admin UX (categories = menu manager)
+------------------------------------------------------------
+
+1. CategoriesAdminPage.tsx: add rename / reorder (sort_order steppers
+   or up/down) / is_active toggle UI so admins control menu order.
+2. Add image_url to CategoryCreate schema (today images only come via
+   separate upload/PUT; admin page already works around it with two
+   calls).
+3. Admin-only listing endpoint (e.g. /categories/admin) that includes
+   INACTIVE categories — DO THIS IN THE SAME PASS AS PHASE 1/2, not
+   deferred. Rationale: public get_all_categories filters
+   is_active == True (category_service.py 17-21) and the admin page
+   uses the same public endpoint, so the moment an admin deactivates
+   a category they lose the ability to see/reactivate it from the UI.
+   Deferring creates a temporary dead-end for admins.
+
+------------------------------------------------------------
+PHASE 4 — seed.py (DB-driven seed for testing)   [DONE]
+------------------------------------------------------------
+
+Goal: seed.py becomes the canonical DB-driven starter data. A freshly
+seeded DB must exercise the new category-driven menu exactly like
+production. NEVER run seed() against a live/production DB — it wipes
+categories first (seed.py:626). Run it only on fresh/test DBs.
+
+Implemented as planned (30 categories with sort_order + image_url,
+26 products / 1 per subcategory, banner seeds unchanged, README +
+docstring guardrails) PLUS two additions made during the work:
+
+- NEW: --only-catalog mode (also `make seed-catalog` and the
+  `seed-catalog` docker compose profile). Only categories + products are
+  re-seeded; banners / blog posts / users / orders / addresses / carts
+  survive. Product-dependent rows are cleared: cart_items, order_items,
+  product_reviews; stories.linked_product_id is nulled; damage_claims
+  order_item_id is nulled (the rows are kept).
+- NEW: full-wipe FK fix — the delete sequence now clears damage_claims
+  and stories too, so the full seed no longer crashes on a DB that has
+  them.
+
+1. CATEGORIES list (lines 58-94): keep all 30 categories; enrich each
+   entry with:
+   - sort_order: roots Plants=1, Seeds=2, Pots & Planters=3,
+     Plant Care=4; children ordered 1..N in current list order.
+     Fresh seed then matches the intended layout (no ties at 0, no
+     surprise alphabetical reshuffle).
+   - image_url: one representative image per category (reuse existing
+     UNSPLASH constants / _pick_images). Required because the DB-driven
+     menu renders category thumbnails — today seed sets no images, so
+     the menu would be image-less.
+   - Category creation loop (lines 646-662) passes sort_order +
+     image_url into Category(...). slug_to_id map unchanged.
+
+2. PRODUCTS list (line 260): reduce to EXACTLY 1 product per
+   subcategory (26 products). For each of the 26 subcategories keep the
+   flagship product (prefer badge: Bestseller / Trending / Popular,
+   else the first entry) and delete the other entries.
+   - Root categories (plants, seeds, pots-planters, plant-care) get
+     0 products — "All <Root>" links already surface children via the
+     one-level-deep category filter.
+   - VERIFY with the same uniq -c on 'cat' as today: every subcategory
+     must show 1, every root 0. (Current counts: indoor-plants 14,
+     plant-care 12, cacti-succulents 7, etc. — these must drop to 1.)
+
+3. Banner seeds (hero/announcement/page) stay as-is. NO menu_banner
+   seeding — Decision B (menu override deleted).
+
+4. Guardrails / docs:
+   - Document "never re-run seed on live DB" prominently in README and
+     seed.py docstring / --help, plus the fresh-DB-only rule.
+   - (Optional, already noted) --demo-data flag to toggle whether
+     categories+products seed at all.
+
+------------------------------------------------------------
+VERIFICATION (after each phase)
+------------------------------------------------------------
+- npx tsc -b  &&  npx eslint <changed files>
+- Seed: run seed on a FRESH test DB; verify 26 products (1 per
+  subcategory), 30 categories with sort_order + image_url.
+- Playwright smoke on: home, /products, a PDP, /corporate-gifting
+- Desktop: mega-dropdowns open, children link to /products?category=<slug>
+- Mobile drawer: menu items render from DB, submenu screen works
+  (getSubcategories), collections accordion works
+- Admin: create a category -> appears in navbar/footer/cart tiles on
+  next fetch (cats:all cache already invalidated); reorder via
+  sort_order -> order updates; deactivate -> visible in admin listing
+  (Phase 3 item 3) and reactivatable
+- Confirm menu_banner placements no longer affect menu items
+
+TEST RUN RECORD (most recent full pass)
+- backend: pytest tests/  -> 109 passed, 3 failed. The 3 failures are
+  PRE-EXISTING and unrelated (test_image_upload.py: CDN_BASE_URL
+  resolution; image_upload.py / config.py were not touched by this work).
+  All category/menu/auth/cart/order/product tests pass.
+- frontend: npx tsc -b (clean)  +  npx eslint (clean on all changed files)
+- seed (full): on throwaway postgres + on live dev DB (5434) at the
+  user's request; 30 cats (roots 0 products), 26 products, sort_order +
+  image_url populated; verified via SQL counts.
+- seed (--only-catalog): on throwaway postgres with fake orders /
+  order_items / damage_claims / stories / marked banners; banners, blog
+  posts, admin and orders survived; order_items / cart_items / reviews
+  cleared; stories.linked_product_id nulled; catalog re-seeded to
+  26/30. Damage-claims table also survives.
+- NOTE: Playwright browser smoke is the only outstanding item (no e2e
+  suite run in this pass).
+
+------------------------------------------------------------
+FILES TOUCHED
+------------------------------------------------------------
+- backend/alembic/versions/f6a7b8c9d0e1_add_sort_order_to_categories.py
+  (new migration: sort_order column + ROW_NUMBER backfill)
+- backend/app/db/models.py                (Category.sort_order)
+- backend/app/schemas/category.py         (sort_order + image_url on create)
+- backend/app/services/category_service.py (ordering, include-inactive, create)
+- backend/app/api/v1/categories.py        (GET /categories/admin, create w/ image_url)
+- backend/seed.py                         (30 cats w/ sort_order+image_url,
+                                           26 products, --only-catalog, FK fixes)
+- frontend/src/hooks/useCategories.ts     (staleTime, placeholderData, useCategoriesAdmin)
+- frontend/src/hooks/useSuggestionTiles.ts (NEW: shared category-tile hook)
+- frontend/src/hooks/useAdmin.ts          (useUpdateCategory, image_url on create)
+- frontend/src/components/layout/Navbar/navData.ts (mappers + STATIC_LINKS)
+- frontend/src/components/layout/Navbar/index.tsx
+- frontend/src/components/layout/Navbar/MobileCollectionList.tsx
+- frontend/src/components/home/MobileCategoryNav.tsx
+- frontend/src/components/layout/Footer.tsx
+- frontend/src/pages/CartPage.tsx
+- frontend/src/components/cart/CartDrawer.tsx
+- frontend/src/pages/admin/CategoriesAdminPage.tsx  (rename/reorder/toggle)
+- frontend/src/types/index.ts             (Category.sort_order)
+- Makefile                                (seed-catalog target)
+- docker-compose.yml                      (seed-catalog profile)
+- backend/.env                            (DATABASE_URL 5433 -> 5434)
+- README.md                               (seed guardrail + catalog-only docs)

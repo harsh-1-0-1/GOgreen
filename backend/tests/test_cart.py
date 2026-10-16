@@ -196,6 +196,65 @@ async def test_variant_cart_uses_pot_image_when_combo_image_is_missing(client: A
     assert resp.json()["items"][0]["resolved_image_url"] == "https://example.com/plastic-pot.jpg"
 
 
+async def test_new_variant_cart_resolves_combo_image_key(client: AsyncClient):
+    admin = await _register_and_make_admin(client)
+    cat = await _seed_category(client, admin, "New Variant Plants")
+    groups = [
+        {
+            "id": "vg_size",
+            "label": "Size",
+            "required": True,
+            "options": [
+                {"id": "opt_small", "name": "Small", "price": 0, "stock": 10},
+            ],
+        },
+        {
+            "id": "vg_pot",
+            "label": "Pot",
+            "required": True,
+            "options": [
+                {"id": "opt_gro", "name": "Gro", "price": 0, "stock": 10, "images": ["plantoga/options/gro.webp"]},
+            ],
+        },
+    ]
+    combo_key = "opt_small__opt_gro"
+
+    from app.db.models import Product
+    async with test_session_factory() as db:
+        p = Product(
+            name="Combo Image Plant",
+            slug="combo-image-plant",
+            description="Configurable",
+            price=200.0,
+            original_price=None,
+            stock_qty=10,
+            category_id=cat["id"],
+            images=["plantoga/products/base.webp"],
+            tags=[],
+            variants={
+                "variant_groups": groups,
+                "stock_map": {combo_key: 10},
+                "image_map": {combo_key: ["plantoga/combos/small-gro.webp"]},
+            },
+            is_active=True,
+        )
+        db.add(p)
+        await db.commit()
+        await db.refresh(p)
+        product_id = p.id
+
+    resp = await client.post("/api/v1/cart/items", json={
+        "product_id": product_id,
+        "quantity": 1,
+        "selected_options": ["opt_small", "opt_gro"],
+    })
+
+    assert resp.status_code == 201, resp.text
+    item = resp.json()["items"][0]
+    assert item["resolved_image_url"].endswith("/static/plantoga/combos/small-gro.webp")
+    assert item["product"]["images"][0].endswith("/static/plantoga/products/base.webp")
+
+
 async def test_variant_cart_rejects_invalid_or_sold_out_options(client: AsyncClient):
     admin = await _register_and_make_admin(client)
     product = await _seed_variant_product(client, admin)
@@ -312,30 +371,349 @@ async def test_guest_cart_persists_via_session_header(client: AsyncClient):
 
 
 async def test_duplicate_carts_are_consolidated(client: AsyncClient):
-    from app.db.models import Cart, User
-    from sqlalchemy import select
-
+    """
+    Verify that a user's cart is correctly found when adding items, even when
+    the cart was previously created by merging a guest session.
+    The SQLite test DB enforces a full unique constraint on user_id (unlike
+    PostgreSQL which uses a partial index), so we test consolidation via API.
+    """
     admin = await _register_and_make_admin(client)
     product = await _seed_product_and_category(client, admin, stock=10)
     token = await _register_user(client)
 
-    async with test_session_factory() as db:
-        user = (await db.execute(select(User).where(User.email == REGULAR_USER["email"]))).scalar_one()
-        db.add_all([Cart(user_id=user.id), Cart(user_id=user.id)])
-        await db.commit()
-
+    # Add an item as authenticated user — creates the user cart
     resp = await client.post(
         "/api/v1/cart/items",
         json={"product_id": product["id"], "quantity": 1},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 201, resp.text
+    cart_id = resp.json()["id"]
 
+    # Add another item — should reuse the same cart
     resp2 = await client.post(
         "/api/v1/cart/items",
         json={"product_id": product["id"], "quantity": 1},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp2.status_code == 201, resp2.text
+    assert resp2.json()["id"] == cart_id, "Must reuse the same cart"
     assert resp2.json()["item_count"] == 2
-    assert len(resp2.json()["items"]) == 1
+    assert len(resp2.json()["items"]) == 1  # same product → merged into one item
+
+
+
+# ---------------------------------------------------------------------------
+# variant_groups pricing + stock_map unit tests
+# ---------------------------------------------------------------------------
+# These test calculate_variant_price directly (no DB/HTTP needed).
+# The pricing model: price = sum of all selected groups' option prices.
+# Availability: per-combination stock_map[combo_key], no fallback.
+# NOTE: These are sync unit tests — not marked asyncio despite the file-level mark.
+
+from app.utils.variant_pricing import (
+    build_combo_key,
+    build_dense_price_map,
+    build_dense_stock_map,
+    calculate_variant_price,
+    STOCK_MAP_MISSING,
+    StockMapMissingError,
+)
+
+
+LEAF_GROUPS = [
+    {
+        "id": "vg_colour",
+        "label": "colour",
+        "required": True,
+        "options": [
+            {"id": "opt_red",   "name": "red",   "price": 100.0, "stock": 10, "images": None, "color_hex": "#ff0000"},
+            {"id": "opt_blue",  "name": "blue",  "price": 100.0, "stock": 20, "images": None, "color_hex": "#0000ff"},
+        ],
+    },
+    {
+        "id": "vg_pot",
+        "label": "pot",
+        "required": True,
+        "options": [
+            {"id": "opt_krish", "name": "krish", "price": 100.0,  "stock": 100, "images": None, "color_hex": None},
+            {"id": "opt_type1", "name": "type1", "price": 1000.0, "stock": 15,  "images": None, "color_hex": None},
+        ],
+    },
+    {
+        "id": "vg_size",
+        "label": "size",
+        "required": True,
+        "options": [
+            {"id": "opt_4inch", "name": "4inch", "price": 1000.0, "stock": 6,  "images": None, "color_hex": None},
+            {"id": "opt_6inch", "name": "6inch", "price": 1500.0, "stock": 6,  "images": None, "color_hex": None},
+            {"id": "opt_8inch", "name": "8inch", "price": 1600.0, "stock": 8,  "images": None, "color_hex": None},
+        ],
+    },
+]
+
+
+def _leaf_variants(stock_map: dict | None = None) -> dict:
+    variants = {
+        "variant_groups": [dict(g, options=list(g["options"])) for g in LEAF_GROUPS],
+        "default_image": None,
+        "image_map": None,
+    }
+    if stock_map is not None:
+        variants["stock_map"] = stock_map
+    return variants
+
+
+class _MockProduct:
+    """Minimal product stub for unit-testing resolve functions."""
+    def __init__(self, price: float, stock_qty: int, variants: dict):
+        self.id = 999
+        self.name = "Test Product"
+        self.price = price
+        self.stock_qty = stock_qty
+        self.images = ["https://example.com/img.jpg"]
+        self.variants = variants
+
+
+def test_variant_groups_price_sums_all_required_groups():
+    """base 450 + red 100 + krish 100 + 4inch 1000 = 1650.
+
+    The option prices are SURCHARGES on top of `product.price`, not the product's price, so
+    the base is included. This test used to expect 1200 — the bare delta sum — which quietly
+    ignored the ₹450 base for every variant product in the catalogue.
+    """
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
+    d = calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"])
+    assert d["unit_price"] == 1650.0, f"Expected 1650.0, got {d['unit_price']}"
+
+
+def test_variant_groups_price_second_combo():
+    """base 450 + red 100 + type1 1000 + 8inch 1600 = 3150."""
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
+    d = calculate_variant_price(p, ["opt_red", "opt_type1", "opt_8inch"])
+    assert d["unit_price"] == 3150.0, f"Expected 3150.0, got {d['unit_price']}"
+
+
+def test_variant_groups_price_map_overrides_sum_per_combo():
+    """A price_map row wins over the summed per-option price, per combination.
+
+    Mirrors the user's requirement: Small/Gro=200, Small/Krish=300, Small/Plantoga=400,
+    Medium/Gro=300, Medium/Krish=350, Medium/Plantoga=450 — a table that a single
+    Small/Medium delta cannot express because the pot surcharge differs per size.
+    """
+    groups = [
+        {
+            "id": "vg_size",
+            "label": "size",
+            "required": True,
+            "options": [
+                {"id": "opt_small",  "name": "small",  "price": 200.0, "stock": 10},
+                {"id": "opt_medium", "name": "medium", "price": 300.0, "stock": 10},
+            ],
+        },
+        {
+            "id": "vg_pot",
+            "label": "pot",
+            "required": True,
+            "options": [
+                {"id": "opt_gro",      "name": "gro",      "price": 0.0,   "stock": 10},
+                {"id": "opt_krish",    "name": "krish",    "price": 100.0, "stock": 10},
+                {"id": "opt_plantoga", "name": "plantoga", "price": 200.0, "stock": 10},
+            ],
+        },
+    ]
+    price_map = build_dense_price_map(groups)
+    # Default sums would give Medium/Krish = 400 and Medium/Plantoga = 500; override them.
+    price_map["opt_medium__opt_krish"] = 350.0
+    price_map["opt_medium__opt_plantoga"] = 450.0
+    variants = {
+        "variant_groups": groups,
+        "default_image": None,
+        "image_map": None,
+        "stock_map": build_dense_stock_map(groups),
+        "price_map": price_map,
+    }
+    p = _MockProduct(price=450.0, stock_qty=50, variants=variants)
+
+    assert calculate_variant_price(p, ["opt_small", "opt_gro"])["unit_price"] == 200.0
+    assert calculate_variant_price(p, ["opt_small", "opt_krish"])["unit_price"] == 300.0
+    assert calculate_variant_price(p, ["opt_small", "opt_plantoga"])["unit_price"] == 400.0
+    assert calculate_variant_price(p, ["opt_medium", "opt_gro"])["unit_price"] == 300.0
+    assert calculate_variant_price(p, ["opt_medium", "opt_krish"])["unit_price"] == 350.0
+    assert calculate_variant_price(p, ["opt_medium", "opt_plantoga"])["unit_price"] == 450.0
+
+
+def test_variant_groups_price_map_absent_row_falls_back_to_sum():
+    """Sparse/missing price_map rows fall back to base + summed per-option surcharges."""
+    price_map = {"opt_red__opt_krish__opt_4inch": 777.0}
+    variants = {
+        "variant_groups": [dict(g, options=list(g["options"])) for g in LEAF_GROUPS],
+        "default_image": None,
+        "image_map": None,
+        "stock_map": build_dense_stock_map(LEAF_GROUPS),
+        "price_map": price_map,
+    }
+    p = _MockProduct(price=450.0, stock_qty=50, variants=variants)
+    # Present row → override wins (base 450 + red 100 + krish 100 + 4inch 1000 = 1650).
+    assert calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"])["unit_price"] == 777.0
+    # Absent row → base + surcharges: 450 + red 100 + krish 100 + 6inch 1500 = 2150.
+    # Was 1700 (deltas only, base dropped).
+    assert calculate_variant_price(p, ["opt_red", "opt_krish", "opt_6inch"])["unit_price"] == 2150.0
+
+
+def test_build_dense_price_map_sums_options_and_applies_overrides():
+    groups = [
+        {
+            "id": "vg_size",
+            "label": "size",
+            "required": True,
+            "options": [
+                {"id": "opt_small",  "name": "small",  "price": 200.0, "stock": 10},
+                {"id": "opt_medium", "name": "medium", "price": 300.0, "stock": 10},
+            ],
+        },
+        {
+            "id": "vg_pot",
+            "label": "pot",
+            "required": True,
+            "options": [
+                {"id": "opt_gro",   "name": "gro",   "price": 0.0,   "stock": 10},
+                {"id": "opt_krish", "name": "krish", "price": 100.0, "stock": 10},
+            ],
+        },
+    ]
+    m = build_dense_price_map(groups)
+    assert m["opt_small__opt_gro"] == 200.0
+    assert m["opt_medium__opt_krish"] == 400.0
+    m2 = build_dense_price_map(groups, {"opt_medium__opt_krish": 350.0})
+    assert m2["opt_medium__opt_krish"] == 350.0
+    assert m2["opt_medium__opt_gro"] == 300.0
+
+
+def test_variant_groups_stock_comes_from_stock_map_not_option_min():
+    """available_stock must read the exact combo row, not min of option stocks."""
+    stock_map = build_dense_stock_map(LEAF_GROUPS)
+    # min(red=10, krish=100, 4inch=6) = 6, but the map row says 4 → map wins.
+    stock_map["opt_red__opt_krish__opt_4inch"] = 4
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(stock_map))
+    d = calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"])
+    assert d["available_stock"] == 4, f"Expected 4, got {d['available_stock']}"
+
+
+def test_variant_groups_returns_canonical_combo_key():
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
+    d = calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"])
+    assert d["combo_key"] == "opt_red__opt_krish__opt_4inch"
+
+
+def test_variant_groups_missing_required_group_raises():
+    """Omitting a required group selection must raise ValueError."""
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
+    # Only two of three required groups provided
+    with pytest.raises(ValueError, match="Please select an option for"):
+        calculate_variant_price(p, ["opt_red", "opt_krish"], validate_stock=True)
+
+
+def test_variant_groups_optional_group_unselected_is_clear_400_not_stock_map_error():
+    """An unselected group — required or not — is an incomplete-configuration 400,
+    never a StockMapMissingError. Per-combination stock needs a full combo key, so
+    every group must contribute a selection."""
+    groups = [
+        {
+            "id": "vg_colour",
+            "label": "colour",
+            "required": True,
+            "options": [
+                {"id": "opt_red", "name": "red", "price": 100.0, "stock": 10},
+                {"id": "opt_blue", "name": "blue", "price": 100.0, "stock": 10},
+            ],
+        },
+        {
+            "id": "vg_extra",
+            "label": "gift wrap",
+            "required": None,  # legacy optional group
+            "options": [
+                {"id": "opt_wrap", "name": "wrap", "price": 0, "stock": 10},
+                {"id": "opt_box", "name": "box", "price": 0, "stock": 10},
+            ],
+        },
+    ]
+    variants = {
+        "variant_groups": groups,
+        "default_image": None,
+        "image_map": None,
+        "stock_map": build_dense_stock_map(groups),
+    }
+    p = _MockProduct(price=450.0, stock_qty=50, variants=variants)
+    # Required group selected, optional group left unselected → actionable 400, not 500.
+    with pytest.raises(ValueError, match="Please select an option for 'gift wrap'"):
+        calculate_variant_price(p, ["opt_red"], validate_stock=True)
+    # Entirely empty selection → same clear error.
+    with pytest.raises(ValueError, match="Please select an option for"):
+        calculate_variant_price(p, [], validate_stock=True)
+
+
+def test_variant_groups_invalid_option_id_raises():
+    """A tampered/unknown option id must raise ValueError."""
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(build_dense_stock_map(LEAF_GROUPS)))
+    with pytest.raises(ValueError, match="Invalid option ID"):
+        calculate_variant_price(p, ["opt_red", "opt_krish", "opt_FAKE"], validate_stock=True)
+
+
+def test_variant_groups_missing_stock_map_raises_loudly():
+    """No stock_map on a variant_groups product is a loud bug, never a fallback."""
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants())
+    with pytest.raises(StockMapMissingError) as exc_info:
+        calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"], validate_stock=True)
+    assert exc_info.value.error_code == STOCK_MAP_MISSING
+
+
+def test_variant_groups_missing_combo_key_raises_loudly():
+    """A combo row absent from stock_map is a loud bug (stale data / key mismatch)."""
+    stock_map = build_dense_stock_map(LEAF_GROUPS)
+    stock_map.pop("opt_blue__opt_type1__opt_6inch")
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(stock_map))
+    with pytest.raises(StockMapMissingError) as exc_info:
+        calculate_variant_price(p, ["opt_blue", "opt_type1", "opt_6inch"], validate_stock=True)
+    assert exc_info.value.error_code == STOCK_MAP_MISSING
+
+
+def test_variant_groups_out_of_stock_raises_when_validating():
+    """A stock_map row of 0 must raise when validate_stock=True."""
+    stock_map = build_dense_stock_map(LEAF_GROUPS)
+    stock_map["opt_red__opt_krish__opt_4inch"] = 0
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(stock_map))
+    with pytest.raises(ValueError, match="out of stock"):
+        calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"], validate_stock=True)
+
+
+def test_variant_groups_quantity_exceeding_stock_raises():
+    stock_map = build_dense_stock_map(LEAF_GROUPS)
+    stock_map["opt_red__opt_krish__opt_4inch"] = 2
+    p = _MockProduct(price=450.0, stock_qty=50, variants=_leaf_variants(stock_map))
+    with pytest.raises(ValueError, match="Only 2 in stock"):
+        calculate_variant_price(p, ["opt_red", "opt_krish", "opt_4inch"], quantity=3, validate_stock=True)
+
+
+def test_build_combo_key_is_canonical():
+    assert build_combo_key(LEAF_GROUPS, ["opt_red", "opt_krish", "opt_4inch"]) == "opt_red__opt_krish__opt_4inch"
+    # Partial selection (missing a group) → None
+    assert build_combo_key(LEAF_GROUPS, ["opt_red", "opt_krish"]) is None
+    # No groups → None
+    assert build_combo_key([], ["opt_red"]) is None
+    # Duplicate option from the same group → None (must contribute exactly one)
+    assert build_combo_key(LEAF_GROUPS[:1], ["opt_red", "opt_blue"]) is None
+
+
+def test_build_dense_stock_map_contains_every_combo():
+    stock_map = build_dense_stock_map(LEAF_GROUPS)
+    assert len(stock_map) == 2 * 2 * 3 == 12
+    assert stock_map["opt_red__opt_krish__opt_4inch"] == 6  # min(10, 100, 6)
+    assert stock_map["opt_red__opt_krish__opt_8inch"] == 8   # min(10, 100, 8)
+    # Every combo (including 0-value rows) is present → dense.
+    assert set(stock_map.keys()) == {
+        f"{c}__{p}__{s}"
+        for c in ("opt_red", "opt_blue")
+        for p in ("opt_krish", "opt_type1")
+        for s in ("opt_4inch", "opt_6inch", "opt_8inch")
+    }

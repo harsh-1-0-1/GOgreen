@@ -1,24 +1,26 @@
 import { Link } from 'react-router-dom';
-import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
+import { ArrowRight, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import RecommendationBar from './RecommendationBar';
+import DoNotForgetBar from './DoNotForgetBar';
+import { formatSelectedOptions } from '@/lib/variantDisplay';
+import { getApiErrorDetail } from '@/lib/apiError';
+import { useSuggestionTiles } from '@/hooks/useSuggestionTiles';
+import { getShippingFee, useShippingSettings } from '@/hooks/useSettings';
 
 function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
   if (!item.selected_options) return null;
-  const color = item.product.variants?.colors?.find((c) => c.slug === item.selected_options?.color)?.name
-    || item.selected_options.color;
-  const pot = item.product.variants?.pot_types?.find((p) => p.slug === item.selected_options?.pot_type)?.name
-    || item.selected_options.pot_type;
-  const size = item.product.variants?.sizes?.find((s) => s.slug === item.selected_options?.size)?.name
-    || item.selected_options.size;
-  return [color && `Color: ${color}`, pot && `Pot: ${pot}`, size && `Size: ${size}`].filter(Boolean).join(' · ');
+  return formatSelectedOptions(item.selected_options, item.product.variants) || null;
 }
 
 export default function CartDrawer() {
-  const { isDrawerOpen, closeDrawer, items, total, itemCount, updateItem, removeItem, lastAddedProduct } =
+  const { isDrawerOpen, closeDrawer, items, total, itemCount, updateItem, removeItem } =
     useCartStore();
+  const suggestionTiles = useSuggestionTiles(4);
+  const { data: shippingSettings } = useShippingSettings();
+  const shipping = getShippingFee(total, shippingSettings);
+  const grandTotal = total + shipping;
 
   useBodyScrollLock(isDrawerOpen);
 
@@ -28,8 +30,8 @@ export default function CartDrawer() {
     try {
       if (qty <= 0) await removeItem(itemId);
       else await updateItem(itemId, qty);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to update cart');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to update cart'));
     }
   }
 
@@ -85,36 +87,7 @@ export default function CartDrawer() {
                   Shop Popular Collections
                 </h4>
                 <div className="grid grid-cols-2 gap-3.5">
-                  {[
-                    {
-                      title: 'Price Drop',
-                      subtitle: 'Up to 50% OFF',
-                      image: 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?w=150&q=80',
-                      link: '/products?tags=offers',
-                      color: 'text-amber-600',
-                    },
-                    {
-                      title: 'XL Plants',
-                      subtitle: 'Grow Big & Bold',
-                      image: 'https://images.unsplash.com/photo-1614594975525-e45190c55d0b?w=150&q=80',
-                      link: '/products?category=xl-plants',
-                      color: 'text-emerald-700',
-                    },
-                    {
-                      title: 'Pots & Planters',
-                      subtitle: 'Ceramic Pots',
-                      image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=150&q=80',
-                      link: '/products?category=pots-planters',
-                      color: 'text-emerald-700',
-                    },
-                    {
-                      title: 'Plant Care',
-                      subtitle: 'Thrive Guides',
-                      image: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=150&q=80',
-                      link: '/products?category=plant-care',
-                      color: 'text-emerald-700',
-                    },
-                  ].map((col) => (
+                  {suggestionTiles.map((col) => (
                     <Link
                       key={col.title}
                       to={col.link}
@@ -124,9 +97,12 @@ export default function CartDrawer() {
                       <div className="relative aspect-[4/3] overflow-hidden bg-gray-50 shrink-0">
                         <img
                           src={col.image}
+                          srcSet={col.srcSet}
+                          sizes="(max-width: 640px) 50vw, 200px"
                           alt={col.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                           loading="lazy"
+                          decoding="async"
                         />
                         <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors" />
                       </div>
@@ -144,58 +120,70 @@ export default function CartDrawer() {
               </div>
             </div>
           ) : (
-            items.map((item) => (
-              <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
-                <img
-                  src={item.resolved_image_url || item.product.images?.[0] || 'https://placehold.co/80x80?text=Plant'}
-                  alt={item.product.name}
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover shrink-0"
-                  loading="lazy"
-                />
-                <div className="flex-1 min-w-0">
-                  <Link
-                    to={`/products/${item.product.slug}`}
-                    className="text-sm font-medium line-clamp-1 hover:text-primary"
-                    onClick={closeDrawer}
-                  >
-                    {item.product.name}
-                  </Link>
-                  {optionSummary(item) && (
-                    <p className="text-[11px] text-gray-500 mt-0.5">{optionSummary(item)}</p>
+            <>
+              {items.map((item) => (
+                <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
+                  {item.resolved_image_url || item.product.images?.[0] ? (
+                    <img
+                      src={item.resolved_image_url || item.product.images?.[0]}
+                      alt={item.product.name}
+                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover shrink-0 bg-white"
+                      onError={(event) => {
+                        const image = event.currentTarget;
+                        const productImage = item.product.images?.[0];
+                        if (productImage && image.src !== productImage) {
+                          image.src = productImage;
+                        } else {
+                          image.style.visibility = 'hidden';
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg bg-gray-100 shrink-0" />
                   )}
-                  <p className="text-primary font-semibold text-sm mt-0.5">₹{item.unit_price}</p>
-                  {item.stock_warning && (
-                    <p className="text-[11px] text-red-500 mt-1">
-                      Only {item.available_stock} units available. Please adjust quantity.
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="flex items-center border rounded-lg">
-                      <button onClick={() => handleUpdate(item.id, item.quantity - 1)} className="p-1.5 hover:bg-gray-100 touch-target">
-                        <Minus size={14} />
-                      </button>
-                      <span className="px-2.5 text-sm font-medium">{item.quantity}</span>
-                      <button
-                        onClick={() => handleUpdate(item.id, item.quantity + 1)}
-                        disabled={item.quantity >= item.available_stock}
-                        className="p-1.5 hover:bg-gray-100 touch-target disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        <Plus size={14} />
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      to={`/products/${item.product.slug}`}
+                      className="text-sm font-medium line-clamp-1 hover:text-primary"
+                      onClick={closeDrawer}
+                    >
+                      {item.product.name}
+                    </Link>
+                    {optionSummary(item) && (
+                      <p className="text-[11px] text-gray-500 mt-0.5">{optionSummary(item)}</p>
+                    )}
+                    <p className="text-primary font-semibold text-sm mt-0.5">₹{item.unit_price}</p>
+                    {item.stock_warning && (
+                      <p className="text-[11px] text-red-500 mt-1">
+                        Only {item.available_stock} units available. Please adjust quantity.
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="flex items-center border rounded-lg">
+                        <button onClick={() => handleUpdate(item.id, item.quantity - 1)} className="p-1.5 hover:bg-gray-100 touch-target">
+                          <Minus size={14} />
+                        </button>
+                        <span className="px-2.5 text-sm font-medium">{item.quantity}</span>
+                        <button
+                          onClick={() => handleUpdate(item.id, item.quantity + 1)}
+                          disabled={item.quantity >= item.available_stock}
+                          className="p-1.5 hover:bg-gray-100 touch-target disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                      <button onClick={() => handleRemove(item.id)} className="p-1.5 text-red-400 hover:text-red-600 ml-auto touch-target">
+                        <Trash2 size={15} />
                       </button>
                     </div>
-                    <button onClick={() => handleRemove(item.id)} className="p-1.5 text-red-400 hover:text-red-600 ml-auto touch-target">
-                      <Trash2 size={15} />
-                    </button>
                   </div>
+                  <p className="text-sm font-semibold shrink-0">₹{item.line_total}</p>
                 </div>
-                <p className="text-sm font-semibold shrink-0">₹{item.line_total}</p>
-              </div>
-            ))
-          )}
-
-          {/* Smart recommendations — show after add */}
-          {lastAddedProduct && items.length > 0 && (
-            <RecommendationBar lastAddedProduct={lastAddedProduct} cartItems={items} />
+              ))}
+              
+              {/* Don't forget to buy section */}
+              <DoNotForgetBar />
+            </>
           )}
         </div>
 
@@ -204,14 +192,22 @@ export default function CartDrawer() {
           <div className="border-t p-4 space-y-3 shrink-0 safe-bottom">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Subtotal</span>
-              <span className="font-bold text-lg">₹{total.toFixed(2)}</span>
+              <span className="font-medium">₹{total.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Delivery</span>
+              <span className="font-medium text-green-600">{shipping === 0 ? 'Free' : `₹${shipping.toFixed(2)}`}</span>
+            </div>
+            <div className="flex justify-between border-t pt-3 text-base font-bold">
+              <span>Total</span>
+              <span className="text-primary">₹{grandTotal.toFixed(2)}</span>
             </div>
             <Link
-              to="/cart"
+              to="/checkout"
               onClick={closeDrawer}
-              className="block w-full text-center py-3 bg-primary text-white rounded-xl font-medium hover:bg-primary/90 transition"
+              className="block w-full text-center py-3 bg-primary text-white rounded-xl font-semibold hover:bg-primary/90 transition"
             >
-              View Cart & Checkout
+              Proceed to Checkout <ArrowRight size={18} className="inline ml-1" />
             </Link>
           </div>
         )}

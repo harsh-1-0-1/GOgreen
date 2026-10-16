@@ -1,0 +1,134 @@
+import { useState, useRef, useEffect } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { StoryViewer } from './StoryViewer';
+import type { Story } from '@/types';
+
+interface StoriesCarouselProps {
+  stories: Story[];
+}
+
+function StoryCard({ story, onClick }: { story: Story; onClick: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            video.play().catch(() => {
+              // Autoplay might be blocked by browser policy, ignore quietly
+            });
+          } else {
+            video.pause();
+          }
+        });
+      },
+      { threshold: 0.5 } // Play when at least 50% visible
+    );
+
+    observer.observe(video);
+
+    return () => {
+      observer.unobserve(video);
+      observer.disconnect();
+    };
+  }, []);
+
+  return (
+    <button
+      className="relative shrink-0 w-44 h-72 sm:w-48 sm:h-80 rounded-2xl overflow-hidden snap-start group shadow-md"
+      onClick={onClick}
+    >
+      <div className="absolute inset-0 bg-black/20 z-10 group-hover:bg-black/10 transition-colors" />
+      <video
+        ref={videoRef}
+        src={story.video}
+        poster={story.thumbnail || undefined}
+        muted
+        loop
+        playsInline
+        className="w-full h-full object-cover"
+      />
+      
+      {/* Caption overlay if no product? Optional. We'll stick to the spec. */}
+      {story.caption && !story.linked_product && (
+        <div className="absolute bottom-4 left-3 right-3 z-20 text-white font-medium text-sm text-left drop-shadow-md">
+          {story.caption}
+        </div>
+      )}
+
+      {story.linked_product && (
+        <div className="absolute bottom-3 left-3 right-3 bg-white/95 backdrop-blur-sm rounded-xl p-2 flex items-center gap-2 z-20 shadow-lg group-hover:-translate-y-1 transition-transform">
+          {story.linked_product.thumbnail && (
+            <img 
+              src={story.linked_product.thumbnail} 
+              className="w-9 h-9 rounded-lg object-cover bg-gray-100 shrink-0" 
+              alt={story.linked_product.name}
+            />
+          )}
+          <div className="flex-1 min-w-0 text-left">
+            <div className="font-semibold text-gray-900 text-[11px] truncate">
+              {story.linked_product.name}
+            </div>
+            <div className="font-bold text-green-800 text-[11px]">
+              ₹{story.linked_product.price}
+            </div>
+          </div>
+        </div>
+      )}
+    </button>
+  );
+}
+
+export function StoriesCarousel({ stories }: StoriesCarouselProps) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  if (!stories || stories.length === 0) return null;
+
+  function scroll(direction: -1 | 1) {
+    const element = scrollerRef.current;
+    if (!element) return;
+    element.scrollBy({ left: direction * Math.min(element.clientWidth * 0.8, 440), behavior: 'smooth' });
+  }
+
+  return (
+    <div className="mt-6 sm:mt-8">
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
+        <h2 className="text-2xl font-serif text-green-900" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>Stories Across India.</h2>
+        {stories.length > 1 && (
+          <div className="flex gap-2" aria-label="Stories controls">
+            <button type="button" onClick={() => scroll(-1)} className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-primary/20 bg-white text-primary transition hover:bg-primary hover:text-white active:scale-95 shadow-sm" aria-label="Previous stories">
+              <ChevronLeft size={18} className="sm:w-[19px] sm:h-[19px]" />
+            </button>
+            <button type="button" onClick={() => scroll(1)} className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-primary/20 bg-white text-primary transition hover:bg-primary hover:text-white active:scale-95 shadow-sm" aria-label="Next stories">
+              <ChevronRight size={18} className="sm:w-[19px] sm:h-[19px]" />
+            </button>
+          </div>
+        )}
+      </div>
+      
+      <div ref={scrollerRef} className="flex gap-3 sm:gap-4 overflow-x-auto snap-x-mandatory pb-4 scrollbar-hide -mx-3 sm:-mx-4 px-3 sm:px-4 md:justify-center md:overflow-x-visible md:mx-0 md:px-0 md:flex-wrap touch-pan-x">
+        {stories.map((story, i) => (
+          <StoryCard 
+            key={story.id} 
+            story={story} 
+            onClick={() => setActiveIndex(i)} 
+          />
+        ))}
+      </div>
+
+      {activeIndex !== null && (
+        <StoryViewer
+          stories={stories}
+          startIndex={activeIndex}
+          onClose={() => setActiveIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+

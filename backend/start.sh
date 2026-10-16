@@ -49,8 +49,5 @@ PY
 echo "Running database migrations..."
 uv run alembic upgrade head || echo "alembic upgrade failed"
 
-echo "Seeding database..."
-uv run python seed.py || echo "seed script failed or no-op"
-
 echo "Starting server..."
 exec uv run uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}

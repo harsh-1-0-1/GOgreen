@@ -36,7 +36,8 @@ interface CartState {
     productId: number,
     quantity?: number,
     product?: Product,
-    selectedOptions?: Record<string, string> | null,
+    // New format: string[] of option IDs. Old format: Record<string, string>. Both supported.
+    selectedOptions?: string[] | Record<string, string> | null,
   ) => Promise<void>;
   updateItem: (itemId: number, quantity: number) => Promise<void>;
   removeItem: (itemId: number) => Promise<void>;

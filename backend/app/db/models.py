@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     JSON,
     Boolean,
+    Column,
     DateTime,
     Enum,
     Float,
@@ -11,9 +12,11 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Table,
     Text,
     UniqueConstraint,
     event,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +25,38 @@ from app.db.base import Base
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# ── Product ↔ Category (many-to-many) ───────────────────────────────────────
+# A product always has ONE primary category (`products.category_id`) and may sit
+# in any number of ADDITIONAL ones recorded here — e.g. a succulent that is both
+# "Cacti & Succulents" and "Air Purifying".
+#
+# The primary deliberately stays a column instead of a row in this table:
+#   • it is NOT NULL, so "which collection does this product belong to" always has
+#     an answer (breadcrumbs, page banners, the admin's primary pick);
+#   • every existing row — and every code path that inserts a product directly
+#     (seed.py, scripts, tests) — keeps working with no backfill and no dual write;
+#   • category filtering ORs the two sources, so a product inserted with only a
+#     `category_id` is still findable under its category.
+product_categories = Table(
+    "product_categories",
+    Base.metadata,
+    Column(
+        "product_id",
+        Integer,
+        ForeignKey("products.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "category_id",
+        Integer,
+        ForeignKey("categories.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    # Filtering is always "products IN category X", so the lookup runs this way round.
+    Index("ix_product_categories_category_id", "category_id"),
+)
 
 
 class User(Base):
@@ -51,13 +86,79 @@ class Category(Base):
     slug: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("categories.id"), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    mobile_image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     parent: Mapped["Category | None"] = relationship(
         back_populates="children", remote_side="Category.id"
     )
     children: Mapped[list["Category"]] = relationship(back_populates="parent")
+    # Products whose PRIMARY category is this one (`products.category_id`).
     products: Mapped[list["Product"]] = relationship(back_populates="category")
+    # Products that additionally sit in this category. The many-to-many half —
+    # see `product_categories` for why the primary is a column and not a row.
+    additional_products: Mapped[list["Product"]] = relationship(
+        secondary=product_categories,
+        back_populates="additional_categories",
+    )
+
+
+class CategoryBadgeConfig(Base):
+    """Per-category look of the three badges drawn on top of a product image.
+
+    The storefront used to hardcode the wording ("BESTSELLER", "15% OFF") and
+    read a colour off each product row, which meant renaming a badge or making
+    it look different per collection meant editing products one by one. The
+    wording, colour and on/off switch now live here, one row per category, and a
+    category with no row falls back to `DEFAULT_BADGE_*` on the client.
+
+    Rows are sparse on purpose: a category only gets one the first time an admin
+    customises it, so new categories keep the default appearance for free.
+    """
+
+    __tablename__ = "category_badge_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    category_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("categories.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    # Bestseller — only drawn on products the admin has flagged `is_bestseller`.
+    bestseller_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    bestseller_label: Mapped[str] = mapped_column(String(50), default="BESTSELLER")
+    bestseller_color: Mapped[str] = mapped_column(String(20), default="#F59E0B")
+    # Discount — auto-derived from original vs selling price. An empty label keeps
+    # the automatic "{n}% OFF" wording.
+    discount_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    discount_label: Mapped[str] = mapped_column(String(50), default="")
+    discount_color: Mapped[str] = mapped_column(String(20), default="#1B4332")
+    # Rating — auto-derived from reviews. An empty label keeps the star + score.
+    rating_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    rating_label: Mapped[str] = mapped_column(String(50), default="")
+    rating_color: Mapped[str] = mapped_column(String(20), default="#1B4332")
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=_utcnow, nullable=True
+    )
+
+    category: Mapped["Category"] = relationship()
+
+
+
+
+class Tag(Base):
+    """A globally-defined catalog tag (name + colour). Products reference tags by
+    slug via their `tags` JSON array; the colour defined here is used everywhere
+    the tag pill is rendered across the catalog."""
+
+    __tablename__ = "tags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    slug: Mapped[str] = mapped_column(String(120), unique=True, index=True, nullable=False)
+    color: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class Product(Base):
@@ -77,13 +178,68 @@ class Product(Base):
     how_to_guide: Mapped[str | None] = mapped_column(Text, nullable=True)
     sunlight: Mapped[str | None] = mapped_column(String(100), nullable=True)
     watering: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    badge: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     variants: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    promise_banner_image: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    why_plantoga_banner_image: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    care_card_image: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    faqs: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    display_section: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    related_product_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # ── Image overlay badge controls ──────────────────────────────────────
+    # Whether this product may wear the bestseller badge. The badge's wording
+    # and colour come from `CategoryBadgeConfig` by default — see the two
+    # `*_override` columns below for the per-product exception.
+    is_bestseller: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Per-product bestseller badge wording/colour. NULL means "not overridden",
+    # so the category config decides. The two are independent: renaming does not
+    # force a colour, and recolouring does not force a name. When either is set
+    # the product is an exception to the category — including to the category's
+    # `bestseller_enabled` switch. See `resolve_bestseller_badge` in the frontend
+    # `ProductImageBadges` component for the exact resolution order.
+    bestseller_label_override: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, default=None
+    )
+    bestseller_color_override: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, default=None
+    )
+    # ── Combo flag ────────────────────────────────────────────────────────
+    # When true, the product is a combo of multiple items. The product detail
+    # page replaces "Product Specification" with "About the Combo" and renders
+    # `combo_items` (plus the optional `combo_description` summary) as contents.
+    is_combo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    combo_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Structured contents: list of {"name": str, "product_id": int | null}.
+    # `name` is a snapshot (the storefront renders it without a lookup);
+    # `product_id` links to the catalog entry when picked from it, else null.
+    combo_items: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     category: Mapped["Category"] = relationship(back_populates="products")
+    additional_categories: Mapped[list["Category"]] = relationship(
+        secondary=product_categories,
+        back_populates="additional_products",
+    )
     reviews: Mapped[list["ProductReview"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+
+
+class DisplaySection(Base):
+    __tablename__ = "display_sections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    key: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False
+    )
+    is_system: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=True
+    )
 
 
 class ReviewStatus(str, enum.Enum):
@@ -105,6 +261,8 @@ class ProductReview(Base):
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str | None] = mapped_column(String(140), nullable=True)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    youtube_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     status: Mapped[ReviewStatus] = mapped_column(Enum(ReviewStatus), default=ReviewStatus.PUBLISHED, index=True)
     is_verified_purchase: Mapped[bool] = mapped_column(Boolean, default=False)
     helpful_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -164,6 +322,28 @@ class PaymentStatus(str, enum.Enum):
     PARTIALLY_REFUNDED = "partially_refunded"
 
 
+class CouponType(str, enum.Enum):
+    PERCENT = "percent"
+    FIXED = "fixed"
+
+
+class Coupon(Base):
+    __tablename__ = "coupons"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    type: Mapped[CouponType] = mapped_column(
+        Enum(CouponType, values_callable=lambda e: [m.value for m in e]),
+        default=CouponType.PERCENT,
+        nullable=False,
+    )
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    min_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    times_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class Order(Base):
     __tablename__ = "orders"
 
@@ -173,10 +353,13 @@ class Order(Base):
     total_amount: Mapped[float] = mapped_column(Float, nullable=False)
     payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     razorpay_order_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    payment_method: Mapped[str] = mapped_column(String(30), nullable=False, default="razorpay")
     payment_status: Mapped[PaymentStatus] = mapped_column(
         Enum(PaymentStatus), default=PaymentStatus.PENDING
     )
     partial_refund_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    coupon_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    coupon_discount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     address_id: Mapped[int] = mapped_column(Integer, ForeignKey("addresses.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
@@ -191,14 +374,15 @@ class OrderItem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     order_id: Mapped[int] = mapped_column(Integer, ForeignKey("orders.id"), nullable=False)
-    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
+    product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
+    product_name_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price: Mapped[float] = mapped_column(Float, nullable=False)
     selected_options: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     resolved_image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     order: Mapped["Order"] = relationship(back_populates="items")
-    product: Mapped["Product"] = relationship()
+    product: Mapped["Product | None"] = relationship()
 
 
 class Refund(Base):
@@ -264,6 +448,11 @@ class Banner(Base):
     cta_link: Mapped[str | None] = mapped_column(String(255), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     image_public_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Wide desktop variant of `image_url`. `image_url` is the phone-sized crop;
+    # the storefront shows this one from the `sm` breakpoint up and falls back to
+    # `image_url` when no web image has been uploaded.
+    image_url_web: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    image_public_id_web: Mapped[str | None] = mapped_column(String(255), nullable=True)
     badge_text: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bg_color: Mapped[str] = mapped_column(String(20), default="#F5F0E8")
     text_color: Mapped[str] = mapped_column(String(20), default="#1B4332")
@@ -293,12 +482,183 @@ class WebhookEvent(Base):
 @event.listens_for(Product, "before_update")
 def sync_stock_qty(mapper, connection, target):
     """Derive stock_qty from variants.stock before every write.
-    
+
     This ensures stock_qty is always the sum of variant stocks, even if
     the client sends an incorrect value or the DB is edited directly via ORM.
-    
+
     Only applies when variants are present and have a stock dict.
     For non-variant products, the client-sent stock_qty is used as-is.
     """
     if target.variants and "stock" in target.variants:
         target.stock_qty = sum(int(v or 0) for v in target.variants["stock"].values())
+
+
+class DamageClaimStatus(str, enum.Enum):
+    SUBMITTED = "submitted"
+    UNDER_REVIEW = "under_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    REPLACEMENT_SHIPPED = "replacement_shipped"
+    REFUND_ISSUED = "refund_issued"
+    CLOSED = "closed"
+
+
+class DamageClaim(Base):
+    __tablename__ = "damage_claims"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    # Human-readable ticket ID generated after insert: PLG-DR-000001
+    ticket_id: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    order_id: Mapped[int] = mapped_column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
+    # Nullable: one claim covers the whole order in v1; reserved for per-item in v2
+    order_item_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("order_items.id"), nullable=True)
+    issue_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    # JSON array of S3 / local storage keys
+    photo_keys: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[DamageClaimStatus] = mapped_column(
+        # Persist the enum *values* (lowercase), matching the damageclaimstatus
+        # enum type created in the e3f4a5b6c7d8 migration.
+        Enum(DamageClaimStatus, values_callable=lambda e: [m.value for m in e]),
+        default=DamageClaimStatus.SUBMITTED,
+        index=True,
+    )
+    admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    user: Mapped["User"] = relationship("User")
+    order: Mapped["Order"] = relationship("Order")
+    order_item: Mapped["OrderItem | None"] = relationship("OrderItem")
+
+
+class CorporateInquiryStatus(str, enum.Enum):
+    """Status lifecycle for corporate/bulk inquiries."""
+    NEW = "new"
+    REVIEW = "review"
+    QUOTED = "quoted"
+    APPROVED = "approved"
+    CANCELLED = "cancelled"
+
+
+class CorporateInquiry(Base):
+    """Corporate/bulk order inquiry model with status tracking and duplicate detection."""
+    __tablename__ = "corporate_inquiries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    # Human-readable ticket ID generated after insert: PLG-INQ-000001
+    ticket_id: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    customization_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Nullable: required in the form (min 10) but optional at storage for API callers
+    qty_requested: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Duplicate/submission guard — signal, not a verdict (see plan 1.6)
+    is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[CorporateInquiryStatus] = mapped_column(
+        Enum(CorporateInquiryStatus, values_callable=lambda e: [m.value for m in e]),
+        default=CorporateInquiryStatus.NEW,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+
+class StoreSettings(Base):
+    """Single-row table that holds all mutable store configuration.
+
+    The row is always created with id=1 on first access (upsert).
+    """
+    __tablename__ = "store_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+
+    # Store info
+    store_name: Mapped[str] = mapped_column(String(255), nullable=False, default="Plantoga")
+    support_email: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    support_phone: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    warehouse_address: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    # Payments
+    cod_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Shipping
+    free_shipping_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=999)
+    flat_shipping_rate: Mapped[int] = mapped_column(Integer, nullable=False, default=75)
+
+    # Notifications
+    notify_new_order: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notify_low_stock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # SEO
+    meta_title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    meta_description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    # Branding
+    primary_color: Mapped[str] = mapped_column(String(20), nullable=False, default="#2D6A4F")
+    accent_color: Mapped[str] = mapped_column(String(20), nullable=False, default="#52B788")
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class DoNotForgetProduct(Base):
+    """Curated list of products to show in "Do Not Forget to Buy" section in cart."""
+    __tablename__ = "do_not_forget_products"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False, unique=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    product: Mapped["Product"] = relationship("Product")
+
+
+class Story(Base):
+    __tablename__ = "stories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    video: Mapped[str] = mapped_column(String(500), nullable=False)
+    thumbnail: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    caption: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    linked_product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    linked_product: Mapped["Product | None"] = relationship("Product")
+
+
+class MenuItem(Base):
+    """Dynamic navigation menu item. Max depth = 1 (top-level + one level of children)."""
+    __tablename__ = "menu_items"
+    __table_args__ = (
+        UniqueConstraint("label", "parent_id", name="uq_menu_items_label_parent"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    href: Mapped[str] = mapped_column(String(512), nullable=False)
+    parent_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("menu_items.id"), nullable=True
+    )
+    image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    accent_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    highlight: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    parent: Mapped["MenuItem | None"] = relationship(
+        "MenuItem", remote_side="MenuItem.id", back_populates="children"
+    )
+    children: Mapped[list["MenuItem"]] = relationship("MenuItem", back_populates="parent")

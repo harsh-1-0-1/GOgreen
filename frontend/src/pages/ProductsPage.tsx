@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ChevronDown, SlidersHorizontal, X } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useBanners } from '@/hooks/useBanners';
 import ProductCard from '@/components/product/ProductCard';
-import { getTagStyle } from '@/components/product/ProductTagBadges';
+import ResponsiveBannerImage from '@/components/banner/ResponsiveBannerImage';
+import { getTagStyle, getReadableTextColor, shadeColor } from '@/components/product/productTagBadges.utils';
+import { toTagKey } from '@/lib/tagKey';
+import { useTags } from '@/hooks/useTags';
 import SkeletonCard from '@/components/ui/SkeletonCard';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -40,8 +43,8 @@ function TrendingPromoBanner({
       title: 'Perfect plants for effortless indoor garden',
       subtitle: 'starting ₹699',
       cta_text: 'SHOP NOW',
-      cta_link: '/products?sort_by=popular',
-      image_url: images[0] || '/page-banner-default.jpeg',
+      cta_link: '/products',
+      image_url: images[0] || undefined,
       bg_color: '#e9dfc9',
       text_color: '#ffeb3b',
       placement: 'trending',
@@ -53,8 +56,8 @@ function TrendingPromoBanner({
       title: 'Fresh greens for every bright corner',
       subtitle: 'price drop',
       cta_text: 'SHOP NOW',
-      cta_link: '/products?sort_by=popular',
-      image_url: images[1] || images[0] || '/page-banner-default.jpeg',
+      cta_link: '/products',
+      image_url: images[1] || images[0] || undefined,
       bg_color: '#164d3b',
       text_color: '#ffeb3b',
       placement: 'trending',
@@ -66,8 +69,8 @@ function TrendingPromoBanner({
       title: 'Easy care picks for your home',
       subtitle: 'trending now',
       cta_text: 'SHOP NOW',
-      cta_link: '/products?sort_by=popular',
-      image_url: images[2] || images[0] || '/page-banner-default.jpeg',
+      cta_link: '/products',
+      image_url: images[2] || images[0] || undefined,
       bg_color: '#f1dfbd',
       text_color: '#ffeb3b',
       placement: 'trending',
@@ -78,9 +81,14 @@ function TrendingPromoBanner({
   const slides = banners.length > 0 ? banners : fallbackSlides;
   const [current, setCurrent] = useState(0);
 
-  useEffect(() => {
+  const [lastSlideLens, setLastSlideLens] = useState<[number, number]>([
+    banners.length,
+    images.length,
+  ]);
+  if (banners.length !== lastSlideLens[0] || images.length !== lastSlideLens[1]) {
+    setLastSlideLens([banners.length, images.length]);
     setCurrent(0);
-  }, [banners.length, images.length]);
+  }
 
   useEffect(() => {
     if (slides.length <= 1) return;
@@ -93,76 +101,47 @@ function TrendingPromoBanner({
 
   if (isLoading) {
     return (
-      <div className="mb-6 aspect-square w-full animate-pulse rounded-none bg-gray-100 sm:mb-8 sm:rounded-2xl lg:aspect-[16/7]" />
+      <div className="mb-6 h-[260px] w-full animate-pulse rounded-none bg-gray-100 sm:mb-8 sm:h-[300px] sm:rounded-2xl md:h-[340px] lg:h-[380px] xl:h-[400px]" />
     );
   }
 
   return (
-    <section className="relative -mx-3 mb-6 aspect-square overflow-hidden bg-[#e9dfc9] sm:mx-0 sm:mb-8 sm:rounded-2xl lg:aspect-[16/7]">
+    <section className="relative -mx-3 mb-6 h-[260px] overflow-hidden bg-[#e9dfc9] sm:mx-0 sm:mb-8 sm:h-[300px] sm:rounded-2xl md:h-[340px] lg:h-[380px] xl:h-[400px]">
       <div
         className="flex h-full transition-transform duration-700 ease-in-out"
         style={{ transform: `translateX(-${current * 100}%)` }}
       >
         {slides.map((slide, slideIndex) => {
-          const sideImages = images
-            .filter((src) => src && src !== slide.image_url)
-            .slice(0, 3);
+          const slideClass =
+            'relative h-full w-full shrink-0 overflow-hidden block';
+          const slideStyle = {
+            backgroundColor: slide.bg_color || '#e9dfc9',
+          };
 
-          return (
+          const slideImage = (
+            <ResponsiveBannerImage
+              banner={{ ...slide, image_url: slide.image_url || images[0] }}
+              loading={slideIndex === 0 ? 'eager' : 'lazy'}
+              fetchPriority={slideIndex === 0 ? 'high' : undefined}
+            />
+          );
+
+          return slide.cta_link ? (
+            <Link
+              key={slide.id || slideIndex}
+              to={slide.cta_link}
+              className={slideClass}
+              style={slideStyle}
+            >
+              {slideImage}
+            </Link>
+          ) : (
             <div
               key={slide.id || slideIndex}
-              className="relative h-full w-full shrink-0 overflow-hidden"
-              style={{ backgroundColor: slide.bg_color || '#e9dfc9' }}
+              className={slideClass}
+              style={slideStyle}
             >
-              <img
-                src={slide.image_url || images[0] || '/page-banner-default.jpeg'}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                loading={slideIndex === 0 ? 'eager' : 'lazy'}
-              />
-              <div className="absolute inset-0 bg-gradient-to-br from-black/45 via-black/10 to-transparent" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
-
-              {sideImages.map((src, index) => (
-                <img
-                  key={`${src}-${index}`}
-                  src={src}
-                  alt=""
-                  className={[
-                    'absolute hidden rounded-xl border-4 border-white/85 object-cover shadow-xl sm:block',
-                    index === 0 && 'right-[9%] top-[14%] h-[34%] w-[22%] rotate-3',
-                    index === 1 && 'right-[23%] bottom-[12%] h-[30%] w-[18%] -rotate-2',
-                    index === 2 && 'right-[4%] bottom-[18%] h-[25%] w-[16%] rotate-6',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  loading="lazy"
-                />
-              ))}
-
-              <div className="absolute left-6 top-8 max-w-[62%] sm:left-10 sm:top-10 lg:left-12 lg:top-12">
-                <p
-                  className="text-[clamp(2rem,10vw,4.75rem)] font-extrabold leading-[0.98] drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]"
-                  style={{ color: slide.text_color || '#ffeb3b' }}
-                >
-                  {slide.title}
-                </p>
-              </div>
-
-              {slide.subtitle && (
-                <div className="absolute right-7 top-10 grid h-24 w-24 rotate-[-10deg] place-items-center rounded-full bg-[#ffeb3b] text-center text-primary shadow-lg [clip-path:polygon(50%_0%,59%_12%,73%_6%,78%_21%,94%_22%,88%_38%,100%_50%,88%_62%,94%_78%,78%_79%,73%_94%,59%_88%,50%_100%,41%_88%,27%_94%,22%_79%,6%_78%,12%_62%,0%_50%,12%_38%,6%_22%,22%_21%,27%_6%,41%_12%)] sm:right-12 sm:top-12 sm:h-32 sm:w-32">
-                  <span className="rotate-[10deg] px-3 text-lg font-bold leading-tight sm:text-2xl">
-                    {slide.subtitle}
-                  </span>
-                </div>
-              )}
-
-              <Link
-                to={slide.cta_link || '/products?sort_by=popular'}
-                className="absolute bottom-7 left-1/2 -translate-x-1/2 rounded-md bg-[#ffeb3b] px-6 py-2 text-sm font-extrabold text-primary shadow-md sm:bottom-8 sm:text-base"
-              >
-                {slide.cta_text || 'SHOP NOW'}
-              </Link>
+              {slideImage}
             </div>
           );
         })}
@@ -185,9 +164,190 @@ function TrendingPromoBanner({
   );
 }
 
-function FiltersSidebar({
-  selectedCategory,
-  onCategoryChange,
+// ── Filter Panel (used inside both the top-bar dropdown and mobile sheet) ───
+
+function CategoryFilter({
+  selectedCategories,
+  onCategoryToggle,
+}: {
+  selectedCategories: string[];
+  onCategoryToggle: (slug: string) => void;
+}) {
+  const { data: categories } = useCategories();
+  const selectedCategorySet = new Set(selectedCategories);
+  const categoryNames = useMemo(() => {
+    const map = new Map<string, string>();
+    (categories ?? []).forEach((c) => {
+      map.set(c.slug, c.name);
+      (c.children ?? []).forEach((child) => map.set(child.slug, child.name));
+    });
+    return map;
+  }, [categories]);
+
+  const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({});
+
+  return (
+    <div className="w-64">
+      {/* Selected chips */}
+      {selectedCategories.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {selectedCategories.map((slug) => {
+            const label = categoryNames.get(slug) ?? formatSlugTitle(slug);
+            return (
+              <span
+                key={slug}
+                className="inline-flex items-center gap-1 rounded-full bg-primary/10 py-1 pl-2.5 pr-1 text-xs font-medium text-primary"
+              >
+                <span className="max-w-[9rem] truncate">{label}</span>
+                <button
+                  type="button"
+                  onClick={() => onCategoryToggle(slug)}
+                  aria-label={`Remove ${label} filter`}
+                  className="rounded-full p-0.5 transition hover:bg-primary/20"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-100 p-1">
+        {(categories ?? []).map((c) => {
+          const children = c.children ?? [];
+          const parentSelected = selectedCategorySet.has(c.slug);
+          const isOpen =
+            expandedParents[c.slug] ??
+            children.some((child) => selectedCategorySet.has(child.slug));
+          return (
+            <div key={c.slug}>
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCategoryToggle(c.slug);
+                    if (children.length) {
+                      setExpandedParents((prev) => ({ ...prev, [c.slug]: true }));
+                    }
+                  }}
+                  aria-pressed={parentSelected}
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition ${parentSelected ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-gray-50'}`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px] leading-none ${parentSelected ? 'border-primary bg-primary text-white' : 'border-gray-300 bg-white'}`}
+                  >
+                    {parentSelected ? '✓' : ''}
+                  </span>
+                  <span className="truncate">{c.name}</span>
+                </button>
+                {children.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedParents((prev) => ({ ...prev, [c.slug]: !isOpen }))
+                    }
+                    aria-expanded={isOpen}
+                    aria-label={`${isOpen ? 'Hide' : 'Show'} subcategories of ${c.name}`}
+                    className="rounded-md p-2 text-gray-400 transition hover:bg-gray-50 hover:text-gray-600"
+                  >
+                    <ChevronRight
+                      className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                    />
+                  </button>
+                )}
+              </div>
+              {isOpen && children.length > 0 && (
+                <div className="ml-3 border-l border-gray-200 pl-2">
+                  {children.map((child) => {
+                    const childSelected = selectedCategorySet.has(child.slug);
+                    return (
+                      <button
+                        key={child.slug}
+                        type="button"
+                        onClick={() => onCategoryToggle(child.slug)}
+                        aria-pressed={childSelected}
+                        className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition ${childSelected ? 'bg-primary/10 font-medium text-primary' : 'text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px] leading-none ${childSelected ? 'border-primary bg-primary text-white' : 'border-gray-300 bg-white'}`}
+                        >
+                          {childSelected ? '✓' : ''}
+                        </span>
+                        <span className="truncate">{child.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {(categories ?? []).length === 0 && (
+          <p className="px-2 py-3 text-center text-xs text-gray-400">No categories yet.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// A single dropdown pill used in the top filter bar
+function FilterDropdown({
+  label,
+  active,
+  children,
+}: {
+  label: React.ReactNode;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition ${
+          active
+            ? 'border-primary bg-primary/5 text-primary'
+            : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
+        }`}
+      >
+        {label}
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-40 mt-2 rounded-xl border border-gray-100 bg-white p-3 shadow-xl">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Full-page filter sheet for mobile ──────────────────────────────────────
+
+function MobileFilterSheet({
+  open,
+  onClose,
+  selectedCategories,
+  onCategoryToggle,
   minPrice,
   maxPrice,
   onMinPriceChange,
@@ -195,9 +355,13 @@ function FiltersSidebar({
   selectedTags,
   onTagToggle,
   onReset,
+  tagOptions,
+  selectedTagKeys,
 }: {
-  selectedCategory: string;
-  onCategoryChange: (slug: string) => void;
+  open: boolean;
+  onClose: () => void;
+  selectedCategories: string[];
+  onCategoryToggle: (slug: string) => void;
   minPrice: string;
   maxPrice: string;
   onMinPriceChange: (v: string) => void;
@@ -205,94 +369,124 @@ function FiltersSidebar({
   selectedTags: string[];
   onTagToggle: (tag: string) => void;
   onReset: () => void;
+  tagOptions: { key: string; label: string; color: string | null }[];
+  selectedTagKeys: Set<string>;
 }) {
-  const { data: categories } = useCategories();
-  const allCategories = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
-  const popularTags = [
-    'indoor',
-    'outdoor',
-    'flowering',
-    'low-maintenance',
-    'air-purifying',
-    'pet-friendly',
-    'beginner-friendly',
-    'vastu-friendly',
-  ];
+  useBodyScrollLock(open);
+  if (!open) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-sm uppercase tracking-wider text-gray-500">Filters</h3>
-        <button onClick={onReset} className="text-xs text-primary hover:underline">Clear All</button>
-      </div>
-      <div>
-        <h4 className="font-semibold text-sm mb-3">Category</h4>
-        <div className="space-y-1.5 max-h-52 overflow-y-auto">
+    <>
+      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl max-h-[85vh] flex flex-col animate-slide-up">
+        <div className="flex items-center justify-between p-4 border-b shrink-0">
+          <h3 className="font-bold flex items-center gap-2">
+            <SlidersHorizontal size={18} /> Filters
+          </h3>
+          <div className="flex items-center gap-3">
+            <button onClick={onReset} className="text-xs text-primary hover:underline">Clear All</button>
+            <button onClick={onClose} className="p-2"><X size={20} /></button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {/* Category */}
+          <div>
+            <h4 className="font-semibold text-sm mb-3">Category</h4>
+            <CategoryFilter
+              selectedCategories={selectedCategories}
+              onCategoryToggle={onCategoryToggle}
+            />
+          </div>
+
+          {/* Price */}
+          <div>
+            <h4 className="font-semibold text-sm mb-3">Price Range</h4>
+            <div className="flex gap-2 items-center">
+              <input
+                type="number"
+                placeholder="Min"
+                value={minPrice}
+                onChange={(e) => onMinPriceChange(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <span className="text-gray-300">—</span>
+              <input
+                type="number"
+                placeholder="Max"
+                value={maxPrice}
+                onChange={(e) => onMaxPriceChange(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          {/* Tags */}
+          <div>
+            <h4 className="font-semibold text-sm mb-3">Tags</h4>
+            <div className="flex flex-wrap gap-2">
+              {tagOptions.map((tag) => {
+                const isSelected = selectedTagKeys.has(tag.key);
+                const style = tag.color
+                  ? {
+                      backgroundColor: tag.color,
+                      color: getReadableTextColor(tag.color),
+                      borderColor: shadeColor(tag.color, -0.18),
+                    }
+                  : {
+                      backgroundColor: getTagStyle(tag.key).bg,
+                      color: getTagStyle(tag.key).text,
+                      borderColor: getTagStyle(tag.key).border,
+                    };
+                return (
+                  <button
+                    key={tag.key}
+                    onClick={() => onTagToggle(tag.key)}
+                    className={`px-3 py-1.5 text-xs rounded-full border transition-all font-medium ${
+                      isSelected ? '' : 'text-gray-600 border-gray-200 hover:border-gray-300'
+                    }`}
+                    style={isSelected ? style : undefined}
+                  >
+                    {tag.label}
+                  </button>
+                );
+              })}
+              {tagOptions.length === 0 && (
+                <p className="text-xs text-gray-400">No tags yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="shrink-0 p-4 border-t safe-bottom">
           <button
-            onClick={() => onCategoryChange('')}
-            className={`block w-full text-left text-sm px-3 py-2 rounded-lg transition touch-target ${!selectedCategory ? 'bg-primary-light/10 text-primary font-medium' : 'hover:bg-gray-50'}`}
+            onClick={onClose}
+            className="w-full py-3 bg-primary text-white rounded-xl font-medium"
           >
-            All
+            Apply Filters
           </button>
-          {allCategories.map((c) => (
-            <button
-              key={c.slug}
-              onClick={() => onCategoryChange(c.slug)}
-              className={`block w-full text-left text-sm px-3 py-2 rounded-lg transition touch-target ${selectedCategory === c.slug ? 'bg-primary-light/10 text-primary font-medium' : 'hover:bg-gray-50'}`}
-            >
-              {c.parent_id ? `  ${c.name}` : c.name}
-            </button>
-          ))}
         </div>
       </div>
-      <div>
-        <h4 className="font-semibold text-sm mb-3">Price Range</h4>
-        <div className="flex gap-2 items-center">
-          <input type="number" placeholder="Min" value={minPrice} onChange={(e) => onMinPriceChange(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-light" />
-          <span className="text-gray-300">—</span>
-          <input type="number" placeholder="Max" value={maxPrice} onChange={(e) => onMaxPriceChange(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-light" />
-        </div>
-      </div>
-      <div>
-        <h4 className="font-semibold text-sm mb-3">Tags</h4>
-        <div className="flex flex-wrap gap-2">
-          {popularTags.map((tag) => {
-            const isSelected = selectedTags.includes(tag);
-            const style = getTagStyle(tag);
-            const label = tag.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-            return (
-              <button
-                key={tag}
-                onClick={() => onTagToggle(tag)}
-                className="px-3 py-1.5 text-xs rounded-full border transition-all touch-target font-medium"
-                style={isSelected ? {
-                  backgroundColor: style.bg,
-                  color: style.text,
-                  borderColor: style.border,
-                } : undefined}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
+
+// ── Page ───────────────────────────────────────────────────────────────────
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  useBodyScrollLock(mobileFiltersOpen);
-
-  const category = searchParams.get('category') || searchParams.get('subcategory') || '';
+  const categoryParam = searchParams.get('category') || searchParams.get('subcategory') || '';
+  const categoryListParam = searchParams.get('categories') || '';
+  const selectedCategories = useMemo(() => {
+    const slugs = [...categoryListParam.split(','), categoryParam];
+    return Array.from(new Set(slugs.map((s) => s.trim()).filter(Boolean)));
+  }, [categoryListParam, categoryParam]);
   const search = searchParams.get('search') || '';
   const collectionTitle = searchParams.get('collection_title') || '';
   const sort = searchParams.get('sort_by') || '';
+  const displaySection = searchParams.get('display_section') || '';
   const page = Number(searchParams.get('page')) || 1;
   const [minPrice, setMinPrice] = useState(searchParams.get('min_price') || '');
   const [maxPrice, setMaxPrice] = useState(searchParams.get('max_price') || '');
@@ -317,20 +511,35 @@ export default function ProductsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  function handleCategoryToggle(slug: string) {
+    const next = selectedCategories.includes(slug)
+      ? selectedCategories.filter((c) => c !== slug)
+      : [...selectedCategories, slug];
+    const params = new URLSearchParams(searchParams);
+    params.delete('category');
+    params.delete('subcategory');
+    if (next.length) params.set('categories', next.join(','));
+    else params.delete('categories');
+    params.delete('page');
+    setSearchParams(params);
+  }
+
   function handleTagToggle(tag: string) {
     const next = selectedTags.includes(tag) ? selectedTags.filter((t) => t !== tag) : [...selectedTags, tag];
     updateParams({ tags: next.join(',') });
   }
 
   function resetFilters() {
-    setMinPrice(''); setMaxPrice('');
+    setMinPrice('');
+    setMaxPrice('');
     setSearchParams({});
   }
 
   const { data, isLoading } = useProducts({
-    category_slug: category || undefined,
+    categories: selectedCategories.length ? selectedCategories.join(',') : undefined,
     search: search || undefined,
     sort_by: sort || undefined,
+    display_section: displaySection || undefined,
     min_price: minPrice ? Number(minPrice) : undefined,
     max_price: maxPrice ? Number(maxPrice) : undefined,
     tags: selectedTags.length ? selectedTags.join(',') : undefined,
@@ -341,54 +550,70 @@ export default function ProductsPage() {
     useBanners('trending');
 
   const isTrendingPage =
-    sort === 'popular' &&
+    (sort === 'popular' || displaySection === 'trending') &&
     !search &&
-    !category &&
+    selectedCategories.length === 0 &&
     !minPrice &&
     !maxPrice &&
     selectedTags.length === 0;
   const isNewestPage =
     sort === 'newest' &&
     !search &&
-    !category &&
+    selectedCategories.length === 0 &&
     !minPrice &&
     !maxPrice &&
     selectedTags.length === 0;
+
   const trendingBannerImages =
-    data?.items.flatMap((product) => product.images ?? []).filter(Boolean) ??
-    [];
+    data?.items.flatMap((product) => product.images ?? []).filter(Boolean) ?? [];
+
+  const categoryTitle =
+    selectedCategories.length === 1
+      ? formatSlugTitle(selectedCategories[0])
+      : selectedCategories.length > 1
+        ? selectedCategories.map(formatSlugTitle).join(' + ')
+        : '';
   const pageTitle = search
     ? `Results for "${search}"`
     : collectionTitle
       ? collectionTitle
       : isTrendingPage
-      ? 'Price Drop!'
-      : isNewestPage
-        ? 'New Arrivals'
-        : category
-          ? formatSlugTitle(category)
-          : selectedTags.length === 1
-            ? formatSlugTitle(selectedTags[0])
-            : selectedTags.length > 1
-              ? selectedTags.map(formatSlugTitle).join(' + ')
-              : 'All Products';
+        ? 'Price Drop!'
+        : isNewestPage
+          ? 'New Arrivals'
+          : categoryTitle
+            ? categoryTitle
+            : selectedTags.length === 1
+              ? formatSlugTitle(selectedTags[0])
+              : selectedTags.length > 1
+                ? selectedTags.map(formatSlugTitle).join(' + ')
+                : 'All Products';
 
-  const sidebar = (
-    <FiltersSidebar
-      selectedCategory={category}
-      onCategoryChange={(slug) => updateParams({ category: slug })}
-      minPrice={minPrice}
-      maxPrice={maxPrice}
-      onMinPriceChange={(v) => { setMinPrice(v); updateParams({ min_price: v }); }}
-      onMaxPriceChange={(v) => { setMaxPrice(v); updateParams({ max_price: v }); }}
-      selectedTags={selectedTags}
-      onTagToggle={handleTagToggle}
-      onReset={resetFilters}
-    />
-  );
+  // Tag options (shared between top-bar and mobile sheet)
+  const { data: savedTags = [] } = useTags();
+  const legacyTags = [
+    'indoor', 'outdoor', 'flowering', 'low-maintenance',
+    'air-purifying', 'pet-friendly', 'beginner-friendly', 'vastu-friendly',
+  ];
+  const tagOptions =
+    savedTags.length > 0
+      ? savedTags
+          .filter((t) => t.is_active)
+          .map((t) => ({ key: toTagKey(t.name), label: t.name, color: t.color || null }))
+          .filter((t) => t.key)
+      : legacyTags.map((t) => ({ key: t, label: formatSlugTitle(t), color: null }));
+
+  const selectedTagKeys = new Set(selectedTags.map(toTagKey));
+
+  // Active filter count for badge
+  const activeFilterCount =
+    selectedCategories.length +
+    selectedTags.length +
+    (minPrice ? 1 : 0) +
+    (maxPrice ? 1 : 0);
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+    <div className="w-full px-2 sm:px-3 lg:px-4 py-3 sm:py-4">
       {isTrendingPage && (
         <TrendingPromoBanner
           banners={trendingBanners}
@@ -397,129 +622,248 @@ export default function ProductsPage() {
         />
       )}
 
-      {/* Header */}
-      <div className="mb-4 sm:mb-6">
-        <h1 className="text-lg sm:text-2xl font-bold">
-          {pageTitle}
-        </h1>
-        {data && <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{data.total} products</p>}
+      {/* Page heading */}
+      <div className="mb-4">
+        <h1 className="text-2xl sm:text-3xl font-bold">{pageTitle}</h1>
+        {data?.total !== undefined && (
+          <p className="text-sm text-gray-500 mt-0.5">{data.total} products</p>
+        )}
       </div>
 
-      {/* Mobile Control Bar */}
-      <div className="lg:hidden flex items-center gap-3 mb-4 -mx-1 sm:mx-0">
+      {/* ── Top Filter Bar ─────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 mb-5 flex-wrap border-b border-gray-100 pb-4">
+
+        {/* Mobile: single "Filter" button that opens the bottom sheet */}
         <button
           onClick={() => setMobileFiltersOpen(true)}
-          className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-xl py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 transition-colors"
+          className="sm:hidden flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium border-gray-200 bg-white text-gray-700 hover:border-gray-400 transition"
         >
-          <SlidersHorizontal size={18} className="text-primary" /> 
-          Filters
-          {(selectedTags.length > 0 || category || minPrice || maxPrice) && (
-            <span className="w-2 h-2 rounded-full bg-accent ml-1" />
+          <SlidersHorizontal size={15} />
+          Filter
+          {activeFilterCount > 0 && (
+            <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+              {activeFilterCount}
+            </span>
           )}
         </button>
-        
-        <div className="flex-1 relative">
-          <select
-            value={sort}
-            onChange={(e) => updateParams({ sort_by: e.target.value })}
-            className="w-full appearance-none bg-white border border-gray-200 rounded-xl py-2.5 pl-4 pr-10 text-sm font-semibold text-gray-700 shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary truncate"
+
+        {/* Desktop: inline dropdown pills */}
+        <div className="hidden sm:flex items-center gap-2 flex-wrap">
+          {/* Category dropdown */}
+          <FilterDropdown
+            label={
+              selectedCategories.length > 0
+                ? `Category (${selectedCategories.length})`
+                : 'Category'
+            }
+            active={selectedCategories.length > 0}
           >
-            <option value="" disabled>Sort By</option>
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-        </div>
-      </div>
+            <CategoryFilter
+              selectedCategories={selectedCategories}
+              onCategoryToggle={handleCategoryToggle}
+            />
+          </FilterDropdown>
 
-      {/* Desktop sort */}
-      <div className="hidden lg:flex items-center justify-end mb-4 gap-3">
-        <select
-          value={sort}
-          onChange={(e) => updateParams({ sort_by: e.target.value })}
-          className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-primary-light"
-        >
-          {SORT_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="flex gap-8">
-        {/* Desktop sidebar */}
-        <aside className="hidden lg:block w-60 shrink-0">{sidebar}</aside>
-
-        {/* Mobile filter bottom sheet */}
-        {mobileFiltersOpen && (
-          <>
-            <div className="fixed inset-0 bg-black/40 z-50 lg:hidden" onClick={() => setMobileFiltersOpen(false)} />
-            <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl max-h-[85vh] flex flex-col lg:hidden animate-slide-up">
-              <div className="flex items-center justify-between p-4 border-b shrink-0">
-                <h3 className="font-bold flex items-center gap-2">
-                  <SlidersHorizontal size={18} /> Filters
-                </h3>
-                <button onClick={() => setMobileFiltersOpen(false)} className="p-2 touch-target"><X size={20} /></button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4">{sidebar}</div>
-              <div className="shrink-0 p-4 border-t safe-bottom">
-                <button
-                  onClick={() => setMobileFiltersOpen(false)}
-                  className="w-full py-3 bg-primary text-white rounded-xl font-medium"
-                >
-                  Apply Filters
-                </button>
-              </div>
+          {/* Price dropdown */}
+          <FilterDropdown
+            label="Price"
+            active={Boolean(minPrice || maxPrice)}
+          >
+            <div className="flex gap-2 items-center w-56">
+              <input
+                type="number"
+                placeholder="Min ₹"
+                value={minPrice}
+                onChange={(e) => { setMinPrice(e.target.value); updateParams({ min_price: e.target.value }); }}
+                className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <span className="text-gray-300 shrink-0">—</span>
+              <input
+                type="number"
+                placeholder="Max ₹"
+                value={maxPrice}
+                onChange={(e) => { setMaxPrice(e.target.value); updateParams({ max_price: e.target.value }); }}
+                className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+              />
             </div>
-          </>
-        )}
+          </FilterDropdown>
 
-        {/* Product grid */}
-        <div className="flex-1">
-          <ErrorBoundary>
-            {isLoading ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-                {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
-              </div>
-            ) : data?.items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-3">
-                <p className="text-lg font-medium">No products found</p>
-                <button onClick={resetFilters} className="text-sm text-primary hover:underline">Reset Filters</button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-                {data?.items.map((p) => <ProductCard key={p.id} product={p} />)}
-              </div>
-            )}
-          </ErrorBoundary>
-
-          {/* Pagination */}
-          {data && data.pages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-8 sm:mt-10">
-              <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 touch-target">
-                <ChevronLeft size={18} />
-              </button>
-              {Array.from({ length: data.pages }, (_, i) => i + 1)
-                .filter((p) => p === 1 || p === data.pages || Math.abs(p - page) <= 1)
-                .map((p, idx, arr) => (
-                  <span key={p}>
-                    {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-gray-300">…</span>}
-                    <button
-                      onClick={() => setPage(p)}
-                      className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg text-sm font-medium transition touch-target ${p === page ? 'bg-primary text-white' : 'hover:bg-gray-50 border'}`}
-                    >
-                      {p}
-                    </button>
-                  </span>
-                ))}
-              <button disabled={page >= data.pages} onClick={() => setPage(page + 1)} className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 touch-target">
-                <ChevronRight size={18} />
-              </button>
+          {/* Tags dropdown */}
+          <FilterDropdown
+            label={selectedTags.length > 0 ? `Tags (${selectedTags.length})` : 'Tags'}
+            active={selectedTags.length > 0}
+          >
+            <div className="flex flex-wrap gap-2 max-w-xs">
+              {tagOptions.map((tag) => {
+                const isSelected = selectedTagKeys.has(tag.key);
+                const style = tag.color
+                  ? {
+                      backgroundColor: tag.color,
+                      color: getReadableTextColor(tag.color),
+                      borderColor: shadeColor(tag.color, -0.18),
+                    }
+                  : {
+                      backgroundColor: getTagStyle(tag.key).bg,
+                      color: getTagStyle(tag.key).text,
+                      borderColor: getTagStyle(tag.key).border,
+                    };
+                return (
+                  <button
+                    key={tag.key}
+                    onClick={() => handleTagToggle(tag.key)}
+                    className={`px-3 py-1.5 text-xs rounded-full border transition-all font-medium ${
+                      isSelected ? '' : 'text-gray-600 border-gray-200 hover:border-gray-300'
+                    }`}
+                    style={isSelected ? style : undefined}
+                  >
+                    {tag.label}
+                  </button>
+                );
+              })}
+              {tagOptions.length === 0 && (
+                <p className="text-xs text-gray-400">No tags yet.</p>
+              )}
             </div>
+          </FilterDropdown>
+
+          {/* Clear all — only shown when something is active */}
+          {activeFilterCount > 0 && (
+            <button
+              onClick={resetFilters}
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-primary transition px-2"
+            >
+              <X size={14} /> Clear all
+            </button>
           )}
         </div>
+
+        {/* Sort — always visible, pushed to the right */}
+        <div className="ml-auto relative flex items-center gap-2">
+          <span className="hidden sm:inline text-sm text-gray-500">Sort by</span>
+          <div className="relative">
+            <select
+              value={sort}
+              onChange={(e) => updateParams({ sort_by: e.target.value })}
+              className="appearance-none bg-white border border-gray-200 rounded-full py-2 pl-4 pr-8 text-sm font-medium text-gray-700 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary hover:border-gray-400 transition cursor-pointer"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
+        </div>
       </div>
 
+      {/* Active filter chips row */}
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4 -mt-2">
+          {selectedCategories.map((slug) => (
+            <span
+              key={slug}
+              className="inline-flex items-center gap-1 rounded-full bg-primary/10 py-1 pl-2.5 pr-1 text-xs font-medium text-primary"
+            >
+              {formatSlugTitle(slug)}
+              <button
+                type="button"
+                onClick={() => handleCategoryToggle(slug)}
+                className="rounded-full p-0.5 transition hover:bg-primary/20"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+          {selectedTags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-1 rounded-full bg-primary/10 py-1 pl-2.5 pr-1 text-xs font-medium text-primary"
+            >
+              {formatSlugTitle(tag)}
+              <button
+                type="button"
+                onClick={() => handleTagToggle(tag)}
+                className="rounded-full p-0.5 transition hover:bg-primary/20"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+          {(minPrice || maxPrice) && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 py-1 pl-2.5 pr-1 text-xs font-medium text-primary">
+              ₹{minPrice || '0'} – ₹{maxPrice || '∞'}
+              <button
+                type="button"
+                onClick={() => { setMinPrice(''); setMaxPrice(''); updateParams({ min_price: '', max_price: '' }); }}
+                className="rounded-full p-0.5 transition hover:bg-primary/20"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Mobile filter sheet ─────────────────────────────────────────── */}
+      <MobileFilterSheet
+        open={mobileFiltersOpen}
+        onClose={() => setMobileFiltersOpen(false)}
+        selectedCategories={selectedCategories}
+        onCategoryToggle={handleCategoryToggle}
+        minPrice={minPrice}
+        maxPrice={maxPrice}
+        onMinPriceChange={(v) => { setMinPrice(v); updateParams({ min_price: v }); }}
+        onMaxPriceChange={(v) => { setMaxPrice(v); updateParams({ max_price: v }); }}
+        selectedTags={selectedTags}
+        onTagToggle={handleTagToggle}
+        onReset={resetFilters}
+        tagOptions={tagOptions}
+        selectedTagKeys={selectedTagKeys}
+      />
+
+      {/* ── Product grid (full width) ──────────────────────────────────── */}
+      <ErrorBoundary>
+        {isLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
+            {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : data?.items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-3">
+            <p className="text-lg font-medium">No products found</p>
+            <button onClick={resetFilters} className="text-sm text-primary hover:underline">Reset Filters</button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
+            {data?.items.map((p, i) => (
+              <ProductCard key={p.id} product={p} priority={i < 4} />
+            ))}
+          </div>
+        )}
+      </ErrorBoundary>
+
+      {/* Pagination */}
+      {data && data.pages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-8 sm:mt-10">
+          <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">
+            <ChevronLeft size={18} />
+          </button>
+          {Array.from({ length: data.pages }, (_, i) => i + 1)
+            .filter((p) => p === 1 || p === data.pages || Math.abs(p - page) <= 1)
+            .map((p, idx, arr) => (
+              <span key={p}>
+                {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-gray-300">…</span>}
+                <button
+                  onClick={() => setPage(p)}
+                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg text-sm font-medium transition ${p === page ? 'bg-primary text-white' : 'hover:bg-gray-50 border'}`}
+                >
+                  {p}
+                </button>
+              </span>
+            ))}
+          <button disabled={page >= data.pages} onClick={() => setPage(page + 1)} className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

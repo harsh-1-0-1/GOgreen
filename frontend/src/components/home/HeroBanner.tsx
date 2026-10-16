@@ -4,39 +4,12 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 
 import { useBanners } from '@/hooks/useBanners';
-import type { Banner } from '@/types';
-
-const FALLBACK_SLIDE: Banner = {
-  id: 0,
-  title: "India's favourite plant store",
-  subtitle: 'Plants, seeds & pots delivered to your door',
-  cta_text: 'Shop Now',
-  cta_link: '/products',
-  bg_color: '#2D6A4F',
-  text_color: '#FFFFFF',
-  image_url:
-    'https://images.unsplash.com/photo-1545241047-6083a3684587?w=1400&h=600&fit=crop',
-  placement: 'hero',
-  position: 0,
-  is_active: true,
-};
-
-const STARBURST_CLIP =
-  'polygon(50% 0%,66% 18%,85% 5%,80% 28%,100% 35%,87% 50%,100% 65%,80% 72%,85% 95%,66% 82%,50% 100%,34% 82%,15% 95%,20% 72%,0% 65%,13% 50%,0% 35%,20% 28%,15% 5%,34% 18%)';
-
-function isDarkBg(hex: string): boolean {
-  const c = hex.replace('#', '');
-  if (c.length !== 6) return false;
-  const r = parseInt(c.substring(0, 2), 16);
-  const g = parseInt(c.substring(2, 4), 16);
-  const b = parseInt(c.substring(4, 6), 16);
-  return r * 0.299 + g * 0.587 + b * 0.114 < 128;
-}
+import ResponsiveBannerImage from '@/components/banner/ResponsiveBannerImage';
 
 function SlidesSkeleton() {
   return (
     <section className="w-full overflow-hidden">
-      <div className="animate-pulse bg-[#f0ebe3] h-[340px] sm:h-[380px] md:h-[58vh] lg:h-[58vh]">
+      <div className="animate-pulse bg-[#f0ebe3] h-[400px] sm:h-[480px] md:h-[560px] lg:h-[640px] xl:h-[720px]">
         <div className="flex items-center h-full px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28">
           <div className="space-y-5 w-full max-w-md">
             <div className="h-10 w-3/4 bg-gray-300/40 rounded-lg" />
@@ -51,15 +24,19 @@ function SlidesSkeleton() {
 
 export default function HeroBanner() {
   const { data: banners = [], isLoading } = useBanners('hero');
-  const slides = banners.length > 0 ? banners : [FALLBACK_SLIDE];
+  const slides = banners;
 
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
   const touchStartRef = useRef(0);
 
-  useEffect(() => {
+  // Reset to the first slide when the banner set changes. React docs recommend
+  // adjusting state during render (guarded) instead of a synchronous setState effect.
+  const [lastBanners, setLastBanners] = useState(banners);
+  if (lastBanners !== banners) {
+    setLastBanners(banners);
     setCurrent(0);
-  }, [banners]);
+  }
 
   const next = useCallback(
     () => setCurrent((c) => (c + 1) % slides.length),
@@ -84,142 +61,52 @@ export default function HeroBanner() {
   function handleTouchEnd(e: React.TouchEvent) {
     const delta = e.changedTouches[0].clientX - touchStartRef.current;
     if (Math.abs(delta) > 50) {
-      delta < 0 ? next() : prev();
+      if (delta < 0) next();
+      else prev();
     }
   }
 
   if (isLoading) return <SlidesSkeleton />;
 
+  if (slides.length === 0) return null;
+
   return (
     <section
-      className="relative w-full overflow-hidden group"
+      className="relative w-full overflow-hidden group h-[400px] sm:h-[480px] md:h-[560px] lg:h-[640px] xl:h-[720px]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
       <div
-        className="flex transition-transform duration-700 ease-in-out h-[340px] sm:h-[380px] md:h-[58vh] lg:h-[58vh]"
+        className="flex transition-transform duration-700 ease-in-out h-full"
         style={{
           transform: `translateX(-${current * 100}%)`,
         }}
       >
         {slides.map((slide, i) => {
-          const dark = isDarkBg(slide.bg_color);
-          const textColor = slide.text_color || (dark ? '#FFFFFF' : '#1B4332');
+          const slideInner = <ResponsiveBannerImage banner={slide} loading={i === 0 ? 'eager' : 'lazy'} fetchPriority={i === 0 ? 'high' : undefined} onError={(e) => { e.currentTarget.style.display = 'none'; }} />;
 
-          return (
+          const slideStyle = { backgroundColor: slide.bg_color };
+
+          return slide.cta_link ? (
+            <Link
+              key={slide.id || i}
+              to={slide.cta_link}
+              className="w-full shrink-0 relative overflow-hidden block"
+              style={slideStyle}
+              aria-hidden={i !== current}
+            >
+              {slideInner}
+            </Link>
+          ) : (
             <div
               key={slide.id || i}
               className="w-full shrink-0 relative overflow-hidden"
-              style={{ backgroundColor: slide.bg_color }}
+              style={slideStyle}
               aria-hidden={i !== current}
             >
-              {slide.image_url && (
-                <img
-                  src={slide.image_url}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover md:hidden"
-                  loading={i === 0 ? 'eager' : 'lazy'}
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent md:hidden" />
-
-              <div className="relative h-full flex items-stretch">
-                <div className="relative z-10 w-full md:w-[48%] lg:w-[44%] flex items-center px-6 sm:px-10 md:pl-12 lg:pl-20 xl:pl-28 py-10 md:py-0">
-                  <div className="text-center md:text-left max-w-md w-full space-y-5 md:space-y-6">
-                    {slide.badge_text && (
-                      <div className="md:hidden">
-                        <span className="inline-block px-4 py-1.5 bg-accent/90 backdrop-blur-sm rounded-full text-xs font-bold text-[#1B4332] shadow">
-                          {slide.badge_text}
-                        </span>
-                      </div>
-                    )}
-
-                    <h2
-                      className={clsx(
-                        'font-bold leading-[1.15] tracking-tight',
-                        'text-[2rem] sm:text-[2.4rem] md:text-[2.8rem] lg:text-[3.2rem] xl:text-[3.6rem]',
-                        dark
-                          ? 'text-white'
-                          : 'text-white md:text-[#1B4332]',
-                      )}
-                      style={{ color: undefined }}
-                    >
-                      <span className="hidden md:inline" style={{ color: textColor }}>
-                        {slide.title}
-                      </span>
-                      <span className="md:hidden">{slide.title}</span>
-                    </h2>
-
-                    {slide.subtitle && (
-                      <p
-                        className={clsx(
-                          'text-[15px] md:text-[16px] lg:text-[17px] leading-relaxed',
-                          dark
-                            ? 'text-white/80'
-                            : 'text-white/90 md:text-gray-500',
-                        )}
-                      >
-                        {slide.subtitle}
-                      </p>
-                    )}
-
-                    {slide.cta_text && slide.cta_link && (
-                      <div className="flex flex-col sm:flex-row items-center md:items-start gap-3">
-                        <Link
-                          to={slide.cta_link}
-                          className={clsx(
-                            'inline-flex items-center justify-center px-8 py-3 rounded-lg font-semibold text-[14px] md:text-[15px] transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md',
-                            dark
-                              ? 'bg-white text-[#1B4332] hover:bg-gray-100'
-                              : 'bg-accent text-[#1B4332] hover:bg-accent/90',
-                          )}
-                        >
-                          {slide.cta_text}
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="hidden md:block flex-1 relative overflow-hidden">
-                  {slide.image_url && (
-                    <img
-                      src={slide.image_url}
-                      alt={slide.title}
-                      className="w-full h-full object-cover object-center"
-                      loading={i === 0 ? 'eager' : 'lazy'}
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  )}
-                  <div
-                    className="absolute inset-y-0 left-0 w-24 pointer-events-none"
-                    style={{
-                      background: `linear-gradient(to right, ${slide.bg_color}, transparent)`,
-                    }}
-                  />
-                </div>
-
-                {slide.badge_text && (
-                  <div
-                    className="absolute z-20 hidden md:flex left-[44%] top-1/2 -translate-x-1/2 -translate-y-1/2 w-[130px] h-[130px] lg:w-[148px] lg:h-[148px] items-center justify-center drop-shadow-xl"
-                    style={{
-                      clipPath: STARBURST_CLIP,
-                      backgroundColor: '#F4A261',
-                    }}
-                  >
-                    <span className="text-[11px] font-extrabold text-[#1B4332] leading-tight text-center px-5">
-                      {slide.badge_text}
-                    </span>
-                  </div>
-                )}
-              </div>
+              {slideInner}
             </div>
           );
         })}

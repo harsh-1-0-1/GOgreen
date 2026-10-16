@@ -45,6 +45,37 @@ make frontend-install
 make frontend-dev
 ```
 
+## Docker Compose Deployment
+
+The compose stack builds and runs the API, React website, Postgres, and Redis:
+
+```bash
+cp .env.example .env
+# Edit .env and set at least SECRET_KEY and POSTGRES_PASSWORD.
+docker compose up --build -d
+```
+
+By default the website is served at `http://localhost`, the API is also exposed at
+`http://localhost:8000`, and Nginx proxies browser requests from `/api` and
+`/static` to the backend container. To seed sample data after the stack is healthy:
+
+```bash
+docker compose --profile seed run --rm seed
+```
+
+> **WARNING**: `seed.py` **wipes all rows** (categories, products, users, carts,
+> orders, ...) before seeding. Never re-run it against a live/production database —
+> it is only meant for fresh or throwaway test databases.
+
+To re-seed only the catalog (categories + products) and leave banners, blog posts,
+users, carts and orders untouched — safe to run against a dev DB:
+
+```bash
+make seed-catalog
+# or
+docker compose --profile seed run --rm seed-catalog
+```
+
 ## Creating Your First Admin User
 
 ```bash

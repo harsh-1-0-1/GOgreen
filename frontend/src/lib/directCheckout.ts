@@ -5,7 +5,8 @@ export const DIRECT_CHECKOUT_KEY = 'plantoga_direct_checkout';
 export interface DirectCheckoutItem {
   product_id: number;
   quantity: number;
-  selected_options: Record<string, string> | null;
+  // New format: string[] of option IDs. Old format: Record<string, string>. Both supported.
+  selected_options: string[] | Record<string, string> | null;
   product: Product;
   unit_price: number;
   line_total: number;

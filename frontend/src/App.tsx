@@ -21,18 +21,25 @@ import BlogListPage from '@/pages/BlogListPage';
 import BlogDetailPage from '@/pages/BlogDetailPage';
 import CorporateGiftingPage from '@/pages/CorporateGiftingPage';
 import DamageReplacementPage from '@/pages/DamageReplacementPage';
+import MyDamageClaimsPage from '@/pages/MyDamageClaimsPage';
 import FaqPage from '@/pages/FaqPage';
 
 import AdminLayout from '@/components/admin/AdminLayout';
 import DashboardPage from '@/pages/admin/DashboardPage';
 import ProductsAdminPage from '@/pages/admin/ProductsAdminPage';
 import CategoriesAdminPage from '@/pages/admin/CategoriesAdminPage';
+import ImageBadgesAdminPage from '@/pages/admin/ImageBadgesAdminPage';
 import OrdersAdminPage from '@/pages/admin/OrdersAdminPage';
 import UsersAdminPage from '@/pages/admin/UsersAdminPage';
 import BannersAdminPage from '@/pages/admin/BannersAdminPage';
 import BlogAdminPage from '@/pages/admin/BlogAdminPage';
+import StoriesAdminPage from '@/pages/admin/StoriesAdminPage';
 import CorporateAdminPage from '@/pages/admin/CorporateAdminPage';
 import CouponsAdminPage from '@/pages/admin/CouponsAdminPage';
+import DamageClaimsAdminPage from '@/pages/admin/DamageClaimsAdminPage';
+import DoNotForgetAdminPage from '@/pages/admin/DoNotForgetAdminPage';
+import MenuAdminPage from '@/pages/admin/MenuAdminPage';
+import DisplaySectionsAdminPage from '@/pages/admin/DisplaySectionsAdminPage';
 import SettingsAdminPage from '@/pages/admin/SettingsAdminPage';
 
 function ScrollToTop() {
@@ -106,6 +113,7 @@ export default function App() {
               <Route path="/blog/:slug" element={<BlogDetailPage />} />
               <Route path="/corporate-gifting" element={<CorporateGiftingPage />} />
               <Route path="/damage-replacement" element={<DamageReplacementPage />} />
+              <Route path="/damage-claims" element={<MyDamageClaimsPage />} />
               <Route path="/faqs" element={<FaqPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
@@ -114,12 +122,18 @@ export default function App() {
                 <Route index element={<DashboardPage />} />
                 <Route path="products" element={<ProductsAdminPage />} />
                 <Route path="categories" element={<CategoriesAdminPage />} />
+                <Route path="badges" element={<ImageBadgesAdminPage />} />
                 <Route path="orders" element={<OrdersAdminPage />} />
                 <Route path="users" element={<UsersAdminPage />} />
                 <Route path="banners" element={<BannersAdminPage />} />
+                <Route path="stories" element={<StoriesAdminPage />} />
                 <Route path="blog" element={<BlogAdminPage />} />
                 <Route path="corporate" element={<CorporateAdminPage />} />
                 <Route path="coupons" element={<CouponsAdminPage />} />
+                <Route path="damage-claims" element={<DamageClaimsAdminPage />} />
+                <Route path="do-not-forget" element={<DoNotForgetAdminPage />} />
+                <Route path="navigation" element={<MenuAdminPage />} />
+                <Route path="display-sections" element={<DisplaySectionsAdminPage />} />
                 <Route path="settings" element={<SettingsAdminPage />} />
               </Route>
             </Route>

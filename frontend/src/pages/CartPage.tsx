@@ -2,30 +2,28 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
-import { useAuthStore } from '@/store/authStore';
-import RecommendationBar from '@/components/cart/RecommendationBar';
+import DoNotForgetBar from '@/components/cart/DoNotForgetBar';
+import { formatSelectedOptions } from '@/lib/variantDisplay';
+import { getApiErrorDetail } from '@/lib/apiError';
+import { useSuggestionTiles } from '@/hooks/useSuggestionTiles';
+import { getShippingFee, useShippingSettings } from '@/hooks/useSettings';
 
 function optionSummary(item: ReturnType<typeof useCartStore.getState>['items'][number]) {
   if (!item.selected_options) return null;
-  const color = item.product.variants?.colors?.find((c) => c.slug === item.selected_options?.color)?.name
-    || item.selected_options.color;
-  const pot = item.product.variants?.pot_types?.find((p) => p.slug === item.selected_options?.pot_type)?.name
-    || item.selected_options.pot_type;
-  const size = item.product.variants?.sizes?.find((s) => s.slug === item.selected_options?.size)?.name
-    || item.selected_options.size;
-  return [color && `Color: ${color}`, pot && `Pot: ${pot}`, size && `Size: ${size}`].filter(Boolean).join(' · ');
+  return formatSelectedOptions(item.selected_options, item.product.variants) || null;
 }
 
 export default function CartPage() {
-  const { items, total, itemCount, updateItem, removeItem, lastAddedProduct } = useCartStore();
-  const { user, openAuthModal } = useAuthStore();
+  const { items, total, itemCount, updateItem, removeItem } = useCartStore();
+  const suggestionTiles = useSuggestionTiles(6);
+  const { data: shippingSettings } = useShippingSettings();
 
   async function handleUpdate(itemId: number, qty: number) {
     try {
       if (qty <= 0) await removeItem(itemId);
       else await updateItem(itemId, qty);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Update failed');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Update failed'));
     }
   }
 
@@ -58,50 +56,7 @@ export default function CartPage() {
             Shop Popular Collections
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-            {[
-              {
-                title: 'Price Drop',
-                subtitle: 'Up to 50% OFF',
-                image: 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?w=500&q=80',
-                link: '/products?tags=offers',
-                color: 'text-amber-600',
-              },
-              {
-                title: 'XL Plants',
-                subtitle: 'Grow Big & Bold',
-                image: 'https://images.unsplash.com/photo-1614594975525-e45190c55d0b?w=500&q=80',
-                link: '/products?category=xl-plants',
-                color: 'text-emerald-700',
-              },
-              {
-                title: 'Plant Care',
-                subtitle: 'Thrive Guarantee',
-                image: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?w=500&q=80',
-                link: '/products?category=plant-care',
-                color: 'text-emerald-700',
-              },
-              {
-                title: 'Fertilizers',
-                subtitle: '100% Organic Nutrition',
-                image: 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?w=500&q=80',
-                link: '/products?category=potting-mix-fertilizers',
-                color: 'text-emerald-700',
-              },
-              {
-                title: 'Pots & Planters',
-                subtitle: 'Premium Ceramic Pots',
-                image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=500&q=80',
-                link: '/products?category=pots-planters',
-                color: 'text-emerald-700',
-              },
-              {
-                title: 'Plant Stands',
-                subtitle: 'Elevate Your Plants',
-                image: 'https://images.unsplash.com/photo-1592150621744-aca64f48394a?w=500&q=80',
-                link: '/products?category=plant-stands',
-                color: 'text-emerald-700',
-              },
-            ].map((col) => (
+            {suggestionTiles.map((col) => (
               <Link
                 key={col.title}
                 to={col.link}
@@ -110,9 +65,12 @@ export default function CartPage() {
                 <div className="relative aspect-[4/3] overflow-hidden bg-gray-50 shrink-0">
                   <img
                     src={col.image}
+                    srcSet={col.srcSet}
+                    sizes="(max-width: 768px) 50vw, 33vw"
                     alt={col.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
+                    decoding="async"
                   />
                   <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors" />
                 </div>
@@ -142,7 +100,7 @@ export default function CartPage() {
     );
   }
 
-  const shipping = total >= 499 ? 0 : 49;
+  const shipping = getShippingFee(total, shippingSettings);
   const grandTotal = total + shipping;
 
   return (
@@ -155,12 +113,16 @@ export default function CartPage() {
           {items.map((item) => (
             <div key={item.id} className="flex gap-3 sm:gap-4 p-3 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-gray-100">
               <Link to={`/products/${item.product.slug}`} className="shrink-0">
-                <img
-                  src={item.resolved_image_url || item.product.images?.[0] || 'https://placehold.co/120x120?text=Plant'}
-                  alt={item.product.name}
-                  className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-lg sm:rounded-xl object-cover"
-                  loading="lazy"
-                />
+                {item.resolved_image_url || item.product.images?.[0] ? (
+                  <img
+                    src={item.resolved_image_url || item.product.images?.[0]}
+                    alt={item.product.name}
+                    className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-lg sm:rounded-xl object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-lg sm:rounded-xl bg-gray-100" />
+                )}
               </Link>
               <div className="flex-1 min-w-0">
                 <Link to={`/products/${item.product.slug}`} className="text-sm sm:text-base font-medium hover:text-primary transition line-clamp-1">
@@ -202,12 +164,10 @@ export default function CartPage() {
           ))}
         </div>
 
-        {/* Smart cross-sell recommendations */}
-        {lastAddedProduct && (
-          <div className="lg:col-span-2">
-            <RecommendationBar lastAddedProduct={lastAddedProduct} cartItems={items} />
-          </div>
-        )}
+        {/* Do Not Forget to Buy section */}
+        <div className="lg:col-span-2">
+          <DoNotForgetBar />
+        </div>
 
         {/* Order summary — desktop: sticky sidebar, mobile: stacked below */}
         <div className="lg:col-span-1 hidden lg:block">
@@ -219,7 +179,7 @@ export default function CartPage() {
                 <span className="font-medium">₹{total.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Shipping</span>
+                <span className="text-gray-500">Delivery</span>
                 <span className="font-medium text-green-600">{shipping === 0 ? 'Free' : `₹${shipping}`}</span>
               </div>
             </div>
@@ -228,10 +188,6 @@ export default function CartPage() {
                 <span>Total</span>
                 <span className="text-primary">₹{grandTotal.toFixed(2)}</span>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <input type="text" placeholder="Promo code" className="flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-light" />
-              <button className="px-4 py-2 text-sm bg-gray-100 rounded-lg font-medium hover:bg-gray-200 transition">Apply</button>
             </div>
             <Link to="/checkout" className="block w-full text-center py-3.5 bg-primary text-white rounded-xl font-semibold hover:bg-primary/90 transition">
               Proceed to Checkout <ArrowRight size={18} className="inline ml-1" />
@@ -246,7 +202,7 @@ export default function CartPage() {
             <span className="font-medium">₹{total.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Shipping</span>
+            <span className="text-gray-500">Delivery</span>
             <span className="font-medium text-green-600">{shipping === 0 ? 'Free' : `₹${shipping}`}</span>
           </div>
           <div className="border-t pt-2 flex justify-between font-bold text-base">

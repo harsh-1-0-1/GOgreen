@@ -1,7 +1,8 @@
-import { DollarSign, Package, ShoppingCart, Users, Plus, ArrowRight, Image as ImageIcon, Calendar } from 'lucide-react';
+import { DollarSign, Package, ShoppingCart, Users, ArrowRight } from 'lucide-react';
 import { useAdminStats, useAdminOrders } from '@/hooks/useAdmin';
 import Spinner from '@/components/ui/Spinner';
 import { Link } from 'react-router-dom';
+import type { Order } from '@/types';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
@@ -57,7 +58,7 @@ export default function DashboardPage() {
           <span className="text-[10px] uppercase font-bold tracking-widest text-[#E6F3EE] bg-white/10 px-2.5 py-1 rounded-full">
             Store Performance
           </span>
-          <h1 className="text-xl sm:text-2xl font-bold pt-1">Welcome back to GOgreen Admin Panel!</h1>
+          <h1 className="text-xl sm:text-2xl font-bold pt-1">Welcome back to Plantoga Admin Panel!</h1>
           <p className="text-xs text-white/80 max-w-md">Here is a quick overview of your orders, revenue, inventory status, and website operations today.</p>
         </div>
         {/* Background Plant Abstract Shapes */}
@@ -161,7 +162,7 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {recentOrders?.items?.slice(0, 5).map((o: any) => (
+              {recentOrders?.items?.slice(0, 5).map((o: Order) => (
                 <tr key={o.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
                   <td className="px-5 py-3 font-semibold text-gray-900">#{o.id}</td>
                   <td className="px-5 py-3 font-medium text-gray-700">{o.address?.full_name || `Customer #${o.user_id}`}</td>
@@ -194,7 +195,7 @@ export default function DashboardPage() {
 
         {/* Mobile cards */}
         <div className="sm:hidden p-3 space-y-2">
-          {recentOrders?.items?.slice(0, 5).map((o: any) => (
+          {recentOrders?.items?.slice(0, 5).map((o: Order) => (
             <div key={o.id} className="flex items-center justify-between p-3 bg-gray-50 border rounded-xl shadow-xs">
               <div>
                 <p className="text-sm font-semibold text-gray-900">#{o.id}</p>

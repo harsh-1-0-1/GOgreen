@@ -1,4 +1,4 @@
-.PHONY: install dev test seed migrate lint format frontend-install frontend-dev frontend-build
+.PHONY: install dev test seed seed-catalog migrate lint format frontend-install frontend-dev frontend-build
 
 # ─── Backend ────────────────────────────────────────────────
 
@@ -13,6 +13,9 @@ test:
 
 seed:
 	cd backend && uv run python seed.py
+
+seed-catalog:
+	cd backend && uv run python seed.py --only-catalog
 
 migrate:
 	cd backend && uv run alembic upgrade head

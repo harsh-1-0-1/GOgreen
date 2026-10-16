@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, field_serializer, model_validator
 
 
 class BannerBase(BaseModel):
@@ -15,7 +15,7 @@ class BannerBase(BaseModel):
     position: int = 0
     placement: str = Field(
         default="hero",
-        pattern=r"^(hero|announcement|page|themed|strip|highlight|collection|mobile_promo|menu_banner|mobile_category|cart_suggestions|corporate_gifting|happy_planters|trending)$",
+        pattern=r"^(hero|announcement|page|themed|strip|highlight|category_nav|mobile_promo|corporate_gifting|happy_planters|trending|product_detail|product_spec|product_strip|why_plantoga)$",
     )
     target_path: Optional[str] = Field(None, max_length=255)
     is_active: bool = True
@@ -33,16 +33,44 @@ class BannerUpdate(BannerBase):
     title: Optional[str] = Field(None, max_length=100)
     placement: Optional[str] = None
     image_url_manual: Optional[str] = Field(None, max_length=512)
+    image_url_web_manual: Optional[str] = Field(None, max_length=512)
 
 
 class BannerOut(BannerBase):
     id: int
     image_url: Optional[str] = None
+    image_url_web: Optional[str] = None
+    # Generated WebP variants per image: {original, w1600, w1920}. Empty when the
+    # image is external or not yet migrated.
+    image_urls: dict[str, str] = Field(default_factory=dict)
+    image_urls_web: dict[str, str] = Field(default_factory=dict)
     created_at: datetime
     updated_at: Optional[datetime] = None
 
+    @model_validator(mode="after")
+    def build_variant_maps(self) -> "BannerOut":
+        from app.utils.image_upload import resolve_image_url
+
+        def _map(val: Optional[str]) -> dict[str, str]:
+            if not val:
+                return {}
+            return {
+                "original": resolve_image_url(val),
+                "w1600": resolve_image_url(val, "w1600"),
+                "w1920": resolve_image_url(val, "w1920"),
+            }
+
+        self.image_urls = _map(self.image_url)
+        self.image_urls_web = _map(self.image_url_web)
+        return self
+
     @field_serializer("image_url")
     def serialize_image_url(self, val: Optional[str]) -> Optional[str]:
+        from app.utils.image_upload import resolve_image_url
+        return resolve_image_url(val)
+
+    @field_serializer("image_url_web")
+    def serialize_image_url_web(self, val: Optional[str]) -> Optional[str]:
         from app.utils.image_upload import resolve_image_url
         return resolve_image_url(val)
 

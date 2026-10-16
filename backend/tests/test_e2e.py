@@ -27,7 +27,6 @@ async def test_full_happy_path(client: AsyncClient, monkeypatch):
     monkeypatch.setattr("app.core.config.settings.RAZORPAY_WEBHOOK_SECRET", "webhook_secret")
 
     # Mock the Razorpay order creation HTTP call so we don't need real credentials
-    import httpx
     from unittest.mock import AsyncMock, MagicMock, patch
 
     mock_razorpay_response = MagicMock()
@@ -121,6 +120,7 @@ async def test_full_happy_path(client: AsyncClient, monkeypatch):
             "payment": {
                 "entity": {
                     "id": razorpay_payment_id,
+                    "amount": 97200,
                     "notes": {
                         "order_id": str(order_id),
                         "source": "checkout",
@@ -142,6 +142,7 @@ async def test_full_happy_path(client: AsyncClient, monkeypatch):
         headers={
             "Content-Type": "application/json",
             "X-Razorpay-Signature": expected_signature,
+            "x-razorpay-event-id": "evt_test_happy_path_123",
         },
     )
     assert webhook_resp.status_code == 200, webhook_resp.text

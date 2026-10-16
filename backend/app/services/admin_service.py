@@ -4,7 +4,16 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import Order, OrderStatus, PaymentStatus, Product, User
+from app.db.models import (
+    DamageClaim,
+    DamageClaimStatus,
+    Order,
+    OrderItem,
+    OrderStatus,
+    PaymentStatus,
+    Product,
+    User,
+)
 
 
 async def get_stats(db: AsyncSession) -> dict:
@@ -44,6 +53,15 @@ async def get_stats(db: AsyncSession) -> dict:
     for status, count in status_counts_q.all():
         orders_by_status[status.value if hasattr(status, "value") else status] = count
 
+    open_damage_claims = (await db.execute(
+        select(func.count()).select_from(DamageClaim).where(
+            DamageClaim.status.notin_([
+                DamageClaimStatus.CLOSED,
+                DamageClaimStatus.REJECTED,
+            ])
+        )
+    )).scalar() or 0
+
     return {
         "total_products": total_products,
         "total_orders": total_orders,
@@ -51,6 +69,7 @@ async def get_stats(db: AsyncSession) -> dict:
         "revenue_today": round(float(revenue_today), 2),
         "revenue_month": round(float(revenue_month), 2),
         "orders_by_status": orders_by_status,
+        "open_damage_claims": open_damage_claims,
     }
 
 
@@ -75,7 +94,11 @@ async def list_orders(
     total = (await db.execute(count_q)).scalar() or 0
     offset = (page - 1) * limit
     result = await db.execute(
-        q.options(selectinload(Order.items), selectinload(Order.user))
+        q.options(
+            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.user),
+            selectinload(Order.address),
+        )
         .order_by(Order.created_at.desc())
         .offset(offset).limit(limit)
     )
@@ -85,7 +108,11 @@ async def list_orders(
 async def update_order_status(db: AsyncSession, order_id: int, status: str) -> Order | None:
     result = await db.execute(
         select(Order).where(Order.id == order_id)
-        .options(selectinload(Order.items))
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.user),
+            selectinload(Order.address),
+        )
     )
     order = result.scalar_one_or_none()
     if not order:

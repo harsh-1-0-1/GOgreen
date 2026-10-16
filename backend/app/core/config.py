@@ -7,6 +7,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     APP_NAME: str = "Plantoga"
@@ -40,6 +41,23 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
     RAZORPAY_WEBHOOK_SECRET: str = ""
+
+    WHATSAPP_ACCESS_TOKEN: str = ""
+    WHATSAPP_PHONE_NUMBER_ID: str = ""
+    WHATSAPP_ADMIN_RECIPIENT: str = ""
+    WHATSAPP_API_VERSION: str = "v23.0"
+    WHATSAPP_ORDER_TEMPLATE_NAME: str = "new_order_received"
+    WHATSAPP_ORDER_TEMPLATE_LANGUAGE: str = "en_US"
+
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = "Plantoga"
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
+    ADMIN_ORDER_EMAIL: str = ""
 
     LOG_JSON: bool = False
     SLOW_QUERY_MS: int = 100

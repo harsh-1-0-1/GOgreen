@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useAdminUsers } from '@/hooks/useAdmin';
-import { Shield, User, HelpCircle, Lock, Unlock } from 'lucide-react';
+import { Shield, User as UserIcon, Lock, Unlock } from 'lucide-react';
+import type { User } from '@/types';
+
+interface AdminUser extends User {
+  created_at?: string | null;
+}
 
 export default function UsersAdminPage() {
   const [page, setPage] = useState(1);
@@ -19,7 +24,7 @@ export default function UsersAdminPage() {
       <div className="bg-white border rounded-xl p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="flex gap-2">
           <div className="bg-gray-100 p-2 rounded-lg text-gray-600 h-9 w-9 flex items-center justify-center shrink-0">
-            <User size={18} />
+            <UserIcon size={18} />
           </div>
           <div>
             <span className="text-xs font-bold text-gray-800 block">Standard Customer Role</span>
@@ -57,7 +62,7 @@ export default function UsersAdminPage() {
             ) : data?.items?.length === 0 ? (
               <tr><td colSpan={7} className="px-5 py-12 text-center text-gray-400">No registered users found.</td></tr>
             ) : (
-              data?.items?.map((u: any) => (
+              data?.items?.map((u: AdminUser) => (
                 <tr key={u.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
                   <td className="px-5 py-3.5 text-gray-400 font-semibold">#{u.id}</td>
                   <td className="px-5 py-3.5 font-semibold text-gray-900">{u.full_name}</td>
@@ -67,7 +72,7 @@ export default function UsersAdminPage() {
                     <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
                       u.is_admin ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-700'
                     }`}>
-                      {u.is_admin ? <Shield size={10} /> : <User size={10} />}
+                      {u.is_admin ? <Shield size={10} /> : <UserIcon size={10} />}
                       {u.is_admin ? 'Administrator' : 'Standard Customer'}
                     </span>
                   </td>
@@ -96,7 +101,7 @@ export default function UsersAdminPage() {
         ) : data?.items?.length === 0 ? (
           <p className="text-center text-gray-400 py-8 text-sm">No users found.</p>
         ) : (
-          data?.items?.map((u: any) => (
+          data?.items?.map((u: AdminUser) => (
             <div key={u.id} className="bg-white rounded-xl border p-3 shadow-sm space-y-1.5">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-gray-900">{u.full_name || 'Anonymous User'}</p>

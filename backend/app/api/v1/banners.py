@@ -1,24 +1,51 @@
 from datetime import datetime, timezone
+from io import BytesIO
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from loguru import logger
+from PIL import Image
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import httpx
 
 from app.core.security import require_admin
 from app.db.models import Banner
 from app.db.session import get_db
 from app.schemas.banner import BannerOut, BannerReorderRequest
-from app.utils.image_upload import delete_image_file, extract_relative_key, upload_image_file
-from app.utils.redis import cache_delete, cache_get, cache_set
+from app.utils.image_upload import (
+    build_variants,
+    delete_image_file,
+    extract_relative_key,
+    generate_image_key,
+    upload_image_file,
+    variant_key,
+)
+from app.utils.redis import cache_delete, cache_delete_pattern, cache_get, cache_set
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/banners", tags=["banners"])
 
 
-async def _invalidate_banner_cache(placement: str) -> None:
-    await cache_delete(f"banners:{placement}")
+class CropRequest(BaseModel):
+    x: int
+    y: int
+    width: int
+    height: int
+    # "mobile" (default) targets the banner's `image_url`; "web" targets the
+    # separate wide `image_url_web` used from the `sm` breakpoint up.
+    variant: str = "mobile"
+
+
+async def _invalidate_banner_cache(placement: str, target_path: str | None = None) -> None:
+    await cache_delete(f"banners:{placement}:")         # global (no slug)
+    await cache_delete(f"banners:{placement}")          # legacy key guard
     await cache_delete("banners:all")
+    # Banner edits affect every slug-scoped key for this placement (the banner
+    # may have just moved to a new target_path), so clear them all.
+    await cache_delete_pattern(f"banners:{placement}:*")
 
 
 # ── PUBLIC ──────────────────────────────────────────────────────────────────
@@ -27,26 +54,73 @@ async def _invalidate_banner_cache(placement: str) -> None:
 @router.get("", response_model=list[BannerOut])
 async def get_banners(
     placement: str = "hero",
+    category_slug: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    cache_key = f"banners:{placement}"
+    # Cache key includes category_slug so category-scoped and global results
+    # are cached independently.
+    cache_key = f"banners:{placement}:{category_slug or ''}"
     cached = await cache_get(cache_key)
     if cached:
         return cached
 
     now = datetime.now(timezone.utc)
-    stmt = (
-        select(Banner)
-        .where(
-            Banner.placement == placement,
-            Banner.is_active == True,  # noqa: E712
-            (Banner.valid_from == None) | (Banner.valid_from <= now),  # noqa: E711
-            (Banner.valid_until == None) | (Banner.valid_until >= now),  # noqa: E711
+    base_filter = [
+        Banner.placement == placement,
+        Banner.is_active == True,  # noqa: E712
+        (Banner.valid_from == None) | (Banner.valid_from <= now),  # noqa: E711
+        (Banner.valid_until == None) | (Banner.valid_until >= now),  # noqa: E711
+    ]
+
+    if category_slug:
+        # Accept target_path saved as bare slug ("plants") OR as the full
+        # query-string path ("/products?category=plants") so banners work
+        # regardless of how they were entered in the admin. Also trim whitespace
+        # from stored target_path to handle accidental spaces.
+        from sqlalchemy import func
+        
+        full_path = f"/products?category={category_slug}"
+        stmt = (
+            select(Banner)
+            .where(
+                *base_filter,
+                (func.trim(Banner.target_path).ilike(category_slug))
+                | (func.trim(Banner.target_path).ilike(full_path)),
+            )
+            .order_by(Banner.position.asc())
         )
-        .order_by(Banner.position.asc())
-    )
-    result = await db.execute(stmt)
-    banners = result.scalars().all()
+        result = await db.execute(stmt)
+        banners = result.scalars().all()
+
+        # Fall back to a global / all-types banner (target_path IS NULL or "*")
+        # when no category-specific one exists yet.
+        if not banners:
+            stmt = (
+                select(Banner)
+                .where(
+                    *base_filter,
+                    (Banner.target_path == None)  # noqa: E711
+                    | (Banner.target_path == "*"),
+                )
+                .order_by(Banner.position.asc())
+            )
+            result = await db.execute(stmt)
+            banners = result.scalars().all()
+    else:
+        # No slug provided — return global/all-types banners only
+        # (target_path IS NULL or "*").
+        stmt = (
+            select(Banner)
+            .where(
+                *base_filter,
+                (Banner.target_path == None)  # noqa: E711
+                | (Banner.target_path == "*"),
+            )
+            .order_by(Banner.position.asc())
+        )
+        result = await db.execute(stmt)
+        banners = result.scalars().all()
+
     data = [BannerOut.model_validate(b).model_dump(mode="json") for b in banners]
     await cache_set(cache_key, data, ttl=300)
     return data
@@ -55,6 +129,225 @@ async def get_banners(
 @router.get("/config")
 async def get_banner_config(_admin=Depends(require_admin)):
     return {"cloudinary_enabled": False}
+
+
+def _crop_and_upload_sync(banner_id: int, old_key: str, x: int, y: int, width: int, height: int, variant: str = "mobile") -> str:
+    """
+    Synchronous function that:
+    1. Downloads image from S3
+    2. Crops it with Pillow
+    3. Uploads cropped version back to S3
+    
+    Runs in threadpool to avoid blocking async event loop.
+    """
+    from app.core.config import settings
+    import boto3
+    from pathlib import Path
+    
+    # Get S3 client
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_REGION or "us-east-1",
+    )
+    
+    is_prod = settings.ENVIRONMENT.lower() == "production"
+    bucket = settings.AWS_S3_BUCKET
+    
+    # Determine original format from key extension
+    original_ext = Path(old_key).suffix.lower()
+    if original_ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+        original_ext = ".png"  # Default fallback
+    
+    # Map extension to PIL format
+    format_map = {
+        ".jpg": "JPEG",
+        ".jpeg": "JPEG",
+        ".png": "PNG",
+        ".webp": "WEBP",
+    }
+    pil_format = format_map.get(original_ext, "PNG")
+    
+    try:
+        if old_key.lower().startswith(("http://", "https://")):
+            # Remote URL (e.g. a seeded or externally-hosted banner): download it
+            # first so it can be cropped and re-uploaded to our storage.
+            resp = httpx.get(old_key, timeout=30, follow_redirects=True)
+            resp.raise_for_status()
+            image_bytes = resp.content
+        elif is_prod and bucket:
+            # Production: Download from S3
+            response = s3.get_object(Bucket=bucket, Key=old_key)
+            image_bytes = response["Body"].read()
+        else:
+            # Local/dev: Read from static folder
+            local_path = Path("static") / old_key
+            if not local_path.exists():
+                raise FileNotFoundError(f"Image not found: {local_path}")
+            image_bytes = local_path.read_bytes()
+        
+        # Open and crop image
+        image = Image.open(BytesIO(image_bytes))
+        
+        # Validate crop bounds against actual image dimensions
+        if x < 0 or y < 0:
+            raise ValueError(f"Crop coordinates cannot be negative: x={x}, y={y}")
+        if x + width > image.width or y + height > image.height:
+            raise ValueError(
+                f"Crop box ({x}, {y}, {x+width}, {y+height}) exceeds image bounds ({image.width}x{image.height})"
+            )
+        
+        cropped = image.crop((x, y, x + width, y + height))
+        
+        # Save to bytes buffer preserving format
+        output_buffer = BytesIO()
+        cropped.save(output_buffer, format=pil_format)
+        output_buffer.seek(0)
+        cropped_bytes = output_buffer.read()
+        
+        # Generate new key for cropped image (suffix keeps web/mobile apart)
+        suffix = "cropped-web" if variant == "web" else "cropped"
+        new_key = generate_image_key("banners", banner_id, f"{suffix}{original_ext}")
+
+        # 1600/1920 WebP siblings (clamped to the crop width, never upscaled).
+        variant_blobs = build_variants(cropped_bytes, "banners")
+
+        # Upload cropped image
+        if is_prod and bucket:
+            # Production: Upload to S3
+            content_type_map = {
+                "JPEG": "image/jpeg",
+                "PNG": "image/png",
+                "WEBP": "image/webp",
+            }
+            s3.put_object(
+                Bucket=bucket,
+                Key=new_key,
+                Body=cropped_bytes,
+                ContentType=content_type_map.get(pil_format, "image/png"),
+                CacheControl="public, max-age=31536000, immutable",
+            )
+            for name, blob in variant_blobs.items():
+                # Variant failures are non-fatal: the cropped original is
+                # already stored and the client falls back via onError.
+                try:
+                    s3.put_object(
+                        Bucket=bucket,
+                        Key=variant_key(new_key, name),
+                        Body=blob,
+                        ContentType="image/webp",
+                        CacheControl="public, max-age=31536000, immutable",
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Banner variant upload failed for {new_key}.{name}: {exc}"
+                    )
+        else:
+            # Local/dev: Write to static folder
+            dest = Path("static") / new_key
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(cropped_bytes)
+            for name, blob in variant_blobs.items():
+                try:
+                    variant_dest = Path("static") / variant_key(new_key, name)
+                    variant_dest.parent.mkdir(parents=True, exist_ok=True)
+                    variant_dest.write_bytes(blob)
+                except Exception as exc:
+                    logger.warning(
+                        f"Banner variant write failed for {new_key}.{name}: {exc}"
+                    )
+
+        logger.info(
+            f"Cropped banner image: {old_key} -> {new_key} (+{len(variant_blobs)} variants)"
+        )
+        return new_key
+        
+    except Exception as e:
+        logger.error(f"Failed to crop image {old_key}: {e}")
+        raise
+
+
+@router.post("/admin/{banner_id}/crop", response_model=BannerOut)
+async def crop_banner_image(
+    banner_id: int,
+    crop: CropRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """
+    Server-side image cropping endpoint.
+    
+    Accepts crop coordinates from the frontend, downloads the original image from S3,
+    crops it with Pillow, uploads the cropped version, and updates the banner record.
+    
+    `crop.variant` picks which image is cropped: "mobile" (the default) edits
+    `image_url`, "web" edits the separate wide `image_url_web`.
+    
+    This avoids CORS issues with client-side canvas cropping.
+    """
+    banner = await db.get(Banner, banner_id)
+    if not banner:
+        raise HTTPException(404, "Banner not found")
+
+    if crop.variant not in {"mobile", "web"}:
+        raise HTTPException(400, "variant must be 'mobile' or 'web'")
+
+    is_web = crop.variant == "web"
+    old_key = (
+        (banner.image_public_id_web or banner.image_url_web)
+        if is_web
+        else (banner.image_public_id or banner.image_url)
+    )
+    if not old_key:
+        raise HTTPException(400, f"Banner has no {crop.variant} image to crop")
+    
+    # Validate crop coordinates
+    if crop.width <= 0 or crop.height <= 0:
+        raise HTTPException(400, "Invalid crop dimensions")
+    
+    try:
+        # Perform crop in threadpool (sync S3 + Pillow operations)
+        new_key = await run_in_threadpool(
+            _crop_and_upload_sync,
+            banner_id,
+            old_key,
+            crop.x,
+            crop.y,
+            crop.width,
+            crop.height,
+            crop.variant,
+        )
+        
+        # Update banner with new cropped image
+        if is_web:
+            banner.image_url_web = new_key
+            banner.image_public_id_web = new_key
+        else:
+            banner.image_url = new_key
+            banner.image_public_id = new_key
+        
+        # Delete old image to prevent S3 orphans
+        if old_key != new_key:
+            await delete_image_file(old_key)
+        
+        await db.flush()
+        await db.refresh(banner)
+        
+        # Invalidate cache
+        await _invalidate_banner_cache(banner.placement, banner.target_path)
+        
+        logger.info(f"Banner {banner_id} {crop.variant} image cropped successfully")
+        return banner
+        
+    except ValueError as e:
+        # Client error: invalid crop coordinates
+        raise HTTPException(400, str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        logger.error(f"Crop operation failed for banner {banner_id}: {e}")
+        raise HTTPException(500, "Failed to crop image")
 
 
 # ── ADMIN ───────────────────────────────────────────────────────────────────
@@ -101,7 +394,9 @@ async def create_banner(
     valid_from: Optional[str] = Form(None),
     valid_until: Optional[str] = Form(None),
     image_url_manual: Optional[str] = Form(None),
+    image_url_web_manual: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
+    image_web: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
@@ -119,6 +414,8 @@ async def create_banner(
         is_active=is_active,
         image_url=extract_relative_key(image_url_manual) if image_url_manual else None,
         image_public_id=None,
+        image_url_web=extract_relative_key(image_url_web_manual) if image_url_web_manual else None,
+        image_public_id_web=None,
         valid_from=datetime.fromisoformat(valid_from) if valid_from else None,
         valid_until=datetime.fromisoformat(valid_until) if valid_until else None,
     )
@@ -129,8 +426,13 @@ async def create_banner(
         banner.image_url = key
         banner.image_public_id = key
         await db.flush()
+    if image_web and image_web.filename:
+        key = await upload_image_file(image_web, folder="banners", entity_id=banner.id)
+        banner.image_url_web = key
+        banner.image_public_id_web = key
+        await db.flush()
     await db.refresh(banner)
-    await _invalidate_banner_cache(placement)
+    await _invalidate_banner_cache(placement, target_path)
     logger.info("Banner created id={} placement={}", banner.id, placement)
     return banner
 
@@ -152,7 +454,14 @@ async def update_banner(
     valid_from: Optional[str] = Form(None),
     valid_until: Optional[str] = Form(None),
     image_url_manual: Optional[str] = Form(None),
+    image_url_web_manual: Optional[str] = Form(None),
+    # Explicit removal flags. A blank `image_url_manual` cannot be used for this:
+    # python-multipart drops empty form fields, so it arrives as None and is
+    # indistinguishable from "field not sent".
+    clear_image: bool = Form(False),
+    clear_image_web: bool = Form(False),
     image: Optional[UploadFile] = File(None),
+    image_web: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
@@ -169,15 +478,37 @@ async def update_banner(
         banner.image_public_id = key
         if old_key != key:
             await delete_image_file(old_key)
+    elif clear_image or (image_url_manual is not None and image_url_manual == ""):
+        old_key = banner.image_public_id or banner.image_url
+        banner.image_url = None
+        banner.image_public_id = None
+        if old_key:
+            await delete_image_file(old_key)
     elif image_url_manual is not None:
         old_key = banner.image_public_id or banner.image_url
-        if image_url_manual == "":
-            banner.image_url = None
-            banner.image_public_id = None
-        else:
-            banner.image_url = extract_relative_key(image_url_manual)
-            banner.image_public_id = None
+        banner.image_url = extract_relative_key(image_url_manual)
+        banner.image_public_id = None
         if old_key != banner.image_url:
+            await delete_image_file(old_key)
+
+    if image_web and image_web.filename:
+        old_key = banner.image_public_id_web or banner.image_url_web
+        key = await upload_image_file(image_web, folder="banners", entity_id=banner_id)
+        banner.image_url_web = key
+        banner.image_public_id_web = key
+        if old_key != key:
+            await delete_image_file(old_key)
+    elif clear_image_web or (image_url_web_manual is not None and image_url_web_manual == ""):
+        old_key = banner.image_public_id_web or banner.image_url_web
+        banner.image_url_web = None
+        banner.image_public_id_web = None
+        if old_key:
+            await delete_image_file(old_key)
+    elif image_url_web_manual is not None:
+        old_key = banner.image_public_id_web or banner.image_url_web
+        banner.image_url_web = extract_relative_key(image_url_web_manual)
+        banner.image_public_id_web = None
+        if old_key != banner.image_url_web:
             await delete_image_file(old_key)
 
     updatable = dict(
@@ -204,9 +535,9 @@ async def update_banner(
 
     await db.flush()
     await db.refresh(banner)
-    await _invalidate_banner_cache(old_placement)
+    await _invalidate_banner_cache(old_placement, banner.target_path)
     if banner.placement != old_placement:
-        await _invalidate_banner_cache(banner.placement)
+        await _invalidate_banner_cache(banner.placement, banner.target_path)
     return banner
 
 
@@ -219,11 +550,13 @@ async def delete_banner(
     banner = await db.get(Banner, banner_id)
     if not banner:
         raise HTTPException(404, "Banner not found")
-    await delete_image_file(banner.image_public_id)
+    await delete_image_file(banner.image_public_id or banner.image_url)
+    await delete_image_file(banner.image_public_id_web or banner.image_url_web)
     placement = banner.placement
+    target_path = banner.target_path
     await db.delete(banner)
     await db.flush()
-    await _invalidate_banner_cache(placement)
+    await _invalidate_banner_cache(placement, target_path)
     logger.info("Banner deleted id={}", banner_id)
     return {"ok": True}
 
@@ -240,7 +573,7 @@ async def toggle_banner(
     banner.is_active = not banner.is_active
     await db.flush()
     await db.refresh(banner)
-    await _invalidate_banner_cache(banner.placement)
+    await _invalidate_banner_cache(banner.placement, banner.target_path)
     return banner
 
 

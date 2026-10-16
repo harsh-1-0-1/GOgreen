@@ -18,6 +18,7 @@ from app.db.models import (
 )
 from app.schemas.review import ReviewCreate
 from app.utils.redis import cache_delete_pattern
+from app.utils.image_upload import resolve_image_url
 
 
 def _clean(value: str | None) -> str | None:
@@ -126,6 +127,7 @@ async def create_or_update_review(
     product_id: int,
     user: User | None,
     payload: ReviewCreate,
+    media_url: str | None = None,
 ) -> ProductReview:
     product = (await db.execute(select(Product).where(Product.id == product_id, Product.is_active == True))).scalar_one_or_none()  # noqa: E712
     if not product:
@@ -155,6 +157,9 @@ async def create_or_update_review(
         existing.is_verified_purchase = is_verified
         existing.updated_at = datetime.now(timezone.utc)
         existing.user = user
+        existing.youtube_url = _clean(payload.youtube_url)
+        if media_url:
+            existing.media_url = media_url
         review = existing
     else:
         review = ProductReview(
@@ -164,6 +169,8 @@ async def create_or_update_review(
             rating=payload.rating,
             title=_clean(payload.title),
             body=_clean(payload.body),
+            media_url=media_url,
+            youtube_url=_clean(payload.youtube_url),
             status=ReviewStatus.PUBLISHED,
             is_verified_purchase=is_verified,
         )
@@ -208,6 +215,8 @@ def to_review_response(review: ProductReview) -> dict:
         "rating": review.rating,
         "title": review.title,
         "body": review.body,
+        "media_url": resolve_image_url(review.media_url),
+        "youtube_url": review.youtube_url,
         "is_verified_purchase": review.is_verified_purchase,
         "helpful_count": review.helpful_count,
         "created_at": review.created_at,

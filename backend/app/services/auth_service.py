@@ -107,32 +107,68 @@ async def register_user(db: AsyncSession, email: str, password: str, full_name: 
 async def guest_register_or_login(
     db: AsyncSession, email: str, full_name: str, phone: str | None
 ) -> User:
-    existing = await db.execute(select(User).where(func.lower(User.email) == func.lower(email)))
-    user = existing.scalar_one_or_none()
-    if user:
-        updated = False
-        if not user.phone and phone:
-            user.phone = phone
-            updated = True
-        if (not user.full_name or user.full_name == email.split('@')[0]) and full_name:
-            user.full_name = full_name
-            updated = True
-        if updated:
-            await db.flush()
-        logger.info("Guest login for existing user: id={} email={}", user.id, user.email)
+    # Check if the "email" field is actually a phone number
+    is_phone_number = email.isdigit() and len(email) == 10
+    
+    if is_phone_number:
+        # If a mobile number is provided, search by phone
+        if not phone:
+            phone = email
+        existing = await db.execute(select(User).where(User.phone == email))
+        user = existing.scalar_one_or_none()
+        
+        if user:
+            updated = False
+            if (not user.full_name or user.full_name.startswith("Guest_")) and full_name:
+                user.full_name = full_name
+                updated = True
+            if updated:
+                await db.flush()
+            logger.info("Guest login for existing user via phone: id={} phone={}", user.id, user.phone)
+            return user
+        
+        # Create new user with phone number as identifier
+        # Generate a unique email for phone-based guests
+        generated_email = f"guest_{email}@plantoga.local"
+        user = User(
+            email=generated_email,
+            hashed_password=None,
+            full_name=full_name,
+            phone=email,
+        )
+        db.add(user)
+        await db.flush()
+        await db.refresh(user)
+        logger.info("Guest user created via phone: id={} phone={}", user.id, user.phone)
         return user
+    else:
+        # Original email-based logic
+        existing = await db.execute(select(User).where(func.lower(User.email) == func.lower(email)))
+        user = existing.scalar_one_or_none()
+        if user:
+            updated = False
+            if not user.phone and phone:
+                user.phone = phone
+                updated = True
+            if (not user.full_name or user.full_name == email.split('@')[0]) and full_name:
+                user.full_name = full_name
+                updated = True
+            if updated:
+                await db.flush()
+            logger.info("Guest login for existing user: id={} email={}", user.id, user.email)
+            return user
 
-    user = User(
-        email=email,
-        hashed_password=None,
-        full_name=full_name,
-        phone=phone,
-    )
-    db.add(user)
-    await db.flush()
-    await db.refresh(user)
-    logger.info("Guest user created: id={} email={}", user.id, user.email)
-    return user
+        user = User(
+            email=email,
+            hashed_password=None,
+            full_name=full_name,
+            phone=phone,
+        )
+        db.add(user)
+        await db.flush()
+        await db.refresh(user)
+        logger.info("Guest user created: id={} email={}", user.id, user.email)
+        return user
 
 
 

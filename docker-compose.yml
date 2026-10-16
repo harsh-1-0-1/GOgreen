@@ -1,57 +1,119 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: plantoga_postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: plantoga
-      POSTGRES_USER: plantoga
-      POSTGRES_PASSWORD: plantoga
-    ports:
-      - "5433:5432"
+      POSTGRES_DB: ${POSTGRES_DB:-plantoga}
+      POSTGRES_USER: ${POSTGRES_USER:-plantoga}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plantoga}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Not published to the host at all - only reachable by other
+    # containers on this compose's internal network (via service name "postgres").
+    # If you ever need to psql in manually from the VPS shell, use:
+    #   docker exec -it plantoga_postgres psql -U $POSTGRES_USER -d $POSTGRES_DB
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U plantoga -d plantoga"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 3s
       retries: 5
+    mem_limit: 512m
+    cpus: 0.5
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    container_name: plantoga_redis
+    restart: unless-stopped
     volumes:
       - redis_data:/data
+    # Also not published - internal only, reached via service name "redis"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
+    mem_limit: 256m
+    cpus: 0.25
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: plantoga_backend
+    restart: unless-stopped
     ports:
-      - "8000:8000"
-    env_file:
-      - .env
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://plantoga:plantoga@postgres:5432/plantoga
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-plantoga}:${POSTGRES_PASSWORD:-plantoga}@postgres:5432/${POSTGRES_DB:-plantoga}
       REDIS_URL: redis://redis:6379
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-https://plantoga.com}
+      SECRET_KEY: ${SECRET_KEY:-change-me-to-a-random-secret-key}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
+      LOG_JSON: ${LOG_JSON:-true}
+      SLOW_QUERY_MS: ${SLOW_QUERY_MS:-100}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://plantoga.com,https://www.plantoga.com}
+      CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-}
+      REQUIRE_CLOUDFRONT: ${REQUIRE_CLOUDFRONT:-false}
+      CLOUDFRONT_SECRET: ${CLOUDFRONT_SECRET:-}
+      CDN_BASE_URL: ${CDN_BASE_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://plantoga.com/api/v1/auth/google/callback}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
     volumes:
-      - ./backend:/app
-      - backend_venv:/app/.venv
+      - backend_static:/app/static
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
+    mem_limit: 512m
+    cpus: 0.75
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        VITE_RAZORPAY_KEY_ID: ${VITE_RAZORPAY_KEY_ID:-}
+        VITE_CDN_BASE_URL: ${VITE_CDN_BASE_URL:-}
+        VITE_CORPORATE_INQUIRY_ENDPOINT: ${VITE_CORPORATE_INQUIRY_ENDPOINT:-}
+    container_name: plantoga_frontend
+    restart: unless-stopped
+    ports:
+      # NOT port 80 - that's already owned by Hestia's nginx for all domains
+      # on this shared VPS. This container serves on 8090 internally, and
+      # Hestia's nginx vhost for plantoga.com proxies public traffic to it.
+      - "127.0.0.1:${FRONTEND_PORT:-8090}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    mem_limit: 256m
+    cpus: 0.5
 
   seed:
     build:
@@ -59,14 +121,11 @@ services:
       dockerfile: Dockerfile
     profiles:
       - seed
-    env_file:
-      - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://plantoga:plantoga@postgres:5432/plantoga
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-plantoga}:${POSTGRES_PASSWORD:-plantoga}@postgres:5432/${POSTGRES_DB:-plantoga}
       REDIS_URL: redis://redis:6379
     volumes:
-      - ./backend:/app
-      - backend_venv:/app/.venv
+      - backend_static:/app/static
     depends_on:
       postgres:
         condition: service_healthy
@@ -77,7 +136,28 @@ services:
     command: sh -c "uv run alembic upgrade head && uv run python seed.py"
     restart: "no"
 
+  seed-catalog:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    profiles:
+      - seed
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-plantoga}:${POSTGRES_PASSWORD:-plantoga}@postgres:5432/${POSTGRES_DB:-plantoga}
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - backend_static:/app/static
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    command: sh -c "uv run alembic upgrade head && uv run python seed.py --only-catalog"
+    restart: "no"
+
 volumes:
   postgres_data:
   redis_data:
-  backend_venv:
+  backend_static:

@@ -18,8 +18,13 @@ from app.db.models import (
     Product,
     Refund,
 )
+from app.services import cart_service as _cart_service
 from app.schemas.order import DirectCheckoutItem
-from app.services.cart_service import resolve_variant_details
+from app.services import coupon_service
+from app.services.cart_service import combination_key, resolve_variant_details
+from app.services.settings_service import calculate_shipping_fee, get_or_create_settings
+from app.utils.redis import cache_delete, cache_delete_pattern
+from app.utils.variant_pricing import StockMapMissingError, build_combo_key
 
 
 async def _create_razorpay_order(order: Order, email: str, full_name: str, phone: str) -> dict:
@@ -59,7 +64,7 @@ async def _reserve_product_for_order(
     db: AsyncSession,
     product_id: int,
     quantity: int,
-    selected_options: dict | None,
+    selected_options: dict | list | None,
 ) -> dict:
     product_result = await db.execute(
         select(Product).where(Product.id == product_id).with_for_update()
@@ -71,15 +76,34 @@ async def _reserve_product_for_order(
     details = resolve_variant_details(
         product, selected_options, quantity, validate_stock=True,
     )
-    combo_key = details["combo_key"]
-    if combo_key:
+    combo_key = details.get("combo_key")
+    variant_snapshot = details.get("variant_snapshot", [])
+
+    if "variant_groups" in (product.variants or {}):
+        # New format: Decrement the exact stock_map combo row under the row lock.
+        # No per-option decrement, no fallback — a missing row/key is a loud bug,
+        # not a condition to reserve against the wrong pool.
+        variants = product.variants or {}
+        stock_map = variants.get("stock_map")
+        if not isinstance(stock_map, dict) or combo_key is None or combo_key not in stock_map:
+            raise StockMapMissingError(
+                f"Stock map missing for product '{product.name}' (id={product.id}, combo_key={combo_key!r})"
+            )
+        stock_map[combo_key] = max(0, int(stock_map[combo_key]) - quantity)
+        variants["stock_map"] = stock_map
+        product.variants = variants
+        flag_modified(product, "variants")
+        # stock_qty = total sellable units = sum of all combination pools.
+        product.stock_qty = sum(int(v or 0) for v in stock_map.values())
+    elif combo_key:
+        # Old format: Update stock in variants.stock map
         variants = product.variants or {}
         variants["stock"][combo_key] = int(variants["stock"].get(combo_key, 0)) - quantity
         product.variants = variants
         product.stock_qty = sum(int(v or 0) for v in variants.get("stock", {}).values())
         flag_modified(product, "variants")
     else:
-        # Atomic SQL update for simple products
+        # Simple product: Atomic SQL update
         update_stmt = (
             update(Product)
             .where(Product.id == product_id, Product.stock_qty >= quantity)
@@ -90,24 +114,106 @@ async def _reserve_product_for_order(
             raise ValueError(
                 f"Insufficient stock for '{product.name}': requested {quantity}"
             )
-        # Refresh ORM object from DB to sync with the atomic SQL update.
-        # Manually adjusting the attribute would use a stale base value,
-        # causing SQLAlchemy to overwrite the correct DB value on next flush.
         await db.refresh(product, ["stock_qty"])
+
+    # CRITICAL: Prepare selected_options with denormalized snapshot for order history
+    # Format: {"option_ids": [...], "snapshot": [{label, name, price}, ...]}
+    # This ensures order history displays correctly even if product is edited later
+    order_selected_options = details.get("selected_options")
+    if variant_snapshot:
+        # New format: Store both IDs and snapshot
+        order_selected_options = {
+            "option_ids": order_selected_options if isinstance(order_selected_options, list) else [],
+            "snapshot": variant_snapshot,
+        }
 
     return {
         "product_id": product.id,
+        "product_slug": product.slug,
+        "product_name_snapshot": product.name,
         "quantity": quantity,
         "unit_price": details["unit_price"],
-        "selected_options": details["selected_options"],
+        "selected_options": order_selected_options,
         "resolved_image_url": details["resolved_image_url"],
     }
 
 
+async def invalidate_product_caches(slugs: list[str]) -> None:
+    for slug in set(slugs):
+        await cache_delete(f"product:{slug}")
+    await cache_delete_pattern("products:*")
+
+
+async def _calculate_order_total(
+    db: AsyncSession, subtotal: float, coupon_discount: float,
+) -> tuple[float, float]:
+    store_settings = await get_or_create_settings(db)
+    shipping_fee = calculate_shipping_fee(
+        subtotal,
+        store_settings.free_shipping_threshold,
+        store_settings.flat_shipping_rate,
+    )
+    total = round(max(0.0, subtotal - coupon_discount + shipping_fee), 2)
+    return total, shipping_fee
+
+
+def _selected_option_ids(selected_options: dict | list | None) -> list[str]:
+    if isinstance(selected_options, list):
+        return [str(option_id) for option_id in selected_options if option_id]
+    if isinstance(selected_options, dict) and isinstance(selected_options.get("option_ids"), list):
+        return [str(option_id) for option_id in selected_options["option_ids"] if option_id]
+    return []
+
+
+def _restore_product_stock(product: Product, quantity: int, selected_options: dict | list | None) -> None:
+    variants = product.variants or {}
+
+    if "variant_groups" in variants:
+        stock_map = variants.get("stock_map")
+        combo_key = build_combo_key(variants.get("variant_groups", []), _selected_option_ids(selected_options))
+        if not isinstance(stock_map, dict) or combo_key is None or combo_key not in stock_map:
+            raise StockMapMissingError(
+                f"Stock map missing while restoring product '{product.name}' (id={product.id}, combo_key={combo_key!r})"
+            )
+        stock_map[combo_key] = int(stock_map.get(combo_key, 0) or 0) + quantity
+        variants["stock_map"] = stock_map
+        product.variants = variants
+        product.stock_qty = sum(int(v or 0) for v in stock_map.values())
+        flag_modified(product, "variants")
+        return
+
+    if selected_options and isinstance(selected_options, dict) and isinstance(variants.get("stock"), dict):
+        combo_key = combination_key(selected_options)
+        variants["stock"][combo_key] = int(variants["stock"].get(combo_key, 0) or 0) + quantity
+        product.variants = variants
+        product.stock_qty = sum(int(v or 0) for v in variants.get("stock", {}).values())
+        flag_modified(product, "variants")
+        return
+
+    product.stock_qty += quantity
+
+
+async def restore_order_stock(db: AsyncSession, order: Order) -> list[str]:
+    affected_product_slugs: list[str] = []
+    for item in sorted(order.items, key=lambda oi: oi.product_id or 0):
+        if not item.product_id:
+            continue
+        product_result = await db.execute(
+            select(Product).where(Product.id == item.product_id).with_for_update()
+        )
+        product = product_result.scalar_one_or_none()
+        if not product:
+            continue
+        _restore_product_stock(product, item.quantity, item.selected_options)
+        affected_product_slugs.append(product.slug)
+    return affected_product_slugs
+
+
 async def checkout(
     db: AsyncSession, user_id: int, address_id: int, cart_id: int,
-    email: str, full_name: str, phone: str,
-) -> tuple[Order, dict]:
+    email: str, full_name: str, phone: str, payment_method: str = "razorpay",
+    coupon_code: str | None = None,
+) -> tuple[Order, dict | None, list[str]]:
     """
     1. Validate cart + stock
     2. Create order & order items (snapshot prices)
@@ -132,6 +238,7 @@ async def checkout(
 
     total_amount = 0.0
     order_items_data: list[dict] = []
+    affected_product_slugs: list[str] = []
 
     # Sort by product_id to guarantee a consistent lock-acquisition order across
     # concurrent checkouts and prevent deadlocks on the FOR UPDATE rows.
@@ -139,18 +246,30 @@ async def checkout(
         item_data = await _reserve_product_for_order(
             db, ci.product_id, ci.quantity, ci.selected_options,
         )
+        affected_product_slugs.append(item_data.pop("product_slug"))
         line = round(item_data["unit_price"] * item_data["quantity"], 2)
         total_amount += line
         order_items_data.append(item_data)
 
-    total_amount = round(total_amount, 2)
+    subtotal = round(total_amount, 2)
+
+    applied_coupon_code = None
+    coupon_discount = 0.0
+    if coupon_code and coupon_code.strip():
+        applied_coupon_code, coupon_discount = await coupon_service.apply_coupon_to_order(
+            db, coupon_code, subtotal,
+        )
+    total_amount, shipping_fee = await _calculate_order_total(db, subtotal, coupon_discount)
 
     order = Order(
         user_id=user_id,
         status=OrderStatus.PENDING,
         total_amount=total_amount,
+        payment_method=payment_method,
         payment_status=PaymentStatus.PENDING,
         address_id=address_id,
+        coupon_code=applied_coupon_code,
+        coupon_discount=coupon_discount,
     )
     db.add(order)
     await db.flush()
@@ -163,24 +282,27 @@ async def checkout(
         await db.delete(ci)
     await db.flush()
 
-    try:
-        razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
-    except Exception as e:
-        logger.error("Razorpay order creation failed during checkout for order {}: {}", order.id, e)
-        await db.rollback()
-        raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
+    razorpay_data = None
+    if payment_method == "razorpay":
+        try:
+            razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+        except Exception as e:
+            logger.error("Razorpay order creation failed during checkout for order {}: {}", order.id, e)
+            await db.rollback()
+            raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
 
-    order.razorpay_order_id = razorpay_data.get("order_id")
+    order.razorpay_order_id = razorpay_data.get("order_id") if razorpay_data else None
     await db.flush()
 
-    logger.info("Checkout complete: order_id={} amount={}", order.id, total_amount)
-    return order, razorpay_data
+    logger.info("Checkout complete: order_id={} amount={} shipping={} payment_method={}", order.id, total_amount, shipping_fee, payment_method)
+    return order, razorpay_data, affected_product_slugs
 
 
 async def direct_checkout(
     db: AsyncSession, user_id: int, address_id: int, items: list[DirectCheckoutItem],
-    email: str, full_name: str, phone: str,
-) -> tuple[Order, dict]:
+    email: str, full_name: str, phone: str, payment_method: str = "razorpay",
+    coupon_code: str | None = None,
+) -> tuple[Order, dict | None, list[str]]:
     address = await db.execute(
         select(Address).where(Address.id == address_id, Address.user_id == user_id)
     )
@@ -192,6 +314,7 @@ async def direct_checkout(
 
     total_amount = 0.0
     order_items_data: list[dict] = []
+    affected_product_slugs: list[str] = []
 
     # Sort by product_id to guarantee a consistent lock-acquisition order across
     # concurrent checkouts and prevent deadlocks on the FOR UPDATE rows.
@@ -199,15 +322,28 @@ async def direct_checkout(
         item_data = await _reserve_product_for_order(
             db, item.product_id, item.quantity, item.selected_options,
         )
+        affected_product_slugs.append(item_data.pop("product_slug"))
         total_amount += round(item_data["unit_price"] * item_data["quantity"], 2)
         order_items_data.append(item_data)
+
+    subtotal = round(total_amount, 2)
+    applied_coupon_code = None
+    coupon_discount = 0.0
+    if coupon_code and coupon_code.strip():
+        applied_coupon_code, coupon_discount = await coupon_service.apply_coupon_to_order(
+            db, coupon_code, subtotal,
+        )
+    total_amount, shipping_fee = await _calculate_order_total(db, subtotal, coupon_discount)
 
     order = Order(
         user_id=user_id,
         status=OrderStatus.PENDING,
-        total_amount=round(total_amount, 2),
+        total_amount=total_amount,
+        payment_method=payment_method,
         payment_status=PaymentStatus.PENDING,
         address_id=address_id,
+        coupon_code=applied_coupon_code,
+        coupon_discount=coupon_discount,
     )
     db.add(order)
     await db.flush()
@@ -216,18 +352,20 @@ async def direct_checkout(
         db.add(OrderItem(order_id=order.id, **oi_data))
     await db.flush()
 
-    try:
-        razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
-    except Exception as e:
-        logger.error("Razorpay order creation failed during direct checkout for order {}: {}", order.id, e)
-        await db.rollback()
-        raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
+    razorpay_data = None
+    if payment_method == "razorpay":
+        try:
+            razorpay_data = await _create_razorpay_order(order, email, full_name, phone)
+        except Exception as e:
+            logger.error("Razorpay order creation failed during direct checkout for order {}: {}", order.id, e)
+            await db.rollback()
+            raise ValueError(f"Failed to initialize payment gateway: {str(e)}")
 
-    order.razorpay_order_id = razorpay_data.get("order_id")
+    order.razorpay_order_id = razorpay_data.get("order_id") if razorpay_data else None
     await db.flush()
 
-    logger.info("Direct checkout complete: order_id={} amount={}", order.id, order.total_amount)
-    return order, razorpay_data
+    logger.info("Direct checkout complete: order_id={} amount={} shipping={} payment_method={}", order.id, order.total_amount, shipping_fee, payment_method)
+    return order, razorpay_data, affected_product_slugs
 
 
 async def list_orders(
@@ -238,7 +376,11 @@ async def list_orders(
     offset = (page - 1) * limit
     result = await db.execute(
         select(Order).where(Order.user_id == user_id)
-        .options(selectinload(Order.items))
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.user),
+            selectinload(Order.address),
+        )
         .order_by(Order.created_at.desc())
         .offset(offset).limit(limit)
     )
@@ -248,7 +390,11 @@ async def list_orders(
 async def get_order(db: AsyncSession, order_id: int, user_id: int) -> Order | None:
     result = await db.execute(
         select(Order).where(Order.id == order_id, Order.user_id == user_id)
-        .options(selectinload(Order.items).selectinload(OrderItem.product))
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.user),
+            selectinload(Order.address),
+        )
     )
     return result.scalar_one_or_none()
 
@@ -262,6 +408,13 @@ async def mark_paid(db: AsyncSession, order_id: int, payment_id: str, amount_pai
 
     if order.payment_status == PaymentStatus.PAID:
         logger.info("Idempotency guard: Order {} is already PAID. Ignoring.", order_id)
+        return order
+    if order.status == OrderStatus.CANCELLED or order.payment_status == PaymentStatus.FAILED:
+        logger.critical(
+            "Payment capture received for cancelled/failed order {}; payment_id={}. Manual reconciliation required.",
+            order_id,
+            payment_id,
+        )
         return order
 
     expected_paise = int(round(order.total_amount * 100))
@@ -281,14 +434,22 @@ async def mark_paid(db: AsyncSession, order_id: int, payment_id: str, amount_pai
 
 
 async def mark_failed(db: AsyncSession, order_id: int) -> Order | None:
-    result = await db.execute(select(Order).where(Order.id == order_id))
+    result = await db.execute(
+        select(Order)
+        .where(Order.id == order_id)
+        .options(selectinload(Order.items).selectinload(OrderItem.product))
+    )
     order = result.scalar_one_or_none()
     if not order:
         return None
 
     if order.status == OrderStatus.CANCELLED:
         return order
+    if order.payment_status == PaymentStatus.PAID:
+        logger.info("Payment failure ignored for already-paid order {}", order_id)
+        return order
 
+    await restore_order_stock(db, order)
     order.payment_status = PaymentStatus.FAILED
     order.status = OrderStatus.CANCELLED
     await db.flush()
@@ -360,3 +521,91 @@ async def record_refund(
 
     await db.flush()
     return order
+
+
+async def restore_cart_from_order(
+    db: AsyncSession, order_id: int, user_id: int
+) -> Cart:
+    """
+    Re-populate the user's cart from a PENDING or FAILED Razorpay order so the
+    cart is not lost when the customer dismisses the Razorpay modal.
+
+    Rules:
+    - Only works for orders that belong to the requesting user.
+    - Only works when payment_status is PENDING or FAILED (not PAID / refunded).
+    - Each order item is added back to the cart using its original product_id,
+      quantity and selected_options.  Items whose product no longer exists or is
+      inactive are silently skipped so one bad product never blocks the rest.
+    - Uses get_or_create_cart so the user's existing cart (if any) is reused; we
+      never duplicate items — if the product+options combo already exists in the
+      cart we just bump the quantity instead.
+    """
+    result = await db.execute(
+        select(Order)
+        .where(Order.id == order_id, Order.user_id == user_id)
+        .options(selectinload(Order.items))
+    )
+    order = result.scalar_one_or_none()
+    if not order:
+        raise ValueError("Order not found")
+    if order.payment_status == PaymentStatus.PAID:
+        raise ValueError("Cannot restore a paid order to cart")
+
+    cart = await _cart_service.get_or_create_cart(db, user_id=user_id)
+    # Re-load with items so we can check for duplicates
+    cart_result = await db.execute(
+        select(Cart)
+        .where(Cart.id == cart.id)
+        .options(selectinload(Cart.items))
+    )
+    cart = cart_result.scalar_one()
+
+    for oi in order.items:
+        if not oi.product_id:
+            continue
+
+        # Verify product still exists and is active
+        prod_result = await db.execute(
+            select(Product).where(Product.id == oi.product_id, Product.is_active == True)  # noqa: E712
+        )
+        product = prod_result.scalar_one_or_none()
+        if not product:
+            logger.info(
+                "restore_cart_from_order: skipping product_id={} (not found / inactive)",
+                oi.product_id,
+            )
+            continue
+
+        # Normalise selected_options back to the list/dict the cart expects
+        selected_options = oi.selected_options
+        if isinstance(selected_options, dict) and "option_ids" in selected_options:
+            # New variant format — cart stores the raw list of IDs
+            selected_options = selected_options.get("option_ids")
+
+        # Check if this product+options combo is already in the cart; bump if so
+        existing = next(
+            (
+                ci for ci in cart.items
+                if ci.product_id == oi.product_id
+                and ci.selected_options == selected_options
+            ),
+            None,
+        )
+        if existing:
+            existing.quantity += oi.quantity
+        else:
+            db.add(
+                CartItem(
+                    cart_id=cart.id,
+                    product_id=oi.product_id,
+                    quantity=oi.quantity,
+                    selected_options=selected_options,
+                )
+            )
+
+    await db.flush()
+    logger.info(
+        "restore_cart_from_order: restored order {} items into cart {} for user {}",
+        order_id, cart.id, user_id,
+    )
+    return cart

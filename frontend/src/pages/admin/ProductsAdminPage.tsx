@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
+import type { Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -12,18 +13,68 @@ import {
   ChevronUp,
   Image as ImageIcon,
   AlertTriangle,
-  HelpCircle,
   Upload,
-  Check
+  Loader2,
+  RotateCcw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useProduct, useProductRaw, useProducts } from '@/hooks/useProducts';
+import { useProduct, useProductRaw, useProducts, useAdminAllProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
+import { useAdminTags, useDeleteTag, useTags, useUpsertTag } from '@/hooks/useTags';
+import { useAdminDisplaySections } from '@/hooks/useDisplaySections';
 import { useDeleteProduct } from '@/hooks/useAdmin';
+import {
+  findInheritedFrom,
+  resolveCategoryBadgeConfig,
+  useBadgeConfigs,
+} from '@/hooks/useBadgeConfigs';
+import { resolveBestsellerBadge } from '@/lib/bestsellerBadge';
 import api from '@/lib/api';
+import { getApiErrorDetail } from '@/lib/apiError';
+import { toTagKey } from '@/lib/tagKey';
+import PotPriceEditor, { type PotPriceDraft } from '@/components/admin/PotPriceEditor';
+import BadgeColorField from '@/components/admin/BadgeColorField';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import type { Product, ProductListResponse, ProductVariants } from '@/types';
+import ImageCropModal from '@/components/admin/ImageCropModal';
+import type { CatalogTag, ComboItem, FAQItem, Product, ProductListResponse, ProductVariants, VariantGroup, VariantOption } from '@/types';
+
+type ProductFormData = z.infer<typeof productSchema>;
+
+// ─── Flexible Variant Draft Types ──────────────────────────────────────────
+// ⚠️ image_keys = relative storage keys sent to backend. image_urls = preview only.
+type VariantOptionDraft = {
+  id: string;           // stable ID – preserved for existing options, generated for new
+  name: string;
+  price: number;
+  image_keys: string[];  // relative keys array, stored in DB
+  image_urls: string[];  // resolved URLs array, display only
+  color_hex: string;     // optional hex color for colour-type variants
+  uploading: boolean;
+};
+
+type VariantGroupDraft = {
+  id: string;           // stable ID – preserved for existing groups, generated for new
+  label: string;
+  always_show_options: boolean;
+  options: VariantOptionDraft[];
+};
+
+function genId(prefix: string): string {
+  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function emptyOption(): VariantOptionDraft {
+  return { id: genId('opt'), name: '', price: 0, image_keys: [], image_urls: [], color_hex: '', uploading: false };
+}
+
+function emptyGroup(): VariantGroupDraft {
+  return { id: genId('vg'), label: '', always_show_options: false, options: [emptyOption()] };
+}
+
+// Stable empty array so `watch('additional_category_ids') ?? EMPTY` does not hand
+// the derived memos a fresh identity on every render.
+const EMPTY_CATEGORY_IDS: number[] = [];
 
 const productSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -32,23 +83,62 @@ const productSchema = z.object({
   original_price: z.coerce.number().positive().optional().or(z.literal(0)),
   stock_qty: z.coerce.number().int().min(0, 'Stock cannot be negative'),
   category_id: z.coerce.number().int().positive('Please select a category'),
-  badge: z.string().optional(),
-  sunlight: z.string().optional(),
-  watering: z.string().optional(),
+  // Categories beyond the primary one. Kept as plain numbers (no field array) so
+  // the checkbox group can be read straight off the form state.
+  additional_category_ids: z.array(z.number().int().positive()).optional(),
+  display_section: z.string().optional(),
   how_to_guide: z.string().optional(),
-  tags: z.array(z.object({ value: z.string() })).optional(),
+  tags: z.array(z.object({ value: z.string().optional() })).optional(),
   care_tips: z.array(z.object({ value: z.string() })).optional(),
 });
 
-type ProductFormData = z.infer<typeof productSchema>;
-type VariantColorDraft = { name: string; hex: string };
-// ⚠️ image_key is the relative storage key sent to the backend (e.g. "plantoga/...").
-// image_url is the resolved full URL used only for <img> preview — never sent anywhere.
-type VariantPotDraft = { name: string; price_modifier: number; image_key: string; image_url: string };
-type VariantSizeDraft = { name: string; price_modifier: number; description: string };
+/**
+ * Crops an image file to a centered square and returns a new File.
+ * This ensures the product carousel always receives uniform square images.
+ *
+ * Uses createImageBitmap so the browser applies EXIF rotation automatically
+ * before we ever touch the canvas — phone photos with rotation metadata
+ * will render correctly without any manual EXIF parsing.
+ *
+ * Preserves PNG transparency (keeps format as image/png). Everything else
+ * is output as JPEG at 92% quality so product cutouts with transparent
+ * backgrounds aren't flattened to a solid color.
+ */
+async function cropToSquare(file: File): Promise<File> {
+  // createImageBitmap applies EXIF orientation for us
+  const bitmap = await createImageBitmap(file);
 
-function slugify(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const size = Math.min(bitmap.width, bitmap.height);
+  const sx = (bitmap.width - size) / 2;
+  const sy = (bitmap.height - size) / 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+
+  const isPng = file.type === 'image/png';
+  if (!isPng) {
+    // Fill with white so any semi-transparent edge pixels don't go black
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+  }
+
+  ctx.drawImage(bitmap, sx, sy, size, size, 0, 0, size, size);
+  bitmap.close();
+
+  return new Promise((resolve, reject) => {
+    const outputType = isPng ? 'image/png' : 'image/jpeg';
+    const quality = isPng ? undefined : 0.92;
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) { reject(new Error('Canvas toBlob failed')); return; }
+        resolve(new File([blob], file.name, { type: outputType, lastModified: Date.now() }));
+      },
+      outputType,
+      quality,
+    );
+  });
 }
 
 function ProductModal({ onClose, editProduct }: { onClose: () => void; editProduct?: Product | null }) {
@@ -58,10 +148,37 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // useProductRaw (admin endpoint, raw relative keys) — used to seed image key state for edit
   const { data: rawProduct } = useProductRaw(isEdit ? (editProduct?.id ?? null) : null);
   const { data: categories } = useCategories();
+  const { data: displaySections = [] } = useAdminDisplaySections();
+  const { data: globalTags = [] } = useTags();
   const qc = useQueryClient();
-  const allCats = categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [];
+  // Memoized because it is a dependency of other memos below — the `?? []` on a
+  // fresh expression builds a new array on every render, which would defeat them.
+  const allCats = useMemo(() => categories?.flatMap((c) => [c, ...(c.children ?? [])]) ?? [], [categories]);
+  const globalTagColors = useMemo(() => {
+    const map: Record<string, string> = {};
+    globalTags.forEach((t) => {
+      if (t.color) map[toTagKey(t.name)] = t.color;
+    });
+    return map;
+  }, [globalTags]);
   const [submitting, setSubmitting] = useState(false);
   const [variantError, setVariantError] = useState<string | null>(null);
+  const upsertTag = useUpsertTag();
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
+  const [showNewTagForm, setShowNewTagForm] = useState(false);
+  const [showManageTags, setShowManageTags] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#1B4332');
+  // `/tags/admin` also returns inactive tags, so hidden ones stay deletable.
+  const { data: allTags = [] } = useAdminTags();
+  const deleteTag = useDeleteTag();
+  const matchingSavedTag = useMemo(
+    () =>
+      allTags.find(
+        (t) => newTagName.trim().toLowerCase() === t.name.trim().toLowerCase()
+      ) ?? null,
+    [allTags, newTagName]
+  );
   const [formInitialized, setFormInitialized] = useState(!isEdit);
 
   // Form Collapsible Sections
@@ -70,8 +187,12 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     pricing: true,
     details: false,
     images: false,
+    faqs: false,
     variants: false,
     seo: false,
+    related: false,
+    badges: false,
+    combo: false,
   });
 
   const toggleSection = (section: string) => {
@@ -95,14 +216,13 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setProductImages(productImages.filter((_, i) => i !== index));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files) {
-      const newFiles = Array.from(files);
-      setUploadedFiles([...uploadedFiles, ...newFiles]);
-      const newPreviews = newFiles.map(file => URL.createObjectURL(file));
-      setFilePreviews([...filePreviews, ...newPreviews]);
-    }
+    if (!files) return;
+    const cropped = await Promise.all(Array.from(files).map(cropToSquare));
+    setUploadedFiles((prev) => [...prev, ...cropped]);
+    const previews = cropped.map((f) => URL.createObjectURL(f));
+    setFilePreviews((prev) => [...prev, ...previews]);
   };
 
   const handleRemoveFile = (index: number) => {
@@ -110,27 +230,86 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setFilePreviews(filePreviews.filter((_, i) => i !== index));
   };
 
-  // Variant States
-  const [colors, setColors] = useState<VariantColorDraft[]>([]);
-  const [pots, setPots] = useState<VariantPotDraft[]>([]);
-  const [uploadingPotImage, setUploadingPotImage] = useState<number | null>(null);
+  // Variant States — new flexible variant groups
+  const [variantGroups, setVariantGroups] = useState<VariantGroupDraft[]>([]);
+  const [uploadingOptionImage, setUploadingOptionImage] = useState<string | null>(null); // optionId
   const [uploadingDefaultImage, setUploadingDefaultImage] = useState(false);
-  const [uploadingComboImage, setUploadingComboImage] = useState<string | null>(null);
-  const [sizes, setSizes] = useState<VariantSizeDraft[]>([]);
   // defaultImageKey: relative key sent to backend. defaultImageUrl: full URL for preview only.
   const [defaultImageKey, setDefaultImageKey] = useState('');
   const [defaultImageUrl, setDefaultImageUrl] = useState('');
-  const [stockByKey, setStockByKey] = useState<Record<string, number>>({});
-  // imageKeyByCombo: relative keys sent to backend. imageUrlByCombo: full URLs for preview only.
-  const [imageKeyByCombo, setImageKeyByCombo] = useState<Record<string, string>>({});
-  const [imageUrlByCombo, setImageUrlByCombo] = useState<Record<string, string>>({});
-  // rawPotTypes: raw pot_types from the admin raw endpoint, held separately so the
-  // pot-image merge effect runs regardless of which fetch (rawProduct vs freshProduct) wins.
-  const [rawPotTypes, setRawPotTypes] = useState<any[] | null>(null);
-  // seededPotImagesRef: guards the merge effect so it only runs once per product load.
-  // Prevents pots.length changes (add/remove pot row) from re-seeding and overwriting
-  // images the admin has already uploaded during this edit session.
-  const seededPotImagesRef = useRef(false);
+  // Combo image map: keyed by "optId1__optId2__..." joining one optId per group in group order.
+  // image_keys = relative keys (sent to backend). image_urls = resolved URLs (display only).
+  const [comboImageKeys, setComboImageKeys] = useState<Record<string, string[]>>({});
+  const [comboImageUrls, setComboImageUrls] = useState<Record<string, string[]>>({});
+  // Per-combination stock: keyed by combo_key (same space as comboImageKeys). Dense on save.
+  const [comboStock, setComboStock] = useState<Record<string, number>>({});
+  // Per-combination price: keyed by combo_key (same space as comboImageKeys). When a row
+  // has a value it overrides the per-option sum, letting each combination carry its own
+  // price (e.g. Small/Krish ₹300 vs Medium/Krish ₹350). Dense on save.
+  const [uploadingComboKey, setUploadingComboKey] = useState<string | null>(null);
+  // pot_price: the N-axis grid, and the ONLY place a variant product's price is authored.
+  const [potPriceDraft, setPotPriceDraft] = useState<PotPriceDraft | null>(null);
+  // Plantoga Promise banner — per-product image replacing the four hardcoded cards
+  // promiseBannerKey: relative key stored in DB. promiseBannerUrl: resolved URL for preview only.
+  const [promiseBannerKey, setPromiseBannerKey] = useState('');
+  const [promiseBannerUrl, setPromiseBannerUrl] = useState('');
+  const [uploadingPromiseBanner, setUploadingPromiseBanner] = useState(false);
+
+  // Why Plantoga banner — per-product image replacing the comparison table
+  const [whyPlantogaBannerKey, setWhyPlantogaBannerKey] = useState('');
+  const [whyPlantogaBannerUrl, setWhyPlantogaBannerUrl] = useState('');
+  const [uploadingWhyPlantogaBanner, setUploadingWhyPlantogaBanner] = useState(false);
+
+  // Care Card image — per-product image shown above the care card tiles
+  const [careCardImageKey, setCareCardImageKey] = useState('');
+  const [careCardImageUrl, setCareCardImageUrl] = useState('');
+  const [uploadingCareCardImage, setUploadingCareCardImage] = useState(false);
+  // Crop modal state for care card
+  const [careCardCropSrc, setCareCardCropSrc] = useState<string | null>(null);
+  const [careCardCropOpen, setCareCardCropOpen] = useState(false);
+
+  // Per-product image overlay badge controls
+  const [isBestseller, setIsBestseller] = useState(false);
+
+  // Per-product combo flag, itemised contents list and optional summary.
+  // comboItems holds one entry per combo member; product_id is non-null when the
+  // item was picked from the catalog (name still editable), null for custom names.
+  const [isCombo, setIsCombo] = useState(false);
+  const [comboDescription, setComboDescription] = useState('');
+  const [comboItems, setComboItems] = useState<ComboItem[]>([]);
+  const [comboSearch, setComboSearch] = useState('');
+
+  // Per-product bestseller badge wording/colour override. A null means "not
+  // overridden" and the category config decides — these are held as plain
+  // strings while editing so a field can be cleared, and turned back into
+  // null-or-value only at save time (see onSubmit). The toggle is separate from
+  // the fields so that switching it off saves a removal while leaving the typed
+  // values in place if the admin switches it back on.
+  const [bestsellerOverrideEnabled, setBestsellerOverrideEnabled] = useState(false);
+  const [bestsellerLabelOverride, setBestsellerLabelOverride] = useState('');
+  const [bestsellerColorOverride, setBestsellerColorOverride] = useState('');
+
+  // Per-product FAQ entries
+  const [faqItems, setFaqItems] = useState<{ question: string; answer: string }[]>([]);
+  const DEFAULT_FAQ = { question: '', answer: '' };
+
+  // Related products (You May Also Like)
+  const [relatedProductIds, setRelatedProductIds] = useState<number[]>([]);
+  const [relatedSearch, setRelatedSearch] = useState('');
+  const { data: allProductsData } = useAdminAllProducts();
+  const allProducts = allProductsData?.items ?? [];
+
+  // Tracks whether the raw product image keys have been seeded into variant state.
+  // Stored as state (not a ref) so that changing it triggers a re-render, which is
+  // required for formReady to update the Save button's disabled state correctly.
+  // The ref-during-render lint error fires if this is a useRef.
+  const [rawProductSeededId, setRawProductSeededId] = useState<number | null>(null);
+
+  // True once form fields are initialized. For edit mode, also wait for rawProduct
+  // to be seeded so option image_keys are populated — saving before that would wipe
+  // existing variant images.
+  const rawProductSeeded = !isEdit || rawProductSeededId === (editProduct?.id ?? null);
+  const formReady = formInitialized && rawProductSeeded;
 
   // Derive a display URL from a relative storage key.
   // Full URLs pass through unchanged (external images, legacy data).
@@ -145,8 +324,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
 
   useBodyScrollLock(true);
 
-  const { register, handleSubmit, control, reset, formState: { errors } } = useForm<ProductFormData>({
-    resolver: zodResolver(productSchema) as any,
+  const { register, handleSubmit, control, watch, reset, setValue, formState: { errors } } = useForm<ProductFormData>({
+    resolver: zodResolver(productSchema) as unknown as Resolver<ProductFormData>,
     defaultValues: {
       name: '',
       description: '',
@@ -154,18 +333,195 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       original_price: undefined,
       stock_qty: 0,
       category_id: undefined,
-      badge: '',
-      sunlight: '',
-      watering: '',
+      additional_category_ids: [],
+      display_section: '',
       how_to_guide: '',
       tags: [],
       care_tips: [],
     },
   });
+  const selectedDisplaySection = watch('display_section');
+  const primaryCategoryId = watch('category_id');
+  const selectedExtraCategoryIds =
+    watch('additional_category_ids') ?? EMPTY_CATEGORY_IDS;
+
+  function toggleAdditionalCategory(catId: number) {
+    const current = selectedExtraCategoryIds ?? [];
+    const next = current.includes(catId)
+      ? current.filter((id) => id !== catId)
+      : [...current, catId];
+    setValue('additional_category_ids', next, { shouldDirty: true, shouldValidate: true });
+  }
+
+  // ── Bestseller badge: what the category says, and what this product overrides ──
+  const { data: badgeConfigMap } = useBadgeConfigs();
+
+  // Depends on primaryCategoryId, so the inherited values shown in the override
+  // section update live when the admin changes this product's category — no save,
+  // no stale preview.
+  const inheritedBadgeConfig = resolveCategoryBadgeConfig(badgeConfigMap, primaryCategoryId);
+
+  // Parent lookup, for naming the ancestor the category inherits from. Mirrors
+  // the lookup the Image Badges admin page builds.
+  const categoryParentOf = useMemo(() => {
+    const map: Record<number, number | null> = {};
+    (categories ?? []).forEach((parent) => {
+      map[parent.id] = null;
+      (parent.children ?? []).forEach((child) => {
+        map[child.id] = parent.id;
+      });
+    });
+    return map;
+  }, [categories]);
+
+  const inheritedFromCategoryId = findInheritedFrom(
+    badgeConfigMap,
+    primaryCategoryId,
+    categoryParentOf
+  );
+  const inheritedFromCategoryName = useMemo(() => {
+    if (inheritedFromCategoryId == null) return null;
+    return allCats.find((c) => c.id === inheritedFromCategoryId)?.name ?? null;
+  }, [allCats, inheritedFromCategoryId]);
+
+  const bestsellerLabelDraft = bestsellerLabelOverride.trim();
+  const bestsellerColorDraft = bestsellerColorOverride.trim();
+
+  /**
+   * What the storefront will actually paint for this product right now, given
+   * the form's unsaved edits. Calls the same resolver the storefront uses, so the
+   * preview cannot drift from the rendered result. When the toggle is off the
+   * drafts are passed as null, because that is what gets saved.
+   */
+  const bestsellerPreview = resolveBestsellerBadge(
+    {
+      is_bestseller: isBestseller,
+      bestseller_label_override: bestsellerOverrideEnabled ? bestsellerLabelDraft || null : null,
+      bestseller_color_override: bestsellerOverrideEnabled ? bestsellerColorDraft || null : null,
+    },
+    inheritedBadgeConfig
+  );
+
+  // The image the badge preview is drawn over. Falls back to the variant default
+  // image, and to nothing at all — in which case the preview degrades to a plain
+  // badge chip rather than an empty grey square.
+  const bestsellerPreviewImage = productImages[0] || defaultImageUrl;
+
+  // Nested tree of parents with their subcategories underneath, so an admin can see
+  // where a product will surface before ticking it. Parents stay open unless
+  // explicitly collapsed.
+  const [collapsedCatParents, setCollapsedCatParents] = useState<Record<number, boolean>>({});
+  const extraCategorySet = useMemo(() => new Set(selectedExtraCategoryIds), [selectedExtraCategoryIds]);
+  function CategoryPill({
+    cat,
+    isChild = false,
+  }: {
+    cat: { id: number; name: string };
+    isChild?: boolean;
+  }) {
+    const isPrimary = primaryCategoryId === cat.id;
+    const isChecked = isPrimary || extraCategorySet.has(cat.id);
+    return (
+      <button
+        type="button"
+        disabled={isPrimary}
+        aria-pressed={isChecked}
+        onClick={() => toggleAdditionalCategory(cat.id)}
+        title={
+          isPrimary
+            ? 'This is the primary category'
+            : isChecked
+              ? `Remove ${cat.name} from this product`
+              : `Also list this product under ${cat.name}`
+        }
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs transition touch-target ${
+          isPrimary
+            ? 'bg-primary/10 border-primary/30 text-primary cursor-not-allowed'
+            : isChecked
+              ? 'bg-primary text-white border-primary'
+              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'
+        }`}
+      >
+        <span aria-hidden="true">{isChecked ? '✓' : '+'}</span>
+        {isChild && <span aria-hidden="true" className={isChecked ? 'opacity-80' : 'text-gray-300'}>↳</span>}
+        {cat.name}
+        {isPrimary && <span className="opacity-70">primary</span>}
+      </button>
+    );
+  }
+  const assignableSections = useMemo(
+    () => displaySections.filter((section) => section.is_active),
+    [displaySections],
+  );
+  const hiddenSectionName = useMemo(() => {
+    if (!selectedDisplaySection) return null;
+    return displaySections.find((section) => section.key === selectedDisplaySection)?.name ?? null;
+  }, [displaySections, selectedDisplaySection]);
   const { fields: tagFields, append: addTag, remove: removeTag } = useFieldArray({ control, name: 'tags' });
   const { fields: tipFields, append: addTip, remove: removeTip } = useFieldArray({ control, name: 'care_tips' });
 
-  const applyProductToForm = useCallback((p: Product) => {
+  const addTagByName = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const exists = tagFields.some((f) => (f.value || '').trim().toLowerCase() === trimmed.toLowerCase());
+    if (!exists) addTag({ value: trimmed });
+  };
+
+  const availableTags = globalTags.filter(
+    (t) => t.is_active && !tagFields.some((f) => (f.value || '').trim().toLowerCase() === t.name.toLowerCase()),
+  );
+
+  const createNewTag = async () => {
+    const name = newTagName.trim();
+    if (!name) return;
+    try {
+      // Re-submitting an existing name must recolour that tag, not append a
+      // duplicate row. The service de-duplicates slugs with a `-2` suffix, so a
+      // blind POST would create `vastu-friendly-2` and leave the badge — which
+      // resolves by the original slug — stuck on the old colour.
+      const existing = matchingSavedTag;
+      if (existing) {
+        await upsertTag.mutateAsync({ id: existing.id, name, color: newTagColor });
+      } else {
+        await upsertTag.mutateAsync({ name, color: newTagColor });
+      }
+      addTagByName(name);
+      setNewTagName('');
+      setNewTagColor('#1B4332');
+      toast.success(
+        existing ? `Tag "${name}" updated` : `Tag "${name}" saved`
+      );
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Could not create tag'));
+    }
+  };
+
+  const recolorTag = async (tag: CatalogTag, color: string) => {
+    try {
+      await upsertTag.mutateAsync({ id: tag.id, name: tag.name, color });
+      toast.success(`Tag "${tag.name}" recoloured`);
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Could not update tag colour'));
+    }
+  };
+
+  const deleteSavedTag = async (tag: CatalogTag) => {
+    if (
+      !window.confirm(
+        `Delete the saved tag "${tag.name}"?\n\nProducts already using it will simply stop showing the badge.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteTag.mutateAsync(tag.id);
+      toast.success(`Tag "${tag.name}" deleted`);
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Could not delete tag'));
+    }
+  };
+
+  const applyProductToForm = (p: Product) => {
     reset({
       name: p.name || '',
       description: p.description || '',
@@ -173,9 +529,8 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       original_price: p.original_price || undefined,
       stock_qty: p.stock_qty ?? 0,
       category_id: p.category_id,
-      badge: p.badge || '',
-      sunlight: p.sunlight || '',
-      watering: p.watering || '',
+      additional_category_ids: p.additional_category_ids ?? [],
+      display_section: p.display_section || '',
       how_to_guide: p.how_to_guide || '',
       tags: p.tags?.length ? p.tags.map((value) => ({ value })) : [],
       care_tips: p.care_tips?.length ? p.care_tips.map((value) => ({ value })) : [],
@@ -184,85 +539,239 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
     setNewImageUrl('');
     setUploadedFiles([]);
     setFilePreviews([]);
-    setColors(p.variants?.colors?.map((c: any) => ({ name: c.name, hex: c.hex })) || []);
-    // Pot image keys are seeded by the rawProduct effect (relative keys from DB).
-    // Here we only set structural fields; image_key/image_url start empty.
-    setPots(
-      p.variants?.pot_types?.map((pot: any) => ({
-        name: pot.name,
-        price_modifier: pot.price_modifier,
-        image_key: '',   // populated by rawProduct effect
-        image_url: '',   // populated by rawProduct effect
-      })) || [],
-    );
-    setSizes(
-      p.variants?.sizes?.map((s: any) => ({
-        name: s.name,
-        price_modifier: s.price_modifier,
-        description: s.description || '',
-      })) || [],
-    );
-    // image key/url state seeded by rawProduct effect
+    // Seed variant groups from new format (variant_groups)
+    const vg = p.variants?.variant_groups;
+    if (Array.isArray(vg)) {
+      setVariantGroups(
+        vg.map((group: VariantGroup) => ({
+          id: group.id || genId('vg'),
+          label: group.label || '',
+          always_show_options: Boolean(group.always_show_options),
+          options: (group.options || []).map((opt: VariantOption) => ({
+            id: opt.id || genId('opt'),
+            name: opt.name || '',
+            price: Number(opt.price ?? 0),
+            // images are already resolved URLs from the API; store first as preview
+            // backend /admin/raw returns relative keys — handled in rawProduct effect
+            image_keys: [],
+            image_urls: opt.images?.filter(Boolean) || [],
+            color_hex: opt.color_hex || '',
+            uploading: false,
+          })),
+        }))
+      );
+    } else {
+      setVariantGroups([]);
+    }
     setDefaultImageKey('');
     setDefaultImageUrl('');
-    setStockByKey(p.variants?.stock || {});
-    setImageKeyByCombo({});
-    setImageUrlByCombo({});
-    setRawPotTypes(null);
-    seededPotImagesRef.current = false; // allow one seed for the incoming product
+    setComboImageKeys({});
+    setComboImageUrls({});
+    setComboStock({});
     setVariantError(null);
-  }, [reset]);
-
-  // Seed image key state from the raw admin endpoint (relative keys, never resolved URLs).
-  // Runs after applyProductToForm and overwrites the empty image fields with real keys.
-  useEffect(() => {
-    if (!isEdit || !rawProduct?.variants) return;
-    const v = rawProduct.variants;
-
-    // default_image and image_map values are raw relative keys straight from DB
-    setDefaultImageKey(v.default_image || '');
-    setDefaultImageUrl(resolveImageUrl(v.default_image));
-
-    const rawImageMap: Record<string, string> = v.image_map || {};
-    setImageKeyByCombo(rawImageMap);
-    setImageUrlByCombo(
-      Object.fromEntries(Object.entries(rawImageMap).map(([k, val]) => [k, resolveImageUrl(val as string)])),
+    // Promise banner URL comes pre-resolved from the public API response.
+    // The raw key is seeded separately from rawProduct in the useEffect below.
+    setPromiseBannerUrl(p.promise_banner_image || '');
+    setPromiseBannerKey('');  // will be overwritten by rawProduct effect
+    setWhyPlantogaBannerUrl(p.why_plantoga_banner_image || '');
+    setWhyPlantogaBannerKey('');  // will be overwritten by rawProduct effect
+    setCareCardImageUrl(p.care_card_image || '');
+    setCareCardImageKey('');  // will be overwritten by rawProduct effect
+    setFaqItems(p.faqs || []);
+    setRelatedProductIds(p.related_product_ids || []);
+    // Reset badge controls (will be overwritten by rawProduct effect on edit)
+    setIsBestseller(Boolean(p.is_bestseller));
+    setIsCombo(Boolean(p.is_combo));
+    setComboDescription(p.combo_description ?? '');
+    setComboItems(p.combo_items ?? []);
+    setBestsellerOverrideEnabled(
+      p.bestseller_label_override != null || p.bestseller_color_override != null
     );
+    setBestsellerLabelOverride(p.bestseller_label_override ?? '');
+    setBestsellerColorOverride(p.bestseller_color_override ?? '');
+  };
+  // Seed default_image from the raw admin endpoint (relative key, not resolved URL).
+  // Must wait for formInitialized so that variantGroups is already populated before
+  // we patch image_keys into options — otherwise prev.map() iterates an empty array.
+  // Guard (rawProductSeededId) prevents re-seeding on background refetches.
+  // Run during render (guarded by seed id) instead of an effect to avoid the
+  // set-state-in-effect hook violation.
+  if (isEdit && rawProduct && formInitialized) {
+    const incomingId = rawProduct.id ?? null;
+    if (rawProductSeededId !== incomingId) {
+      setRawProductSeededId(incomingId);
 
-    // Store raw pot types separately so the merge effect below can run
-    // regardless of whether rawProduct or applyProductToForm resolved first.
-    // Reset the guard so the merge runs exactly once for this product load.
-    seededPotImagesRef.current = false;
-    setRawPotTypes(v.pot_types || []);
-  // resolveImageUrl is stable (defined inside component but no deps) — safe to omit
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEdit, rawProduct]);
+      const v: ProductVariants = rawProduct.variants ?? { variant_groups: [] };
+      // Seed the pot_price grid. A product with no pot_price starts with no axes ticked
+      // rather than a default one, so existing products are not silently repriced.
+      if (v.pot_price) {
+        setPotPriceDraft({
+          group_ids: [...(v.pot_price.group_ids ?? [])],
+          independent_group_ids: [...(v.pot_price.independent_group_ids ?? [])],
+          map: { ...(v.pot_price.map ?? {}) },
+        });
+      } else {
+        setPotPriceDraft(null);
+      }
+      // Seed default image relative key
+      setDefaultImageKey(v.default_image || '');
+      setDefaultImageUrl(resolveImageUrl(v.default_image));
 
-  // Merge pot image keys into the pots array.
-  // Kept in a separate effect so it fires whenever EITHER rawPotTypes or pots.length
-  // changes — making it order-independent between the two data fetches.
-  // The seededPotImagesRef guard ensures this runs exactly ONCE per product load.
-  // Without it, adding/removing a pot row would re-fire and overwrite any images
-  // the admin already uploaded during this edit session.
-  useEffect(() => {
-    if (!rawPotTypes || pots.length === 0 || seededPotImagesRef.current) return;
-    setPots(prev => prev.map((pot, i) => {
-      const rawKey: string = rawPotTypes[i]?.image_url || '';
-      return { ...pot, image_key: rawKey, image_url: resolveImageUrl(rawKey) };
-    }));
-    seededPotImagesRef.current = true; // never re-seed after this for the current product
-  // pots.length (not pots) — only retrigger when rows are added/removed, not on every keystroke
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawPotTypes, pots.length]);
+      // Seed combo image_map from raw product
+      if (v.image_map && typeof v.image_map === 'object') {
+        const seedKeys: Record<string, string[]> = {};
+        const seedUrls: Record<string, string[]> = {};
+        Object.entries(v.image_map).forEach(([key, imgs]) => {
+          if (Array.isArray(imgs) && imgs.length > 0) {
+            seedKeys[key] = imgs.filter(Boolean);
+            seedUrls[key] = imgs.filter(Boolean).map((k: string) => resolveImageUrl(k));
+          }
+        });
+        setComboImageKeys(seedKeys);
+        setComboImageUrls(seedUrls);
+      }
 
+      // Seed per-combination stock from raw stock_map
+      if (v.stock_map && typeof v.stock_map === 'object') {
+        const seedStock: Record<string, number> = {};
+        Object.entries(v.stock_map).forEach(([key, qty]) => {
+          const n = Number(qty);
+          seedStock[key] = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+        });
+        setComboStock(seedStock);
+      }
+
+      // Seed per-option image keys from raw variant_groups
+      if (Array.isArray(v.variant_groups)) {
+        setVariantGroups(prev => prev.map((group) => {
+          const rawGroup = v.variant_groups.find((rg: VariantGroup) => rg.id === group.id);
+          if (!rawGroup) return group;
+          return {
+            ...group,
+            options: group.options.map((opt) => {
+              const rawOpt = rawGroup.options?.find((ro: VariantOption) => ro.id === opt.id);
+              if (!rawOpt) return opt;
+              const rawKeys: string[] = (rawOpt.images || []).filter(Boolean);
+              const rawUrls = rawKeys.map((k: string) => resolveImageUrl(k));
+              return {
+                ...opt,
+                image_keys: rawKeys.length ? rawKeys : opt.image_keys,
+                image_urls: rawKeys.length ? rawUrls : opt.image_urls,
+                color_hex: rawOpt.color_hex || opt.color_hex,
+              };
+            }),
+          };
+        }));
+      }
+
+      // Seed promise banner raw key
+      const rawBannerKey = rawProduct.promise_banner_image || '';
+      setPromiseBannerKey(rawBannerKey);
+      if (rawBannerKey) setPromiseBannerUrl(resolveImageUrl(rawBannerKey));
+
+      // Seed why plantoga banner raw key
+      const rawWhyBannerKey = rawProduct.why_plantoga_banner_image || '';
+      setWhyPlantogaBannerKey(rawWhyBannerKey);
+      if (rawWhyBannerKey) setWhyPlantogaBannerUrl(resolveImageUrl(rawWhyBannerKey));
+
+      // Seed care card image raw key
+      const rawCareCardKey = rawProduct.care_card_image || '';
+      setCareCardImageKey(rawCareCardKey);
+      if (rawCareCardKey) setCareCardImageUrl(resolveImageUrl(rawCareCardKey));
+
+      // Seed FAQs from raw product
+      const rawFaqs = rawProduct.faqs;
+      if (Array.isArray(rawFaqs) && rawFaqs.length > 0) {
+        setFaqItems(rawFaqs.map((f: FAQItem) => ({ question: f.question || '', answer: f.answer || '' })));
+      }
+
+      // Seed related product IDs from raw product
+      const rawRelatedIds = rawProduct.related_product_ids;
+      if (Array.isArray(rawRelatedIds)) {
+        setRelatedProductIds(rawRelatedIds);
+      }
+
+      // Seed badge controls from raw product
+      setIsBestseller(Boolean(rawProduct.is_bestseller));
+      setIsCombo(Boolean(rawProduct.is_combo));
+      setComboDescription(rawProduct.combo_description ?? '');
+      setComboItems(rawProduct.combo_items ?? []);
+      const rawLabelOverride = rawProduct.bestseller_label_override ?? null;
+      const rawColorOverride = rawProduct.bestseller_color_override ?? null;
+      setBestsellerOverrideEnabled(rawLabelOverride != null || rawColorOverride != null);
+      setBestsellerLabelOverride(rawLabelOverride ?? '');
+      setBestsellerColorOverride(rawColorOverride ?? '');
+    }
+  }
+
+  // Initialize the form from the freshly-fetched product. Kept as an effect because it
+  // calls react-hook-form's reset() (an external-store mutation that must not run during
+  // render). The render-time rawProduct seeding block above waits on formInitialized.
   useEffect(() => {
     if (!isEdit) return;
     const source = freshProduct ?? editProduct;
     if (source && !formInitialized) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset() belongs in an effect
       applyProductToForm(source);
       setFormInitialized(true);
     }
-  }, [isEdit, freshProduct, editProduct, formInitialized, applyProductToForm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyProductToForm is recreated each render; the effect re-runs whenever editProduct/freshProduct changes identity anyway
+  }, [isEdit, freshProduct, editProduct, formInitialized]);
+
+  // ─── Cartesian product helper ────────────────────────────────────────────
+  // Returns rows of { key: "optId1__optId2__...", label: "Name1 / Name2 / ..." }
+  //
+  // The label is built purely from the option names the admin typed, joined in group order —
+  // nothing about it is hardcoded, so renaming a variant type or option relabels the table.
+  //
+  // Keys are built over EVERY group, including ones that are not fully named yet. The
+  // backend's build_combo_key also walks all variant_groups, so dropping an unnamed group
+  // here would produce a short key that the backend can never match — stock and images
+  // would be written to a key nothing reads, and the product would look out of stock with no
+  // error anywhere. Unnamed groups mark their rows `ready: false` so the table can explain
+  // itself instead of silently omitting them.
+  const COMBO_CAP = 50;
+  function buildComboRows(groups: VariantGroupDraft[]): { key: string; label: string; ready: boolean }[] {
+    if (groups.length === 0) return [];
+    // Cartesian product
+    let rows: { key: string; label: string; ready: boolean }[] = [{ key: '', label: '', ready: true }];
+    for (const group of groups) {
+      const next: { key: string; label: string; ready: boolean }[] = [];
+      const groupNamed = !!group.label.trim();
+      for (const row of rows) {
+        for (const opt of group.options) {
+          const optNamed = !!opt.name.trim();
+          next.push({
+            key: row.key ? `${row.key}__${opt.id}` : opt.id,
+            // Names only, no group prefixes — a group prefix would be a second, differently
+            // formatted copy of the same information in the same cell.
+            label: row.label ? `${row.label} / ${opt.name}` : opt.name,
+            ready: row.ready && groupNamed && optNamed,
+          });
+        }
+      }
+      rows = next;
+    }
+    return rows;
+  }
+
+  // Full dense stock_map (no COMBO_CAP) for the save payload. Every cartesian combo
+  // gets a row. Editable rows come from comboStock; overflow rows not present in state
+  // fall back to the existing stock_map value (preserves untouched combos), else 0.
+  function buildDenseStockMap(
+    groups: VariantGroupDraft[],
+    comboStockMap: Record<string, number>,
+    existing: Record<string, number> | null | undefined,
+  ): Record<string, number> {
+    const rows = buildComboRows(groups);
+    const map: Record<string, number> = {};
+    for (const row of rows) {
+      const qty = comboStockMap[row.key] ?? existing?.[row.key] ?? 0;
+      const n = Number(qty);
+      map[row.key] = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+    }
+    return map;
+  }
 
   async function onSubmit(data: ProductFormData) {
     setSubmitting(true);
@@ -270,105 +779,159 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       setVariantError(null);
       let variants: ProductVariants | null = null;
 
-      // Handle custom variant setup
-      if (colors.length || pots.length || sizes.length || defaultImageKey.trim()) {
-        const cleanColors = colors
-          .filter((c) => c.name.trim())
-          .map(c => ({ name: c.name.trim(), hex: c.hex, slug: slugify(c.name) }));
+      // Toggle off ⇒ save a removal, whatever is still typed in the fields. The
+      // draft stays in state so switching the toggle back on restores it.
+      const savedBestsellerLabelOverride = bestsellerOverrideEnabled
+        ? bestsellerLabelOverride.trim() || null
+        : null;
+      const savedBestsellerColorOverride = bestsellerOverrideEnabled
+        ? bestsellerColorOverride.trim() || null
+        : null;
 
-        const cleanPots = pots
-          .filter((p) => p.name.trim())
-          .map(p => ({
-            name: p.name.trim(),
-            slug: slugify(p.name),
-            price_modifier: Number(p.price_modifier || 0),
-            // image_url field in DB holds a relative key — send the key, not the display URL
-            image_url: (p.image_key || '').trim(),
-          }));
-
-        const cleanSizes = sizes
-          .filter((s) => s.name.trim())
-          .map(s => ({ name: s.name.trim(), slug: slugify(s.name), price_modifier: Number(s.price_modifier || 0), description: s.description.trim() }));
-
-        if (colors.length > 0 && !cleanColors.length) {
-          setVariantError('Please fill in names for the added colors.');
+      // Build new variant_groups payload
+      const cleanGroups = variantGroups.filter(g => g.label.trim());
+      
+      // Validate each group has a label and at least one named option
+      for (const group of cleanGroups) {
+        if (!group.label.trim()) {
+          setVariantError('Each variant type must have a label (e.g. "Select Size").');
           setSubmitting(false);
           return;
         }
-        if (pots.length > 0 && !cleanPots.length) {
-          setVariantError('Please fill in names for the added pot types.');
-          setSubmitting(false);
-          return;
-        }
-        if (sizes.length > 0 && !cleanSizes.length) {
-          setVariantError('Please fill in names for the added sizes.');
-          setSubmitting(false);
-          return;
-        }
-
-        // Size-only mode: no colors/pots, just sizes
-        if (cleanSizes.length > 0 && !cleanColors.length && !cleanPots.length) {
-          variants = {
-            colors: [],
-            pot_types: [],
-            sizes: cleanSizes,
-            default_image: defaultImageKey,
-            image_map: {},
-            stock: Object.fromEntries(cleanSizes.map(s => [s.slug, Number(stockByKey[s.slug] || 0)])),
-          };
-        } else if (cleanColors.length && cleanPots.length) {
-          // Color + pot (+ optional size) combinations
-          let rowKeys: string[];
-          if (cleanSizes.length) {
-            rowKeys = cleanColors.flatMap(color =>
-              cleanPots.flatMap(pot =>
-                cleanSizes.map(size => `${color.slug}__${pot.slug}__${size.slug}`)
-              )
-            );
-          } else {
-            rowKeys = cleanColors.flatMap((color) => cleanPots.map((pot) => `${color.slug}__${pot.slug}`));
-          }
-          variants = {
-            colors: cleanColors,
-            pot_types: cleanPots,
-            ...(cleanSizes.length ? { sizes: cleanSizes } : {}),
-            default_image: defaultImageKey,
-            image_map: Object.fromEntries(rowKeys.map((key) => [key, imageKeyByCombo[key] || ''])),
-            stock: Object.fromEntries(rowKeys.map((key) => [key, Number(stockByKey[key] || 0)])),
-          };
-        } else if (cleanColors.length || cleanPots.length) {
-          setVariantError('To create combinations, please specify both at least one Color and one Pot Type. Otherwise, configure them in basic info.');
+        const cleanOpts = group.options.filter(o => o.name.trim());
+        if (cleanOpts.length === 0) {
+          setVariantError(`Variant type "${group.label}" must have at least one option.`);
           setSubmitting(false);
           return;
         }
       }
 
-      const totalStock = variants
-        ? Object.values(variants.stock).reduce((sum, qty) => sum + Number(qty || 0), 0)
+      let stockMap: Record<string, number> | null = null;
+
+      if (cleanGroups.length > 0 || defaultImageKey.trim()) {
+        // Build image_map: only include combos that actually have images
+        const imageMap: Record<string, string[]> = {};
+        Object.entries(comboImageKeys).forEach(([key, keys]) => {
+          if (keys.length > 0) imageMap[key] = keys;
+        });
+
+        // Build dense stock_map over every cartesian combo (comboStock state, falling
+        // back to the existing stock_map for overflow rows, else 0).
+        const existingStockMap = rawProduct?.variants?.stock_map;
+        stockMap = cleanGroups.length
+          ? buildDenseStockMap(cleanGroups, comboStock, existingStockMap)
+          : null;
+
+        // Determine which groups are in the pot price grid
+        const gridGroupIds = new Set(potPriceDraft?.group_ids ?? []);
+
+        // price_map is RETIRED, not rebuilt.
+        //
+        // There is no longer a second place to type a price: the grid above is the only
+        // pricing surface, so a per-combination table is a second source of truth that can
+        // only ever disagree with it. It is also the one entry in the resolver that overrides
+        // the grid outright, so a stale map left in the DB would silently keep winning while
+        // the admin believed the grid was live.
+        //
+        // `null` (not omission) is what clears the stored value — the column is part of a
+        // whole-object replace, so leaving the key out would preserve the old map.
+        //
+        // The safety net is that calculate_variant_price now always adds `product.price` as a
+        // floor. That matters here: this save also zeroes every per-option delta, so without
+        // the floor a product left with no grid would fall to the delta sum and be ₹0.
+
+        variants = {
+          variant_groups: cleanGroups.map(group => ({
+            id: group.id,
+            label: group.label.trim(),
+            always_show_options: group.always_show_options,
+            options: group.options
+              .filter(o => o.name.trim())
+              .map(o => ({
+                id: o.id,
+                name: o.name.trim(),
+                // Smart price handling: If this group is in the pot_price grid, force price to 0
+                // to prevent double-charging. Otherwise, save the entered price.
+                // The backend also excludes grid groups automatically, but clearing here prevents
+                // confusing validation errors.
+                price: gridGroupIds.has(group.id) ? 0 : (Number(o.price) || 0),
+                // Per-option images — used as colour fallback on product page
+                ...(o.image_keys.length ? { images: o.image_keys } : {}),
+                ...(o.color_hex.trim() ? { color_hex: o.color_hex.trim() } : {}),
+              })),
+          })),
+          ...(Object.keys(imageMap).length ? { image_map: imageMap } : {}),
+          ...(stockMap ? { stock_map: stockMap } : {}),
+          ...(cleanGroups.length ? { price_map: null } : {}),
+          ...(potPriceDraft && (potPriceDraft.group_ids?.length ?? 0) > 0
+            ? {
+                pot_price: {
+                  group_ids: potPriceDraft.group_ids,
+                  independent_group_ids: potPriceDraft.independent_group_ids ?? [],
+                  map: potPriceDraft.map ?? {},
+                },
+              }
+            : {}),
+          default_image: defaultImageKey || undefined,
+        };
+      }
+
+      // Total stock = sum of all per-combination stock rows (sum(stock_map.values())).
+      // Each combination is an independent pool, so total sellable units is the sum.
+      // If no variants, fall through to the form field value.
+      const totalStock = stockMap
+        ? Object.values(stockMap).reduce((sum, n) => sum + (Number(n) || 0), 0)
         : data.stock_qty;
 
-      const payload = {
+      type ProductPayload = {
+        name: string;
+        description: string;
+        price: number;
+        original_price: number | null;
+        stock_qty: number;
+        category_id: number;
+        additional_category_ids: number[];
+        display_section: string | null;
+        how_to_guide: string | null;
+        tags: string[];
+        care_tips: string[];
+        variants?: ProductVariants;
+      };
+      // The backend drops the primary from the extra set and rejects unknown ids, but
+      // sending a clean list keeps the request honest about what the admin picked.
+      const additionalCategoryIds = (data.additional_category_ids ?? []).filter(
+        (id) => id !== data.category_id
+      );
+      const payload: ProductPayload = {
         name: data.name,
         description: data.description || '',
         price: data.price,
         original_price: data.original_price || null,
         stock_qty: totalStock,
         category_id: data.category_id,
-        badge: data.badge || null,
-        sunlight: data.sunlight || null,
-        watering: data.watering || null,
+        additional_category_ids: additionalCategoryIds,
+        display_section: data.display_section || null,
         how_to_guide: data.how_to_guide?.trim() || null,
-        tags: data.tags?.map((t) => t.value).filter(Boolean) || [],
+        tags: data.tags?.map((t) => (t.value || '').trim()).filter(Boolean) || [],
         care_tips: data.care_tips?.map((t) => t.value).filter(Boolean) || [],
-        variants,
       };
+      if (variants !== null) {
+        payload.variants = variants;
+      }
+
+      // Drop empty rows and trim names; keep product_id only when it is a real
+      // catalog id (custom items carry null). Used by both save paths.
+      const cleanComboItems = comboItems
+        .map((item) => ({ name: item.name.trim(), product_id: item.product_id ?? null }))
+        .filter((item) => item.name);
 
       if (editProduct) {
         // Upload any newly selected files first
         const uploadedUrls: string[] = [];
         for (const file of uploadedFiles) {
+          const squared = await cropToSquare(file);
           const fd = new FormData();
-          fd.append('image', file);
+          fd.append('image', squared);
           fd.append('product_id', String(editProduct.id));
           const { data: uploadResult } = await api.post<{ url: string }>('/products/upload-image', fd);
           uploadedUrls.push(uploadResult.url);
@@ -380,9 +943,48 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         const updatePayload = {
           ...payload,
           images: finalImages,
+          promise_banner_image: promiseBannerKey || null,
+          why_plantoga_banner_image: whyPlantogaBannerKey || null,
+          care_card_image: careCardImageKey || null,
+          faqs: faqItems.filter(f => f.question.trim() && f.answer.trim()),
+          related_product_ids: relatedProductIds.length > 0 ? relatedProductIds : null,
+          is_bestseller: isBestseller,
+          is_combo: isCombo,
+          combo_description: comboDescription.trim() || null,
+          // Always sent so clearing every row persists as an empty list rather
+          // than retaining the previous contents.
+          combo_items: cleanComboItems.length > 0 ? cleanComboItems : null,
+          // Always sent, explicitly null when the toggle is off. The edit form
+          // owns both fields, so "off" has to be a deliberate write rather than
+          // an omission — omitting would preserve an existing override.
+          bestseller_label_override: savedBestsellerLabelOverride,
+          bestseller_color_override: savedBestsellerColorOverride,
         };
         const { data: updatedProduct } = await api.put<Product>(`/products/${editProduct.id}`, updatePayload);
         toast.success('Product updated successfully!');
+
+        // Replace = delete the previous default image file (admin request):
+        // only when the key actually changed, the old key is a managed
+        // storage key (not a remote URL), and nothing else still references it
+        // (combo image_map, option images, product gallery).
+        const oldDefaultKey = rawProduct?.variants?.default_image;
+        if (
+          oldDefaultKey &&
+          oldDefaultKey !== defaultImageKey &&
+          !oldDefaultKey.startsWith('http')
+        ) {
+          const refs = new Set<string>();
+          const addRef = (x: unknown): void => {
+            if (typeof x === 'string') { if (x) refs.add(x); }
+            else if (Array.isArray(x)) x.forEach(addRef);
+            else if (x && typeof x === 'object') Object.values(x).forEach(addRef);
+          };
+          addRef(rawProduct?.variants);
+          addRef(rawProduct?.images);
+          if (!refs.has(oldDefaultKey)) {
+            void api.delete(`/products/image/${oldDefaultKey}`).catch(() => {});
+          }
+        }
 
         // Update the product detail cache immediately
         qc.setQueryData(['product', updatedProduct.slug], updatedProduct);
@@ -400,22 +1002,37 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
         // Still invalidate so stale data is refreshed in the background
         qc.invalidateQueries({ queryKey: ['products'] });
         qc.invalidateQueries({ queryKey: ['product', updatedProduct.slug] });
+        // Invalidate the raw admin cache so the next edit re-fetches fresh image keys.
+        qc.invalidateQueries({ queryKey: ['product-raw', editProduct.id] });
       } else {
         // New creation uses FormData to support file uploads
         const fd = new FormData();
         fd.append('name', payload.name);
         fd.append('price', String(payload.price));
         fd.append('category_id', String(payload.category_id));
+        fd.append('additional_category_ids', JSON.stringify(payload.additional_category_ids));
         fd.append('description', payload.description);
         if (payload.original_price) fd.append('original_price', String(payload.original_price));
         fd.append('stock_qty', String(payload.stock_qty));
         fd.append('tags', JSON.stringify(payload.tags));
         fd.append('care_tips', JSON.stringify(payload.care_tips));
-        if (payload.badge) fd.append('badge', payload.badge);
-        if (payload.sunlight) fd.append('sunlight', payload.sunlight);
-        if (payload.watering) fd.append('watering', payload.watering);
+        if (payload.display_section) fd.append('display_section', payload.display_section);
         if (payload.how_to_guide) fd.append('how_to_guide', payload.how_to_guide);
         if (payload.variants) fd.append('variants', JSON.stringify(payload.variants));
+        if (promiseBannerKey) fd.append('promise_banner_image', promiseBannerKey);
+        if (whyPlantogaBannerKey) fd.append('why_plantoga_banner_image', whyPlantogaBannerKey);
+        if (careCardImageKey) fd.append('care_card_image', careCardImageKey);
+        const cleanFaqs = faqItems.filter(f => f.question.trim() && f.answer.trim());
+        if (cleanFaqs.length) fd.append('faqs', JSON.stringify(cleanFaqs));
+        if (relatedProductIds.length) fd.append('related_product_ids', JSON.stringify(relatedProductIds));
+        fd.append('is_bestseller', String(isBestseller));
+        fd.append('is_combo', String(isCombo));
+        if (comboDescription.trim()) fd.append('combo_description', comboDescription.trim());
+        if (cleanComboItems.length) fd.append('combo_items', JSON.stringify(cleanComboItems));
+        // Only appended when set, so "no override" never travels as an empty
+        // string that would have to be re-interpreted server-side.
+        if (savedBestsellerLabelOverride) fd.append('bestseller_label_override', savedBestsellerLabelOverride);
+        if (savedBestsellerColorOverride) fd.append('bestseller_color_override', savedBestsellerColorOverride);
         fd.append('image_urls', JSON.stringify(productImages));
 
         // Add file uploads
@@ -430,99 +1047,156 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
       setUploadedFiles([]);
       setFilePreviews([]);
       onClose();
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to save product');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to save product'));
     } finally {
       setSubmitting(false);
     }
   }
 
   const inputClass = "w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
-  
-  const activeColors = colors.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), slug: slugify(c.name) }));
-  const activePots = pots.filter(p => p.name.trim()).map(p => ({ name: p.name.trim(), slug: slugify(p.name) }));
-  const activeSizes = sizes.filter(s => s.name.trim()).map(s => ({ name: s.name.trim(), slug: slugify(s.name) }));
 
-  async function handlePotImageUpload(index: number, file?: File) {
+  // hasVariants: true if any groups exist or default image is set
+  const hasVariants = variantGroups.length > 0 || defaultImageKey.trim().length > 0;
+
+  async function handleOptionImageUpload(groupId: string, optionId: string, file?: File) {
     if (!file) return;
-    setUploadingPotImage(index);
+    setUploadingOptionImage(optionId);
     try {
+      const squared = await cropToSquare(file);
       const fd = new FormData();
-      fd.append('image', file);
+      fd.append('image', squared);
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/variant-image', fd);
-      // key → stored in payload; url → display only
-      setPots(current => current.map((pot, i) => i === index ? { ...pot, image_key: data.key, image_url: data.url } : pot));
-      toast.success('Pot image uploaded');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload pot image');
+      setVariantGroups(prev => prev.map(g =>
+        g.id !== groupId ? g : {
+          ...g,
+          options: g.options.map(o =>
+            o.id !== optionId ? o : {
+              ...o,
+              image_keys: [...o.image_keys, data.key],
+              image_urls: [...o.image_urls, data.url],
+            }
+          ),
+        }
+      ));
+      toast.success('Image uploaded');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload image'));
     } finally {
-      setUploadingPotImage(null);
+      setUploadingOptionImage(null);
     }
+  }
+
+  // ─── Combo image upload / remove ────────────────────────────────────────
+  async function handleComboImageUpload(comboKey: string, file?: File) {
+    if (!file) return;
+    const current = comboImageKeys[comboKey] || [];
+    if (current.length >= 8) { toast.error('Limit of 8 images per combination'); return; }
+    setUploadingComboKey(comboKey);
+    try {
+      const squared = await cropToSquare(file);
+      const fd = new FormData();
+      fd.append('image', squared);
+      if (editProduct?.id) fd.append('product_id', String(editProduct.id));
+      const { data } = await api.post<{ key: string; url: string }>('/products/variant-image', fd);
+      setComboImageKeys(prev => ({ ...prev, [comboKey]: [...(prev[comboKey] || []), data.key] }));
+      setComboImageUrls(prev => ({ ...prev, [comboKey]: [...(prev[comboKey] || []), data.url] }));
+      toast.success('Combination image uploaded');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload combination image'));
+    } finally {
+      setUploadingComboKey(null);
+    }
+  }
+
+  function handleRemoveComboImage(comboKey: string, index: number) {
+    setComboImageKeys(prev => ({ ...prev, [comboKey]: (prev[comboKey] || []).filter((_, i) => i !== index) }));
+    setComboImageUrls(prev => ({ ...prev, [comboKey]: (prev[comboKey] || []).filter((_, i) => i !== index) }));
   }
 
   async function handleDefaultImageUpload(file?: File) {
     if (!file) return;
     setUploadingDefaultImage(true);
     try {
+      const squared = await cropToSquare(file);
       const fd = new FormData();
-      fd.append('image', file);
+      fd.append('image', squared);
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/upload-image', fd);
       // key → stored in payload; url → display only
       setDefaultImageKey(data.key);
       setDefaultImageUrl(data.url);
       toast.success('Default image uploaded');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload default image');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload default image'));
     } finally {
       setUploadingDefaultImage(false);
     }
   }
 
-  async function handleComboImageUpload(comboKey: string, file?: File) {
+  async function handlePromiseBannerUpload(file?: File) {
     if (!file) return;
-    setUploadingComboImage(comboKey);
+    setUploadingPromiseBanner(true);
     try {
       const fd = new FormData();
       fd.append('image', file);
       if (editProduct?.id) fd.append('product_id', String(editProduct.id));
       const { data } = await api.post<{ key: string; url: string }>('/products/upload-image', fd);
-      // key → stored in payload; url → display only
-      setImageKeyByCombo(prev => ({ ...prev, [comboKey]: data.key }));
-      setImageUrlByCombo(prev => ({ ...prev, [comboKey]: data.url }));
-      toast.success('Combination image uploaded');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to upload combination image');
+      setPromiseBannerKey(data.key);
+      setPromiseBannerUrl(data.url);
+      toast.success('Promise banner uploaded');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload banner image'));
     } finally {
-      setUploadingComboImage(null);
+      setUploadingPromiseBanner(false);
     }
   }
-  
-  // Build variant rows for the stock/image matrix
-  let variantRows: { key: string; label: string }[] = [];
-  if (activeColors.length && activePots.length && activeSizes.length) {
-    // 3D: color + pot + size
-    variantRows = activeColors.flatMap(color =>
-      activePots.flatMap(pot =>
-        activeSizes.map(size => ({
-          key: `${color.slug}__${pot.slug}__${size.slug}`,
-          label: `${color.name} / ${pot.name} / ${size.name}`,
-        }))
-      )
-    );
-  } else if (activeColors.length && activePots.length) {
-    // 2D: color + pot
-    variantRows = activeColors.flatMap((color) => activePots.map((pot) => ({
-      key: `${color.slug}__${pot.slug}`,
-      label: `${color.name} / ${pot.name}`,
-    })));
-  } else if (activeSizes.length && !activeColors.length && !activePots.length) {
-    // Size-only
-    variantRows = activeSizes.map(size => ({ key: size.slug, label: size.name }));
+
+  async function handleWhyPlantogaBannerUpload(file?: File) {
+    if (!file) return;
+    setUploadingWhyPlantogaBanner(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      if (editProduct?.id) fd.append('product_id', String(editProduct.id));
+      const { data } = await api.post<{ key: string; url: string }>('/products/upload-image', fd);
+      setWhyPlantogaBannerKey(data.key);
+      setWhyPlantogaBannerUrl(data.url);
+      toast.success('Why Plantoga banner uploaded');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload banner image'));
+    } finally {
+      setUploadingWhyPlantogaBanner(false);
+    }
   }
 
-  const hasVariants = colors.length > 0 || pots.length > 0 || sizes.length > 0 || defaultImageKey.trim().length > 0;
+  async function handleCareCardImageUpload(file?: File) {
+    if (!file) return;
+    // Open crop modal first — upload happens after cropping
+    const src = URL.createObjectURL(file);
+    setCareCardCropSrc(src);
+    setCareCardCropOpen(true);
+  }
+
+  async function uploadCroppedCareCard(croppedFile: File) {
+    setUploadingCareCardImage(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', croppedFile);
+      if (editProduct?.id) fd.append('product_id', String(editProduct.id));
+      const { data } = await api.post<{ key: string; url: string }>('/products/upload-image', fd);
+      setCareCardImageKey(data.key);
+      setCareCardImageUrl(data.url);
+      toast.success('Care card image uploaded');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Failed to upload care card image'));
+    } finally {
+      setUploadingCareCardImage(false);
+    }
+  }
+
+  // ─── end of handlers ──────────────────────────────────────────────────────
 
   if (isEdit && (isLoadingProduct || !formInitialized)) {
     return (
@@ -592,13 +1266,307 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     {errors.category_id && <p className="text-xs text-red-500 mt-1">{errors.category_id.message}</p>}
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Product Tag / Badge</label>
-                    <input
-                      {...register('badge')}
-                      placeholder="e.g., Bestseller, New Arrival, Sale"
-                      className={inputClass}
-                    />
-                    <p className="text-[11px] text-gray-400 mt-1">A colorful label shown over the product image.</p>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Display Section</label>
+                    <select {...register('display_section')} className={inputClass}>
+                      <option value="">None (Hidden from sections)</option>
+                      {assignableSections.map((section) => (
+                        <option key={section.id} value={section.key}>
+                          {section.name}
+                        </option>
+                      ))}
+                      {selectedDisplaySection &&
+                        !assignableSections.some(
+                          (section) => section.key === selectedDisplaySection,
+                        ) && (
+                          <option value={selectedDisplaySection}>
+                            {hiddenSectionName ?? selectedDisplaySection} (hidden)
+                          </option>
+                        )}
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Where this product appears on the home page. Hidden sections keep existing
+                      assignments but are not offered for new ones.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                    Also show in
+                  </label>
+                  {categories?.length ? (
+                    <div className="rounded-lg border border-gray-200 p-2 space-y-2">
+                      {categories.map((parent) => {
+                        const children = parent.children ?? [];
+                        const isCollapsed = collapsedCatParents[parent.id] ?? false;
+                        // A collapsed parent would otherwise hide a ticked subcategory,
+                        // so surface the count on the toggle.
+                        const selectedChildCount = children.filter((child) =>
+                          extraCategorySet.has(child.id)
+                        ).length;
+                        return (
+                          <div key={parent.id}>
+                            <div className="flex items-start gap-1">
+                              <div className="min-w-0 flex-1">
+                                <CategoryPill cat={parent} />
+                              </div>
+                              {children.length > 0 && (
+                                <div className="flex shrink-0 items-center gap-1">
+                                  {isCollapsed && selectedChildCount > 0 && (
+                                    <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-medium leading-none text-white">
+                                      {selectedChildCount}
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setCollapsedCatParents((prev) => ({
+                                        ...prev,
+                                        [parent.id]: !isCollapsed,
+                                      }))
+                                    }
+                                    aria-expanded={!isCollapsed}
+                                    aria-label={`${isCollapsed ? 'Show' : 'Hide'} subcategories of ${parent.name}`}
+                                    className="mt-1 rounded-md p-1.5 text-gray-400 transition hover:bg-gray-50 hover:text-gray-600"
+                                  >
+                                    <ChevronDown
+                                      className={`h-3.5 w-3.5 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+                                    />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            {!isCollapsed && children.length > 0 && (
+                              <div className="ml-3 mt-1.5 flex flex-wrap gap-1.5 border-l-2 border-gray-100 pl-3">
+                                {children.map((child) => (
+                                  <CategoryPill key={child.id} cat={child} isChild />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-gray-400">No categories created yet.</p>
+                  )}
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    A product can live in several categories. Shoppers filtering by any of them
+                    will find it. The primary category above is always included and cannot be
+                    picked twice.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">Product Tags</label>
+
+                  {/* Catalog tags (coloured pills shown under the product) */}
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTagDropdownOpen((v) => !v);
+                            setShowNewTagForm(false);
+                          }}
+                          className="flex items-center gap-2 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        >
+                          <span className="whitespace-nowrap text-gray-500">Choose saved tag…</span>
+                          <ChevronDown
+                            size={14}
+                            className={`text-gray-400 transition-transform ${tagDropdownOpen ? 'rotate-180' : ''}`}
+                          />
+                        </button>
+                        {tagDropdownOpen && (
+                          <div className="absolute z-20 mt-1 w-56 max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg p-1">
+                            {availableTags.length === 0 ? (
+                              <p className="px-2 py-2 text-xs text-gray-400">No saved tags yet — create one below.</p>
+                            ) : (
+                              availableTags.map((t) => (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  onClick={() => {
+                                    addTagByName(t.name);
+                                    setTagDropdownOpen(false);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-primary-light/10 text-left"
+                                >
+                                  <span
+                                    className="shrink-0 w-3.5 h-3.5 rounded-full border border-gray-200 block"
+                                    style={{ backgroundColor: t.color || '#E5E7EB' }}
+                                  />
+                                  <span className="text-xs text-gray-700">{t.name}</span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNewTagForm((v) => !v);
+                          setTagDropdownOpen(false);
+                        }}
+                        className="px-2.5 py-1.5 text-xs text-gray-600 font-medium hover:bg-gray-100 border border-gray-200 rounded transition"
+                      >
+                        {showNewTagForm ? 'Hide new tag' : '+ New tag'}
+                      </button>
+                    </div>
+
+                    {/* Create a new tag (saved to the table automatically) */}
+                    {showNewTagForm && (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2 bg-primary-light/5 border border-primary/10 rounded-lg p-2.5">
+                          <input
+                            value={newTagName}
+                            onChange={(e) => setNewTagName(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && createNewTag()}
+                            placeholder="Type a tag name"
+                            autoFocus
+                            className="w-40 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          />
+                          {/* Full-width swatch: the native picker anchors to this wide box, so it never goes off-screen */}
+                          <label
+                            className="relative flex-1 min-w-[160px] h-8 rounded-lg border border-gray-200 overflow-hidden cursor-pointer block"
+                            title="Tag colour (used everywhere in the catalog)"
+                          >
+                            <span
+                              className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white/90"
+                              style={{ backgroundColor: newTagColor, textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
+                            >
+                              colour
+                            </span>
+                            <input
+                              type="color"
+                              value={newTagColor}
+                              onChange={(e) => setNewTagColor(e.target.value)}
+                              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={createNewTag}
+                            disabled={upsertTag.isPending || !newTagName.trim()}
+                            className="px-2.5 py-1.5 text-xs bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
+                          >
+                            {upsertTag.isPending
+                              ? 'Saving…'
+                              : matchingSavedTag
+                                ? 'Update tag'
+                                : 'Add tag'}
+                          </button>
+                        </div>
+
+                        {matchingSavedTag && (
+                          <p className="flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                            <span
+                              className="shrink-0 w-3 h-3 rounded-full border border-gray-300"
+                              style={{ backgroundColor: matchingSavedTag.color || '#E5E7EB' }}
+                            />
+                            <span>
+                              “{matchingSavedTag.name}” already exists — saving will change its
+                              colour, not create a second tag.
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Saved tag manager: recolour or delete any tag */}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setShowManageTags((v) => !v)}
+                        className="px-2.5 py-1.5 text-xs text-gray-600 font-medium hover:bg-gray-100 border border-gray-200 rounded transition"
+                      >
+                        {showManageTags ? 'Hide saved tags' : `Manage saved tags${allTags.length ? ` (${allTags.length})` : ''}`}
+                      </button>
+
+                      {showManageTags && (
+                        <div className="mt-2 space-y-1.5 border border-gray-200 rounded-lg bg-white p-2">
+                          {allTags.length === 0 ? (
+                            <p className="px-2 py-2 text-xs text-gray-400">
+                              No saved tags yet — create one above.
+                            </p>
+                          ) : (
+                            allTags.map((t) => (
+                              <div
+                                key={t.id}
+                                className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50"
+                              >
+                                <label
+                                  className="relative shrink-0 w-8 h-8 rounded-lg border border-gray-200 overflow-hidden cursor-pointer block"
+                                  title={`Change colour of "${t.name}"`}
+                                >
+                                  <span
+                                    className="absolute inset-0"
+                                    style={{ backgroundColor: t.color || '#E5E7EB' }}
+                                  />
+                                  <input
+                                    type="color"
+                                    value={t.color || '#E5E7EB'}
+                                    onChange={(e) => recolorTag(t, e.target.value)}
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                  />
+                                </label>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-medium text-gray-700 truncate">
+                                    {t.name}
+                                  </p>
+                                  <p className="text-[10px] text-gray-400 truncate">
+                                    {t.color || 'no colour'} · {t.slug}
+                                    {!t.is_active && ' · hidden'}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteSavedTag(t)}
+                                  disabled={deleteTag.isPending}
+                                  className="shrink-0 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                  title={`Delete "${t.name}"`}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Added tags appear as buttons below, one after another */}
+                    <div className="flex flex-wrap gap-2">
+                      {tagFields.map((f, i) => {
+                        // Live colour preview from the global tag definition (slugified key)
+                        const previewColor =
+                          globalTagColors[toTagKey(watch(`tags.${i}.value`) ?? '')] || '#E5E7EB';
+                        return (
+                          <span key={f.id} className="inline-flex items-center gap-1.5 border rounded-full bg-gray-50 px-2.5 py-1">
+                            <span
+                              className="shrink-0 w-3.5 h-3.5 rounded-full border border-gray-200 block"
+                              style={{ backgroundColor: previewColor }}
+                              title="Colour from the global tag"
+                            />
+                            <span className="text-xs text-gray-700">{f.value}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeTag(i)}
+                              className="text-red-400 hover:text-red-600"
+                              title="Remove tag"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                      {tagFields.length === 0 && (
+                        <p className="text-xs text-gray-400 italic py-2">No tags added yet.</p>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-400">Pick from saved tags, or create a new one with a colour — it saves to the tags table and appears under this product.</p>
                   </div>
                 </div>
 
@@ -610,7 +1578,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     placeholder="Provide details about the plant, its beauty, growth habits, etc."
                     className={inputClass}
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">HTML/Markdown and paragraphs are supported.</p>
+                  <p className="text-[11px] text-gray-400 mt-1">Use blank lines for paragraphs and start lines with - for bullet points.</p>
                 </div>
               </div>
             )}
@@ -685,24 +1653,34 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             </button>
             {openSections.details && (
               <div className="p-5 border-t border-gray-100 space-y-4 bg-white">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Sunlight Requirement</label>
-                    <input
-                      {...register('sunlight')}
-                      placeholder="e.g., Bright indirect light, partial shade"
-                      className={inputClass}
-                    />
-                    <p className="text-[11px] text-gray-400 mt-1">Where to place the plant for best health.</p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Watering Cycle</label>
-                    <input
-                      {...register('watering')}
-                      placeholder="e.g., Once a week, when soil is dry"
-                      className={inputClass}
-                    />
-                    <p className="text-[11px] text-gray-400 mt-1">How often the plant needs watering.</p>
+                {/* Care Card Image */}
+                <div className="border-t pt-4 space-y-2">
+                  <label className="text-xs font-semibold text-gray-700 block">Care Card Image</label>
+                  <p className="text-[10px] text-gray-400">Optional wide image displayed above the care card tiles. Crops to 3:1.</p>
+                  <div className="flex gap-3 items-center">
+                    <div className="h-16 w-48 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
+                      {careCardImageUrl
+                        ? <img src={careCardImageUrl} alt="Care card" className="h-full w-full object-cover" />
+                        : <ImageIcon size={22} className="text-gray-300" />}
+                    </div>
+                    <div className="flex-1">
+                      <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingCareCardImage ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <Upload size={14} />
+                        {uploadingCareCardImage ? 'Uploading…' : careCardImageKey ? 'Change image' : 'Upload image'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => { void handleCareCardImageUpload(e.target.files?.[0]); e.target.value = ''; }}
+                        />
+                      </label>
+                      {careCardImageKey && (
+                        <button type="button" onClick={() => { setCareCardImageKey(''); setCareCardImageUrl(''); }}
+                          className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium">
+                          Remove image
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -715,7 +1693,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary resize-y"
                   />
                   <p className="text-[11px] text-gray-400 mt-1">
-                    Shown as a green card on the product page. Leave blank to auto-build from sunlight, watering, and care tips.
+                    Shown as a green card on the product page. Leave blank to auto-build from care tips.
                   </p>
                 </div>
 
@@ -847,11 +1825,137 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                     <p className="text-xs text-gray-400 italic text-center py-4 border rounded-xl bg-gray-50/50 mt-4">No images added yet.</p>
                   )}
                 </div>
+
+                {/* Plantoga Promise Banner */}
+                <div className="border-t pt-4 space-y-2">
+                  <label className="text-xs font-semibold text-gray-700 block">Plantoga Promise Banner</label>
+                  <p className="text-[10px] text-gray-400">Replaces the four trust cards when set.</p>
+                  <div className="flex gap-3 items-center">
+                    <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
+                      {promiseBannerUrl
+                        ? <img src={promiseBannerUrl} alt="Promise banner" className="h-full w-full object-cover" />
+                        : <ImageIcon size={22} className="text-gray-300" />}
+                    </div>
+                    <div className="flex-1">
+                      <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingPromiseBanner ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <Upload size={14} />
+                        {uploadingPromiseBanner ? 'Uploading…' : promiseBannerKey ? 'Change banner' : 'Upload banner'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => { void handlePromiseBannerUpload(e.target.files?.[0]); e.target.value = ''; }}
+                        />
+                      </label>
+                      {promiseBannerKey && (
+                        <button type="button" onClick={() => { setPromiseBannerKey(''); setPromiseBannerUrl(''); }}
+                          className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium">
+                          Remove banner
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Why Plantoga Banner */}
+                <div className="border-t pt-4 space-y-2">
+                  <label className="text-xs font-semibold text-gray-700 block">Why Plantoga Banner</label>
+                  <p className="text-[10px] text-gray-400">Replaces the "Plantoga vs the rest" comparison table when set.</p>
+                  <div className="flex gap-3 items-center">
+                    <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
+                      {whyPlantogaBannerUrl
+                        ? <img src={whyPlantogaBannerUrl} alt="Why Plantoga banner" className="h-full w-full object-cover" />
+                        : <ImageIcon size={22} className="text-gray-300" />}
+                    </div>
+                    <div className="flex-1">
+                      <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingWhyPlantogaBanner ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <Upload size={14} />
+                        {uploadingWhyPlantogaBanner ? 'Uploading…' : whyPlantogaBannerKey ? 'Change banner' : 'Upload banner'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => { void handleWhyPlantogaBannerUpload(e.target.files?.[0]); e.target.value = ''; }}
+                        />
+                      </label>
+                      {whyPlantogaBannerKey && (
+                        <button type="button" onClick={() => { setWhyPlantogaBannerKey(''); setWhyPlantogaBannerUrl(''); }}
+                          className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium">
+                          Remove banner
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Section 5: Variants */}
+          {/* Section 5: FAQs */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleSection('faqs')}
+              className="w-full flex items-center justify-between px-5 py-4 font-semibold text-sm text-gray-800 hover:bg-gray-50 text-left"
+            >
+              <span className="flex items-center gap-2">❓ <span>FAQs</span></span>
+              {openSections.faqs ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {openSections.faqs && (
+              <div className="p-5 border-t border-gray-100 space-y-4 bg-white">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block">Product FAQs</label>
+                      <p className="text-[11px] text-gray-400">Questions & answers shown on the product page. Leave empty to show default FAQs.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFaqItems(prev => [...prev, { ...DEFAULT_FAQ }])}
+                      className="px-2.5 py-1 text-xs text-primary font-medium hover:bg-primary-light/10 border border-primary/20 rounded transition"
+                    >
+                      + Add FAQ
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {faqItems.map((item, index) => (
+                      <div key={index} className="rounded-xl border border-gray-200 p-3 bg-gray-50/40 space-y-2">
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 space-y-1.5">
+                            <input
+                              value={item.question}
+                              onChange={(e) => setFaqItems(prev => prev.map((f, i) => i === index ? { ...f, question: e.target.value } : f))}
+                              placeholder="Question (e.g. How do I care for my plant?)"
+                              className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                            <textarea
+                              value={item.answer}
+                              onChange={(e) => setFaqItems(prev => prev.map((f, i) => i === index ? { ...f, answer: e.target.value } : f))}
+                              placeholder="Answer"
+                              rows={2}
+                              className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary resize-y"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setFaqItems(prev => prev.filter((_, i) => i !== index))}
+                            className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0 mt-0.5"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {faqItems.length === 0 && (
+                      <p className="text-xs text-gray-400 italic text-center py-2">No FAQs added yet. Default FAQs will be shown on the product page.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 6: Variants */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <button
               type="button"
@@ -864,7 +1968,7 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             {openSections.variants && (
               <div className="p-5 border-t border-gray-100 space-y-5 bg-white">
                 <div className="rounded-lg bg-green-50 border border-green-100 p-3 text-xs text-green-800 leading-relaxed">
-                  <strong>How variants work:</strong> Add different colors (e.g. Terracotta, Teal) and pot types (e.g. Ceramic, Plastic). The system automatically combines them so you can manage stock and custom images for each!
+                  <strong>How variants work:</strong> Click &ldquo;+ Add Variant Type&rdquo;, type a label (e.g. &ldquo;Select Size&rdquo;, &ldquo;Select Packet Size&rdquo;), then add options with name and price. Stock is set per combination in the &ldquo;Variant Combinations&rdquo; table below — the only stock field that matters. Admin controls all labels — no category rules.
                 </div>
 
                 {variantError && (
@@ -874,219 +1978,422 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                   </div>
                 )}
 
-                {/* Colors Setup */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-semibold text-gray-700 block">1. Color Variants</span>
-                      <span className="text-[10px] text-gray-400">Add the available pot/plant colors</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setColors([...colors, { name: '', hex: '#2D6A4F' }])}
-                      className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
-                    >
-                      + Add Color
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {colors.map((color, index) => (
-                      <div key={index} className="flex gap-2 items-center">
+                {/* Dynamic Variant Groups */}
+                <div className="space-y-3">
+                  {variantGroups.map((group) => (
+                    <div key={group.id} className="rounded-xl border border-gray-200 bg-gray-50/40 overflow-hidden">
+                      {/* Group header: label + remove */}
+                      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
                         <input
-                          value={color.name}
-                          onChange={(e) => setColors(colors.map((c, i) => i === index ? { ...c, name: e.target.value } : c))}
-                          placeholder="Color Name (e.g., Terracotta)"
-                          className={`${inputClass} flex-1`}
+                          value={group.label}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setVariantGroups(prev => prev.map(g => g.id === group.id ? { ...g, label: v } : g));
+                          }}
+                          placeholder='Variant label shown to customer (e.g. "Select Size", "Select Packet Size", "Select Colour")'
+                          className={`${inputClass} flex-1 bg-white font-medium`}
                         />
-                        <div className="flex items-center gap-1 shrink-0">
-                          <input
-                            type="color"
-                            value={color.hex}
-                            onChange={(e) => setColors(colors.map((c, i) => i === index ? { ...c, hex: e.target.value } : c))}
-                            className="h-9 w-9 border border-gray-200 rounded-lg cursor-pointer bg-transparent p-0"
-                          />
-                        </div>
                         <button
                           type="button"
-                          onClick={() => setColors(colors.filter((_, i) => i !== index))}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
+                          onClick={() => setVariantGroups(prev => prev.filter(g => g.id !== group.id))}
+                          className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0"
+                          aria-label="Remove variant type"
                         >
                           <Trash2 size={15} />
                         </button>
                       </div>
-                    ))}
-                    {colors.length === 0 && (
-                      <p className="text-xs text-gray-400 italic text-center py-1">No custom colors.</p>
-                    )}
-                  </div>
-                </div>
 
-                {/* Pot Types Setup */}
-                <div className="space-y-2 border-t pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-semibold text-gray-700 block">2. Pot Types</span>
-                      <span className="text-[10px] text-gray-400">Add each pot's name, price, and customer-facing image</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setPots([...pots, { name: '', price_modifier: 0, image_key: '', image_url: '' }])}
-                      className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
-                    >
-                      + Add Pot Option
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {pots.map((pot, index) => (
-                      <div key={index} className="rounded-xl border border-gray-200 p-3 space-y-3 bg-gray-50/40">
-                        <div className="flex gap-2 items-center">
+                      {/* Always-show-options toggle */}
+                      <div className="flex items-center gap-2 px-3 pb-2">
+                        <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
                           <input
-                            value={pot.name}
-                            onChange={(e) => setPots(pots.map((p, i) => i === index ? { ...p, name: e.target.value } : p))}
-                            placeholder="Pot Type (e.g. Ceramic pot)"
-                            className={`${inputClass} flex-1 bg-white`}
+                            type="checkbox"
+                            checked={group.always_show_options}
+                            onChange={(e) => {
+                              const v = e.target.checked;
+                              setVariantGroups(prev => prev.map(g => g.id === group.id ? { ...g, always_show_options: v } : g));
+                            }}
+                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                           />
-                          <div className="flex items-center gap-1.5 shrink-0 w-32">
-                            <span className="text-xs text-gray-500">₹</span>
-                            <input
-                              type="number"
-                              value={pot.price_modifier}
-                              onChange={(e) => setPots(pots.map((p, i) => i === index ? { ...p, price_modifier: Number(e.target.value) } : p))}
-                              placeholder="Price +/-"
-                              className={`${inputClass} bg-white`}
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setPots(pots.filter((_, i) => i !== index))}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
-                            aria-label={`Remove ${pot.name || 'pot'} option`}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                        <div className="flex gap-3 items-center">
-                          <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
-                            {pot.image_url ? (
-                              <img src={pot.image_url} alt={`${pot.name || 'Pot'} preview`} className="h-full w-full object-contain" />
-                            ) : (
-                              <ImageIcon size={22} className="text-gray-300" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingPotImage === index ? 'opacity-60 pointer-events-none' : ''}`}>
-                              <Upload size={14} />
-                              {uploadingPotImage === index ? 'Uploading…' : pot.image_key ? 'Change pot image' : 'Upload pot image'}
-                              <input
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                className="hidden"
-                                onChange={(e) => {
-                                  void handlePotImageUpload(index, e.target.files?.[0]);
-                                  e.target.value = '';
-                                }}
-                              />
-                            </label>
-                            {pot.image_key && (
+                          <span>
+                            Always show every option (ignores stock)
+                            <span className="text-gray-400 font-normal">
+                              &nbsp;— e.g. always display Small / Medium / Large
+                            </span>
+                          </span>
+                        </label>
+                        {/size/i.test(group.label) && !group.always_show_options && (
+                          <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 rounded-full px-2 py-0.5">
+                            Tip: this label looks like a size group — tick the box so sizes always appear
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Options */}
+                      <div className="px-3 pb-3 space-y-2">
+                        {group.options.map((opt) => {
+                          const isColourGroup = /colou?r/i.test(group.label);
+                          return (
+                          <div key={opt.id} className="rounded-lg border border-gray-200 bg-white p-2.5 space-y-2">
+                            {/* Row 1: image/color + name + remove */}
+                            <div className="flex gap-2 items-center">
+                              {isColourGroup ? (
+                                /* Color swatch picker */
+                                <label
+                                  className="relative h-10 w-10 rounded-full border-2 border-gray-300 overflow-hidden shrink-0 cursor-pointer hover:border-primary/60 transition shadow-sm"
+                                  title={opt.color_hex ? `Colour: ${opt.color_hex}` : 'Click to pick a colour'}
+                                  style={{ backgroundColor: opt.color_hex || '#e5e7eb' }}
+                                >
+                                  <input
+                                    type="color"
+                                    value={opt.color_hex || '#000000'}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                        ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, color_hex: v }),
+                                      }));
+                                    }}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  />
+                                </label>
+                              ) : (
+                                /* Clickable image thumbnail / upload trigger — shows first image */
+                                <label
+                                  className={`relative h-10 w-10 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 shrink-0 flex items-center justify-center cursor-pointer hover:border-primary/60 transition group ${uploadingOptionImage === opt.id ? 'opacity-60 pointer-events-none' : ''}`}
+                                  title={opt.image_urls[0] ? 'Add more images below' : 'Upload image'}
+                                >
+                                  {uploadingOptionImage === opt.id ? (
+                                    <Loader2 size={14} className="animate-spin text-primary" />
+                                  ) : opt.image_urls[0] ? (
+                                    <>
+                                      <img src={opt.image_urls[0]} alt={opt.name || 'option'} className="h-full w-full object-cover" />
+                                      <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center">{opt.image_urls.length}</span>
+                                    </>
+                                  ) : (
+                                    <div className="flex flex-col items-center gap-0.5 text-primary/60">
+                                      <Upload size={13} />
+                                      <span className="text-[8px] font-medium leading-none">Image</span>
+                                    </div>
+                                  )}
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    className="hidden"
+                                    onChange={(e) => { void handleOptionImageUpload(group.id, opt.id, e.target.files?.[0]); e.target.value = ''; }}
+                                  />
+                                </label>
+                              )}
+
+                              {/* Name */}
+                              <div className="flex-1 flex flex-col gap-1">
+                                <input
+                                  value={opt.name}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                      ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, name: v }),
+                                    }));
+                                  }}
+                                  placeholder={isColourGroup ? 'Colour name (e.g. "Forest Green")' : 'Name (e.g. "4 Inch", "100 gm")'}
+                                  className={`${inputClass} flex-1`}
+                                />
+                                {isColourGroup && (
+                                  <span className="text-[10px] text-gray-400 pl-1">
+                                    {opt.color_hex ? opt.color_hex : 'Click the circle to pick a colour'}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Remove option */}
                               <button
                                 type="button"
-                                onClick={() => setPots(pots.map((p, i) => i === index ? { ...p, image_key: '', image_url: '' } : p))}
-                                className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium"
+                                onClick={() => setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                  ...g, options: g.options.filter(o => o.id !== opt.id),
+                                }))}
+                                disabled={group.options.length <= 1}
+                                className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0 disabled:opacity-30"
+                                aria-label="Remove option"
                               >
-                                Remove image
+                                <X size={14} />
                               </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {pots.length === 0 && (
-                      <p className="text-xs text-gray-400 italic text-center py-1">No custom pots.</p>
-                    )}
-                  </div>
-                </div>
+                            </div>
 
-                {/* Plant Sizes Setup */}
-                <div className="space-y-2 border-t pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-semibold text-gray-700 block">3. Plant Sizes</span>
-                      <span className="text-[10px] text-gray-400">Add size options (Small, Medium, Large) with optional price difference</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSizes([...sizes, { name: '', price_modifier: 0, description: '' }])}
-                      className="px-2 py-1 text-xs text-primary font-medium hover:underline border border-primary/20 rounded"
-                    >
-                      + Add Size
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {sizes.map((size, index) => (
-                      <div key={index} className="flex gap-2 items-center">
-                        <select
-                          value={size.name}
-                          onChange={(e) => setSizes(sizes.map((s, i) => i === index ? { ...s, name: e.target.value } : s))}
-                          className={`${inputClass} flex-1`}
-                        >
-                          <option value="">Select Size</option>
-                          <option value="Small">Small</option>
-                          <option value="Medium">Medium</option>
-                          <option value="Large">Large</option>
-                          <option value="Extra Large">Extra Large</option>
-                        </select>
-                        <input
-                          value={size.description}
-                          onChange={(e) => setSizes(sizes.map((s, i) => i === index ? { ...s, description: e.target.value } : s))}
-                          placeholder="Hint (e.g. 6–12 in)"
-                          className={`${inputClass} w-40`}
-                        />
-                        <div className="flex items-center gap-1.5 shrink-0 w-28">
-                          <span className="text-xs text-gray-500">₹</span>
-                          <input
-                            type="number"
-                            value={size.price_modifier}
-                            onChange={(e) => setSizes(sizes.map((s, i) => i === index ? { ...s, price_modifier: Number(e.target.value) } : s))}
-                            placeholder="+Price"
-                            className={inputClass}
-                          />
-                        </div>
+                            {/* Row 2: price + (colour: image upload) */}
+                            <div className="flex gap-2 items-center flex-wrap pl-12">
+                              {/* Price input - ONLY shown for single variant group products */}
+                              {variantGroups.length === 1 && (
+                                <div className="flex items-center gap-1.5">
+                                  <label className="text-[11px] text-gray-600 font-medium shrink-0">Price:</label>
+                                  <div className="relative">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">₹</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={opt.price || 0}
+                                      onChange={(e) => {
+                                        const v = parseFloat(e.target.value) || 0;
+                                        setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                                          ...g, options: g.options.map(o => o.id !== opt.id ? o : { ...o, price: v }),
+                                        }));
+                                      }}
+                                      placeholder="0"
+                                      className="w-24 pl-5 pr-2 py-1 text-[11px] border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary"
+                                      title="Surcharge added to base price"
+                                    />
+                                  </div>
+                                  <span className="text-[10px] text-gray-400">surcharge</span>
+                                </div>
+                              )}
+
+                              {/* Colour variants: quick add-photo button (full management in table below) */}
+                              {isColourGroup && (
+                                <label
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-gray-50 text-[11px] font-medium text-primary cursor-pointer hover:bg-green-50 shrink-0 ${uploadingOptionImage === opt.id ? 'opacity-60 pointer-events-none' : ''}`}
+                                  title="Upload colour photo"
+                                >
+                                  {uploadingOptionImage === opt.id
+                                    ? <Loader2 size={12} className="animate-spin" />
+                                    : opt.image_urls[0]
+                                    ? <img src={opt.image_urls[0]} alt="" className="h-4 w-4 rounded object-cover" />
+                                    : <Upload size={12} />}
+                                  <span>{opt.image_urls.length > 0 ? `${opt.image_urls.length} photo${opt.image_urls.length > 1 ? 's' : ''}` : 'Add photo'}</span>
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    className="hidden"
+                                    onChange={(e) => { void handleOptionImageUpload(group.id, opt.id, e.target.files?.[0]); e.target.value = ''; }}
+                                  />
+                                </label>
+                              )}
+                            </div>
+                          </div>
+                        );
+                        })}
+
+                        {/* Add Option */}
                         <button
                           type="button"
-                          onClick={() => setSizes(sizes.filter((_, i) => i !== index))}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
+                          onClick={() => setVariantGroups(prev => prev.map(g => g.id !== group.id ? g : {
+                            ...g, options: [...g.options, emptyOption()],
+                          }))}
+                          className="w-full py-1.5 border border-dashed border-primary/30 rounded-lg text-xs text-primary font-medium hover:bg-green-50/50 hover:border-primary/50 transition"
                         >
-                          <Trash2 size={15} />
+                          + Add Option
                         </button>
                       </div>
-                    ))}
-                    {sizes.length === 0 && (
-                      <p className="text-xs text-gray-400 italic text-center py-1">No size options. Add sizes like Small, Medium, Large.</p>
-                    )}
-                  </div>
-                  {sizes.length > 0 && !colors.length && !pots.length && (
-                    <p className="text-[10px] text-blue-600 bg-blue-50 rounded-lg px-3 py-1.5">
-                      💡 Size-only mode: Stock will be tracked per size (no color/pot needed).
-                    </p>
-                  )}
-                  {sizes.length > 0 && colors.length > 0 && pots.length > 0 && (
-                    <p className="text-[10px] text-amber-700 bg-amber-50 rounded-lg px-3 py-1.5">
-                      ⚠️ 3D mode: Stock will be tracked per Color × Pot × Size combination.
-                    </p>
-                  )}
+                    </div>
+                  ))}
                 </div>
+
+                {/* Add Variant Type */}
+                <button
+                  type="button"
+                  onClick={() => setVariantGroups(prev => [...prev, emptyGroup()])}
+                  className="w-full py-2.5 border-2 border-dashed border-primary/25 rounded-xl text-sm font-semibold text-primary hover:bg-green-50/50 hover:border-primary/50 transition flex items-center justify-center gap-2"
+                >
+                  <Plus size={15} />
+                  Add Variant Type
+                </button>
+
+                {/* ── Pot Price Grid (N-axis) - AUTO-SHOWN for 2+ variant groups ─────── */}
+                {variantGroups.length >= 2 && (
+                  <div className="mt-4 border-t pt-4 space-y-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-800">Price Grid</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Set prices that depend on multiple choices (e.g., pot costing more for a bigger plant).
+                        Select which variant types affect the price, then fill in the grid.
+                      </p>
+                    </div>
+                    <PotPriceEditor
+                      productId={editProduct?.id ?? null}
+                      groups={variantGroups}
+                      draft={potPriceDraft}
+                      onChange={setPotPriceDraft}
+                      existingPriceMap={rawProduct?.variants?.price_map ?? null}
+                      priceMapActive={
+                        !!(rawProduct?.variants?.price_map && Object.keys(rawProduct.variants.price_map).length)
+                      }
+                    />
+                  </div>
+                )}
+
+                {/* ── Variant Combinations Image Table ────────────────────────────── */}
+                {(() => {
+                  const comboRows = buildComboRows(variantGroups);
+                  if (comboRows.length === 0) return null;
+                  // Only rows whose every group and option is named can be labelled, so only
+                  // those get a row. The rest are counted and explained rather than dropped
+                  // silently — an unlabelled row looks identical to a product with no stock.
+                  const namedRows = comboRows.filter(r => r.ready);
+                  const unnamedCount = comboRows.length - namedRows.length;
+                  const overCap = namedRows.length > COMBO_CAP;
+                  const visibleRows = overCap ? namedRows.slice(0, COMBO_CAP) : namedRows;
+                  const hasAnyComboImage = Object.values(comboImageUrls).some(a => a.length > 0);
+                  return (
+                    <div className="border-t pt-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-semibold text-gray-700 block">Variant Combinations &amp; Images</span>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            Set the price and stock for each combination. The price field overrides the summed
+                            option prices (each combination can have its own price).
+                            Upload a photo per combination — shown in the gallery when that exact combo is
+                            selected. Combinations without a photo fall back to the colour option's image,
+                            then the default image.
+                          </p>
+                        </div>
+                        {hasAnyComboImage && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!confirm('Clear all combination images?')) return;
+                              setComboImageKeys({});
+                              setComboImageUrls({});
+                            }}
+                            className="text-xs text-red-500 hover:text-red-600 font-medium border border-red-200 px-2 py-1 rounded hover:bg-red-50 transition shrink-0"
+                          >
+                            Clear all combo images
+                          </button>
+                        )}
+                      </div>
+
+                      {overCap && (
+                        <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 flex gap-2 items-start text-xs text-amber-800">
+                          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                          <span>
+                            {namedRows.length} combinations total — showing first {COMBO_CAP}. Reduce options or groups to see all combinations.
+                          </span>
+                        </div>
+                      )}
+
+                      {unnamedCount > 0 && (
+                        <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 flex gap-2 items-start text-xs text-amber-800">
+                          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                          <span>
+                            {unnamedCount} combination{unnamedCount > 1 ? 's are' : ' is'} hidden
+                            because a variant type or one of its options has no name yet. Name{' '}
+                            {unnamedCount > 1 ? 'them' : 'it'} above to set stock and images.
+                          </span>
+                        </div>
+                      )}
+
+                      {namedRows.length === 0 && unnamedCount > 0 ? (
+                        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
+                          Name every variant type and option to list its combinations here.
+                        </div>
+                      ) : (
+
+                      <div className="overflow-x-auto border rounded-lg bg-gray-50/50">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-gray-100 text-gray-600 border-b">
+                            <tr>
+                              <th className="p-3 font-medium">
+                                Combination
+                                <span className="font-normal text-gray-400 ml-1">(the option names for this pick)</span>
+                              </th>
+                              <th className="p-3 font-medium">
+                                Stock
+                                <span className="font-normal text-gray-400 ml-1">(per combination)</span>
+                              </th>
+                              <th className="p-3 font-medium">
+                                Images
+                                <span className="font-normal text-gray-400 ml-1">(optional — falls back to colour / default image)</span>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {visibleRows.map((row) => {
+                              const imgs = comboImageUrls[row.key] || [];
+                              const keys = comboImageKeys[row.key] || [];
+                              return (
+                                <tr key={row.key} className="border-b last:border-0 bg-white">
+                                  <td
+                                    className="p-3 font-semibold text-gray-800 align-top pt-4 min-w-[180px]"
+                                    title={row.label}
+                                  >
+                                    {/* Wraps rather than nowrap: with several variant types the
+                                        names get long, and a clipped name cannot be told apart
+                                        from the wrong name. */}
+                                    <span className="break-words">{row.label}</span>
+                                  </td>
+                                  <td className="p-3 align-top pt-3.5">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step={1}
+                                      value={comboStock[row.key] ?? 0}
+                                      onChange={(e) => {
+                                        const n = Number(e.target.value);
+                                        setComboStock(prev => ({
+                                          ...prev,
+                                          [row.key]: Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0,
+                                        }));
+                                      }}
+                                      className="w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-800 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                                    />
+                                  </td>
+                                  <td className="p-3">
+                                    <div className="flex flex-col gap-2">
+                                      {imgs.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {imgs.map((url, idx) => (
+                                            <div key={idx} className="relative group h-12 w-12 rounded border overflow-hidden bg-gray-50 shrink-0">
+                                              <img src={url} alt="" className="h-full w-full object-cover" />
+                                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleRemoveComboImage(row.key, idx)}
+                                                  className="p-0.5 text-red-400 hover:text-red-300 bg-black/40 rounded text-[9px] leading-none"
+                                                  title="Remove"
+                                                >✕</button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                      {imgs.length === 0 && (
+                                        <p className="text-[10px] text-gray-400 italic">No image — will use fallback</p>
+                                      )}
+                                      {keys.length < 8 && (
+                                        <label
+                                          className={`inline-flex items-center gap-1 px-2 py-1 rounded border bg-white text-[11px] font-medium text-primary cursor-pointer hover:bg-green-50 self-start transition ${uploadingComboKey === row.key ? 'opacity-60 pointer-events-none' : ''}`}
+                                        >
+                                          {uploadingComboKey === row.key
+                                            ? <Loader2 size={10} className="animate-spin" />
+                                            : <Upload size={10} />}
+                                          {uploadingComboKey === row.key ? 'Uploading…' : 'Add Image'}
+                                          <input
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp"
+                                            className="hidden"
+                                            onChange={(e) => { void handleComboImageUpload(row.key, e.target.files?.[0]); e.target.value = ''; }}
+                                          />
+                                        </label>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Default Fallback Image */}
                 <div className="border-t pt-4 space-y-2">
-                  <label className="text-xs font-semibold text-gray-700 block">4. Default Variant Image</label>
-                  <p className="text-[10px] text-gray-400">This image is loaded if a specific combination lacks its own image.</p>
+                  <label className="text-xs font-semibold text-gray-700 block">Default Variant Image</label>
+                  <p className="text-[10px] text-gray-400">Fallback shown if a selected option has no image of its own.</p>
                   <div className="flex gap-3 items-center">
                     <div className="h-16 w-16 rounded-lg border overflow-hidden bg-white shrink-0 flex items-center justify-center">
-                      {defaultImageUrl ? (
-                        <img src={defaultImageUrl} alt="Default variant preview" className="h-full w-full object-cover" />
-                      ) : (
-                        <ImageIcon size={22} className="text-gray-300" />
-                      )}
+                      {defaultImageUrl
+                        ? <img src={defaultImageUrl} alt="Default" className="h-full w-full object-cover" />
+                        : <ImageIcon size={22} className="text-gray-300" />}
                     </div>
                     <div className="flex-1">
                       <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 w-full justify-center ${uploadingDefaultImage ? 'opacity-60 pointer-events-none' : ''}`}>
@@ -1096,97 +2403,23 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
                           type="file"
                           accept="image/jpeg,image/png,image/webp"
                           className="hidden"
-                          onChange={(e) => {
-                            void handleDefaultImageUpload(e.target.files?.[0]);
-                            e.target.value = '';
-                          }}
+                          onChange={(e) => { void handleDefaultImageUpload(e.target.files?.[0]); e.target.value = ''; }}
                         />
                       </label>
                       {defaultImageKey && (
-                        <button
-                          type="button"
-                          onClick={() => { setDefaultImageKey(''); setDefaultImageUrl(''); }}
-                          className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium"
-                        >
+                        <button type="button" onClick={() => { setDefaultImageKey(''); setDefaultImageUrl(''); }}
+                          className="text-xs text-red-500 hover:text-red-600 mt-1 font-medium">
                           Remove image
                         </button>
                       )}
                     </div>
                   </div>
                 </div>
-
-                {/* Combinations Matrix */}
-                {variantRows.length > 0 && (
-                  <div className="border-t pt-4 space-y-2">
-                    <span className="text-xs font-semibold text-gray-700 block">4. Variant Combinations stock & images</span>
-                    <div className="overflow-x-auto border rounded-lg bg-gray-50/50">
-                      <table className="w-full text-xs text-left">
-                        <thead className="bg-gray-100 text-gray-600 border-b">
-                          <tr>
-                            <th className="p-3 font-medium">Combination</th>
-                            <th className="p-3 font-medium w-28">Stock Qty</th>
-                            <th className="p-3 font-medium">Image URL</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {variantRows.map((row) => (
-                            <tr key={row.key} className="border-b last:border-0 bg-white">
-                              <td className="p-3 font-semibold text-gray-800">{row.label}</td>
-                              <td className="p-3">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={stockByKey[row.key] ?? 0}
-                                  onChange={(e) => setStockByKey({ ...stockByKey, [row.key]: Number(e.target.value) })}
-                                  className="w-full px-2 py-1.5 border rounded-lg text-xs"
-                                />
-                              </td>
-                              <td className="p-3">
-                                <div className="flex gap-2 items-center">
-                                  {imageUrlByCombo[row.key] && (
-                                    <div className="h-9 w-9 rounded border overflow-hidden bg-gray-50 shrink-0">
-                                      <img src={imageUrlByCombo[row.key]} alt="" className="h-full w-full object-cover" />
-                                    </div>
-                                  )}
-                                  <label className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-white text-xs font-medium text-primary cursor-pointer hover:bg-green-50 ${uploadingComboImage === row.key ? 'opacity-60 pointer-events-none' : ''}`}>
-                                    <Upload size={12} />
-                                    {uploadingComboImage === row.key ? 'Uploading…' : imageKeyByCombo[row.key] ? 'Change' : 'Upload'}
-                                    <input
-                                      type="file"
-                                      accept="image/jpeg,image/png,image/webp"
-                                      className="hidden"
-                                      onChange={(e) => {
-                                        void handleComboImageUpload(row.key, e.target.files?.[0]);
-                                        e.target.value = '';
-                                      }}
-                                    />
-                                  </label>
-                                  {imageKeyByCombo[row.key] && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setImageKeyByCombo(prev => ({ ...prev, [row.key]: '' }));
-                                        setImageUrlByCombo(prev => ({ ...prev, [row.key]: '' }));
-                                      }}
-                                      className="text-xs text-red-500 hover:text-red-600 font-medium"
-                                    >
-                                      ✕
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>
 
-          {/* Section 6: SEO & Visibility */}
+          {/* Section 7: SEO & Search Tags */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <button
               type="button"
@@ -1238,6 +2471,434 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
             )}
           </div>
 
+          {/* Section 8: Image Badges */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleSection('badges')}
+              className="w-full flex items-center justify-between px-5 py-4 font-semibold text-sm text-gray-800 hover:bg-gray-50 text-left"
+            >
+              <span className="flex items-center gap-2">🏷️ <span>Image Badges</span></span>
+              {openSections.badges ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {openSections.badges && (
+              <div className="p-5 border-t border-gray-100 space-y-4 bg-white">
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  The <strong>% OFF</strong> and <strong>⭐ rating</strong> badges appear on their
+                  own whenever a discount or review exists. The bestseller badge is opt-in per
+                  product, so tick it here to let this product wear it.
+                </p>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isBestseller}
+                    onChange={(e) => setIsBestseller(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-xs text-gray-700">Show the bestseller badge on this product image</span>
+                </label>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  What the badge says and what colour it is are set per category under{' '}
+                  <strong>Image Badges</strong> in the admin menu, so one edit covers every product
+                  in that category.
+                </p>
+
+                {/* ── Bestseller badge, this product only ──────────────────────
+                    Kept inside the Image Badges section because it IS an image badge —
+                    splitting it out would suggest it is something separate from the
+                    category config, when the whole point is that it overrides it. */}
+                <div className="border-t border-gray-100 pt-4 space-y-4">
+                  <p className="text-[11px] text-gray-400 leading-relaxed">
+                    Optional. Rename this product&rsquo;s bestseller badge or give it its own
+                    colour, for this product only. Switch it on and anything you set below wins
+                    over the category; leave it off and the category settings are used.
+                  </p>
+
+                  {!isBestseller && (
+                    <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-relaxed">
+                      This product is not flagged as a bestseller, so no bestseller badge is drawn
+                      at all — tick <strong>Show the bestseller badge</strong> above for anything
+                      here to appear.
+                    </p>
+                  )}
+
+                  {/* Editor card — deliberately the same shape as the Image Badges page's
+                      per-badge card, so the two feel like the same tool. */}
+                  <div
+                    className={`rounded-xl border p-4 space-y-3 ${
+                      bestsellerOverrideEnabled ? 'border-gray-200' : 'border-gray-200 bg-gray-50/40'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800">Bestseller badge</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          top-right corner · only shown on products an admin has flagged as a bestseller.
+                        </p>
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          {bestsellerOverrideEnabled
+                            ? 'This product has its own wording and colour.'
+                            : `Inherits ${
+                                inheritedFromCategoryName
+                                  ? `from ${inheritedFromCategoryName}`
+                                  : 'the store defaults'
+                              } — “${inheritedBadgeConfig.bestseller.label || 'BESTSELLER'}” in ${inheritedBadgeConfig.bestseller.color}. Switch it on to override just this product.`}
+                        </p>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer select-none shrink-0">
+                        <span className="text-[11px] text-gray-500">
+                          {bestsellerOverrideEnabled ? 'On' : 'Off'}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={bestsellerOverrideEnabled}
+                          onChange={(e) => setBestsellerOverrideEnabled(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                      </label>
+                    </div>
+
+                    {bestsellerOverrideEnabled && (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-600 shrink-0 w-16">Name</span>
+                          <input
+                            value={bestsellerLabelOverride}
+                            onChange={(e) => setBestsellerLabelOverride(e.target.value)}
+                            placeholder={`Leave blank — shows ${
+                              inheritedBadgeConfig.bestseller.label || 'BESTSELLER'
+                            }`}
+                            maxLength={50}
+                            className={inputClass}
+                          />
+                        </div>
+                        <BadgeColorField
+                          color={bestsellerColorDraft || inheritedBadgeConfig.bestseller.color}
+                          onChange={setBestsellerColorOverride}
+                          label="Bestseller badge colour"
+                        />
+                      </>
+                    )}
+
+                    {/* The category has this badge switched off but the override wins, so say so —
+                        otherwise the admin saves, sees a badge, and cannot explain it. */}
+                    {bestsellerOverrideEnabled && !inheritedBadgeConfig.bestseller.enabled && (
+                      <p className="text-[11px] text-amber-600 font-medium leading-relaxed">
+                        This product&rsquo;s category has the bestseller badge switched off in the
+                        admin menu under <strong>Image Badges</strong>. Your override still shows —
+                        this product is the exception.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Live preview. Calls the storefront's own resolver, so it cannot drift
+                      from what actually renders. Drawn over the product's own image when
+                      there is one, because that is the only way to see whether the badge
+                      collides with the % OFF badge sitting in the opposite corner. */}
+                  <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+                    <p className="text-[11px] font-semibold text-gray-500 mb-2 uppercase tracking-wider">
+                      Preview
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {bestsellerPreview ? (
+                        <>
+                          {bestsellerPreviewImage && (
+                            <span className="relative inline-block w-16 h-16 rounded-md overflow-hidden border border-gray-200">
+                              <img
+                                src={bestsellerPreviewImage}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                              <span
+                                className="absolute top-0 right-0 text-white text-[8px] font-bold px-1.5 py-1 rounded-bl-md shadow-sm whitespace-nowrap leading-none"
+                                style={{ backgroundColor: bestsellerPreview.color }}
+                              >
+                                {bestsellerPreview.text}
+                              </span>
+                            </span>
+                          )}
+                          {!bestsellerPreviewImage && (
+                            <span
+                              className="text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg shadow-sm whitespace-nowrap leading-none"
+                              style={{ backgroundColor: bestsellerPreview.color }}
+                            >
+                              {bestsellerPreview.text}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-gray-400">
+                            What shoppers will see on this product&rsquo;s image.
+                          </span>
+                        </>
+                      ) : (
+                        <p className="text-xs text-gray-400">
+                          No bestseller badge is drawn for this product.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {bestsellerOverrideEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBestsellerOverrideEnabled(false);
+                        setBestsellerLabelOverride('');
+                        setBestsellerColorOverride('');
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+                    >
+                      <RotateCcw size={13} /> Use category settings
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 9: Related Products (You May Also Like) */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleSection('related')}
+              className="w-full flex items-center justify-between px-5 py-4 font-semibold text-sm text-gray-800 hover:bg-gray-50 text-left"
+            >
+              <span className="flex items-center gap-2">💡 <span>Related Products (You May Also Like)</span></span>
+              {openSections.related ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {openSections.related && (
+              <div className="p-5 border-t border-gray-100 space-y-4 bg-white">
+                <p className="text-[11px] text-gray-400">Select products to show in the "You May Also Like" section on this product's detail page. If none are selected, the latest products are shown instead.</p>
+                {/* Selected products */}
+                {relatedProductIds.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {relatedProductIds.map((id) => {
+                      const p = allProducts.find((ap) => ap.id === id);
+                      return (
+                        <div key={id} className="flex items-center gap-1.5 border rounded-lg bg-primary/5 border-primary/20 px-2.5 py-1.5">
+                          <span className="text-xs font-medium text-gray-700 truncate max-w-[160px]">{p?.name ?? `#${id}`}</span>
+                          <button
+                            type="button"
+                            onClick={() => setRelatedProductIds((prev) => prev.filter((rid) => rid !== id))}
+                            className="text-red-400 hover:text-red-600"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Search input */}
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={relatedSearch}
+                    onChange={(e) => setRelatedSearch(e.target.value)}
+                    placeholder="Search products by name..."
+                    className={`${inputClass} pl-8`}
+                  />
+                </div>
+                {/* Search results dropdown */}
+                {relatedSearch.trim() && (
+                  <div className="border rounded-lg max-h-48 overflow-y-auto bg-white">
+                    {allProducts
+                      .filter((p) =>
+                        p.name.toLowerCase().includes(relatedSearch.toLowerCase()) &&
+                        p.id !== editProduct?.id &&
+                        !relatedProductIds.includes(p.id)
+                      )
+                      .slice(0, 20)
+                      .map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setRelatedProductIds((prev) => [...prev, p.id]);
+                            setRelatedSearch('');
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 border-b border-gray-50 last:border-0"
+                        >
+                          <div className="h-8 w-8 rounded border overflow-hidden bg-gray-100 shrink-0">
+                            {p.images?.[0] ? (
+                              <img src={p.images[0]} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="h-full w-full flex items-center justify-center text-gray-300">
+                                <ImageIcon size={14} />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-700 truncate">{p.name}</p>
+                            <p className="text-[11px] text-gray-400">₹{p.price}</p>
+                          </div>
+                        </button>
+                      ))}
+                    {allProducts.filter((p) =>
+                      p.name.toLowerCase().includes(relatedSearch.toLowerCase()) &&
+                      p.id !== editProduct?.id &&
+                      !relatedProductIds.includes(p.id)
+                    ).length === 0 && (
+                      <p className="px-3 py-2 text-xs text-gray-400 italic">No matching products found.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Section: Combo */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleSection('combo')}
+              className="w-full flex items-center justify-between px-5 py-4 font-semibold text-sm text-gray-800 hover:bg-gray-50 text-left"
+            >
+              <span className="flex items-center gap-2">📦 <span>Combo</span></span>
+              {openSections.combo ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {openSections.combo && (
+              <div className="p-5 border-t border-gray-100 space-y-4 bg-white">
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Mark this product as a combo (e.g. a set of multiple plants). When enabled,
+                  the product detail page shows <strong>About the Combo</strong> instead of
+                  &ldquo;Product Specification&rdquo;, and lists the items below inside that accordion.
+                </p>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isCombo}
+                    onChange={(e) => setIsCombo(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-xs text-gray-700">This product is a combo</span>
+                </label>
+
+                {isCombo && (
+                  <div className="space-y-4">
+                    {/* Combo items list */}
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div>
+                          <label className="text-xs font-semibold text-gray-700 block">Combo items</label>
+                          <p className="text-[11px] text-gray-400">Each item's name is shown on the product page. Pick from your catalog or add a custom name.</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setComboItems(prev => [...prev, { name: '', product_id: null }])}
+                          className="px-2.5 py-1 text-xs text-primary font-medium hover:bg-primary-light/10 border border-primary/20 rounded transition shrink-0"
+                        >
+                          + Add custom item
+                        </button>
+                      </div>
+
+                      {comboItems.length > 0 && (
+                        <div className="space-y-2">
+                          {comboItems.map((item, index) => (
+                            <div key={index} className="flex items-center gap-2">
+                              <span className="w-5 text-xs text-gray-400 text-right shrink-0">{index + 1}.</span>
+                              <input
+                                value={item.name}
+                                onChange={(e) => setComboItems(prev => prev.map((it, i) => i === index ? { ...it, name: e.target.value } : it))}
+                                placeholder="Item name (e.g. Snake Plant – Golden)"
+                                className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                              />
+                              {item.product_id != null && (
+                                <span
+                                  title="Linked to a catalog product"
+                                  className="shrink-0 inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full bg-primary/5 text-primary border border-primary/20"
+                                >
+                                  <ImageIcon size={11} /> Catalog
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setComboItems(prev => prev.filter((_, i) => i !== index))}
+                                className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition shrink-0"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Add from catalog */}
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={comboSearch}
+                        onChange={(e) => setComboSearch(e.target.value)}
+                        placeholder="Search products to add to this combo..."
+                        className={`${inputClass} pl-8`}
+                      />
+                    </div>
+                    {comboSearch.trim() && (
+                      <div className="border rounded-lg max-h-48 overflow-y-auto bg-white">
+                        {allProducts
+                          .filter((p) =>
+                            p.name.toLowerCase().includes(comboSearch.toLowerCase()) &&
+                            p.id !== editProduct?.id &&
+                            !comboItems.some((it) => it.product_id === p.id)
+                          )
+                          .slice(0, 20)
+                          .map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                setComboItems(prev => [...prev, { name: p.name, product_id: p.id }]);
+                                setComboSearch('');
+                              }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 border-b border-gray-50 last:border-0"
+                            >
+                              <div className="h-8 w-8 rounded border overflow-hidden bg-gray-100 shrink-0">
+                                {p.images?.[0] ? (
+                                  <img src={p.images[0]} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                  <div className="h-full w-full flex items-center justify-center text-gray-300">
+                                    <ImageIcon size={14} />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-700 truncate">{p.name}</p>
+                                <p className="text-[11px] text-gray-400">₹{p.price}</p>
+                              </div>
+                            </button>
+                          ))}
+                        {allProducts.filter((p) =>
+                          p.name.toLowerCase().includes(comboSearch.toLowerCase()) &&
+                          p.id !== editProduct?.id &&
+                          !comboItems.some((it) => it.product_id === p.id)
+                        ).length === 0 && (
+                          <p className="px-3 py-2 text-xs text-gray-400 italic">No matching products found.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Optional summary */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-gray-700">
+                        Combo description
+                        <span className="ml-1 text-gray-400 font-normal">(optional, shown above the item list)</span>
+                      </label>
+                      <textarea
+                        value={comboDescription}
+                        onChange={(e) => setComboDescription(e.target.value)}
+                        rows={3}
+                        placeholder="Optional summary, e.g. A curated set of air-purifying plants for beginners."
+                        className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-y"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
         </form>
 
         {/* Modal Action Buttons */}
@@ -1252,22 +2913,41 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
           <button
             type="button"
             onClick={handleSubmit(onSubmit)}
-            disabled={submitting || uploadingPotImage !== null || uploadingDefaultImage || uploadingComboImage !== null}
+            disabled={!formReady || submitting || uploadingOptionImage !== null || uploadingDefaultImage || uploadingComboKey !== null}
             className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/95 disabled:opacity-60 transition"
           >
-            {uploadingPotImage !== null
-              ? 'Uploading Pot Image...'
+            {!formReady
+              ? (!formInitialized ? 'Loading...' : 'Loading image keys...')
+              : uploadingOptionImage !== null
+              ? 'Uploading Image...'
               : uploadingDefaultImage
-                ? 'Uploading Default Image...'
-                : uploadingComboImage !== null
-                  ? 'Uploading Combo Image...'
-                  : submitting
-                    ? 'Saving Product...'
-                    : (isEdit ? 'Save Changes' : 'Publish Product')}
+              ? 'Uploading Default Image...'
+              : submitting
+              ? 'Saving Product...'
+              : (isEdit ? 'Save Changes' : 'Publish Product')}
           </button>
         </div>
 
       </div>
+
+      {/* Care Card Crop Modal */}
+      {careCardCropOpen && careCardCropSrc && (
+        <ImageCropModal
+          isOpen={careCardCropOpen}
+          imageSrc={careCardCropSrc}
+          placement="care_card"
+          useServerCrop={false}
+          onCropComplete={(croppedFile) => {
+            void uploadCroppedCareCard(croppedFile);
+          }}
+          onServerCropComplete={() => {}}
+          onClose={() => {
+            setCareCardCropOpen(false);
+            if (careCardCropSrc) URL.revokeObjectURL(careCardCropSrc);
+            setCareCardCropSrc(null);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -1410,18 +3090,17 @@ export default function ProductsAdminPage() {
                 <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
-                      <img
-                        src={p.images?.[0] || 'https://placehold.co/60x60?text=P'}
-                        alt={p.name}
-                        className="w-10 h-10 rounded-lg object-cover bg-gray-100 shrink-0 border"
-                      />
+                      {p.images?.[0] ? (
+                        <img
+                          src={p.images?.[0]}
+                          alt={p.name}
+                          className="w-10 h-10 rounded-lg object-cover bg-gray-100 shrink-0 border"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 shrink-0 border" />
+                      )}
                       <div>
                         <span className="font-semibold text-gray-900 block">{p.name}</span>
-                        {p.badge && (
-                          <span className="inline-block mt-0.5 text-[9px] font-bold bg-[#E6F3EE] text-primary px-1.5 py-0.5 rounded">
-                            {p.badge}
-                          </span>
-                        )}
                       </div>
                     </div>
                   </td>
@@ -1473,12 +3152,16 @@ export default function ProductsAdminPage() {
         ) : (
           displayedItems.map((p) => (
             <div key={p.id} className="bg-white rounded-xl border p-3 flex gap-3 shadow-sm">
-              <img
-                src={p.images?.[0] || 'https://placehold.co/60x60?text=P'}
-                alt={p.name}
-                className="w-12 h-12 rounded-lg object-cover shrink-0 border bg-gray-50"
-                loading="lazy"
-              />
+              {p.images?.[0] ? (
+                <img
+                  src={p.images?.[0]}
+                  alt={p.name}
+                  className="w-12 h-12 rounded-lg object-cover shrink-0 border bg-gray-50"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 border" />
+              )}
               <div className="flex-1 min-w-0">
                 <span className="font-semibold text-sm block truncate text-gray-900">{p.name}</span>
                 <p className="text-xs font-semibold text-primary mt-0.5">₹{p.price}</p>

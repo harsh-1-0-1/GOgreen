@@ -4,15 +4,25 @@ from app.api.v1 import (
     addresses,
     admin,
     auth,
+    badge_configs,
     banners,
     blog,
     cart,
     categories,
+    corporate_inquiries,
+    coupons,
+    damage_claims,
+    display_sections,
+    do_not_forget,
     health,
+    menu_items,
     orders,
     payments,
     products,
     reviews,
+    settings,
+    stories,
+    tags,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -25,6 +35,16 @@ api_router.include_router(cart.router)
 api_router.include_router(addresses.router)
 api_router.include_router(orders.router)
 api_router.include_router(payments.router)
+api_router.include_router(damage_claims.router)
+api_router.include_router(corporate_inquiries.router)
+api_router.include_router(coupons.router)
 api_router.include_router(admin.router)
 api_router.include_router(blog.router)
 api_router.include_router(banners.router)
+api_router.include_router(do_not_forget.router)
+api_router.include_router(stories.router)
+api_router.include_router(settings.router)
+api_router.include_router(display_sections.router)
+api_router.include_router(menu_items.router)
+api_router.include_router(tags.router)
+api_router.include_router(badge_configs.router)

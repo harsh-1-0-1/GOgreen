@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import api from '@/lib/api';
+import { useCartStore } from '@/store/cartStore';
 import type { User, TokenResponse } from '@/types';
 
 interface AuthState {
@@ -116,7 +117,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       const sessionId = localStorage.getItem('cart_session_id');
       if (sessionId) {
-        const { useCartStore } = await import('./cartStore');
         await useCartStore.getState().mergeCart(sessionId);
       }
     } finally {

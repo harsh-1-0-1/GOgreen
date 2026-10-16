@@ -1,22 +1,28 @@
 from datetime import datetime
+from typing import Any, Literal
 
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, Field, computed_field, field_serializer
 
 
 class CheckoutRequest(BaseModel):
     address_id: int
     cart_id: int
+    payment_method: Literal["razorpay", "cod"] = "razorpay"
+    coupon_code: str | None = None
 
 
 class DirectCheckoutItem(BaseModel):
     product_id: int
     quantity: int
-    selected_options: dict[str, str] | None = None
+    # New-format variant products send a list of option IDs; old-format send a dict.
+    selected_options: list[str] | dict[str, str] | None = None
 
 
 class DirectCheckoutRequest(BaseModel):
     address_id: int
     items: list[DirectCheckoutItem]
+    payment_method: Literal["razorpay", "cod"] = "razorpay"
+    coupon_code: str | None = None
 
 
 class RazorpayOrderData(BaseModel):
@@ -32,18 +38,50 @@ class RazorpayOrderData(BaseModel):
 
 class OrderItemResponse(BaseModel):
     id: int
-    product_id: int
+    product_id: int | None = None
     quantity: int
     unit_price: float
-    selected_options: dict[str, str] | None = None
+    # Old format: dict of slugs. New format: {"option_ids": [...], "snapshot": [...]}.
+    selected_options: dict[str, Any] | None = None
     resolved_image_url: str | None = None
+    product_name_snapshot: str | None = None
+    product: Any = Field(default=None, exclude=True)
 
     model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def product_name(self) -> str | None:
+        if getattr(self, "product", None):
+            return self.product.name
+        return getattr(self, "product_name_snapshot", None)
 
     @field_serializer("resolved_image_url")
     def serialize_resolved_image_url(self, val: str | None) -> str | None:
         from app.utils.image_upload import resolve_image_url
         return resolve_image_url(val)
+
+
+class OrderUserResponse(BaseModel):
+    id: int
+    email: str
+    full_name: str
+    phone: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class OrderAddressResponse(BaseModel):
+    id: int
+    full_name: str
+    phone: str
+    line1: str
+    line2: str | None = None
+    city: str
+    state: str
+    pincode: str
+
+    model_config = {"from_attributes": True}
 
 
 class OrderResponse(BaseModel):
@@ -52,9 +90,14 @@ class OrderResponse(BaseModel):
     status: str
     total_amount: float
     payment_id: str | None
+    payment_method: str = "razorpay"
     payment_status: str
     address_id: int
     created_at: datetime
+    coupon_code: str | None = None
+    coupon_discount: float = 0.0
+    user: OrderUserResponse | None = None
+    address: OrderAddressResponse | None = None
     items: list[OrderItemResponse] = []
 
     model_config = {"from_attributes": True}

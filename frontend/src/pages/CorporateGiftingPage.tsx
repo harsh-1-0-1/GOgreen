@@ -1,6 +1,7 @@
 import { ArrowDown, Building2, CheckCircle2, Gift, Leaf, PackageCheck, ShieldCheck, Sparkles, Truck } from 'lucide-react';
 import CorporateGiftInquiryForm from '@/components/corporate/CorporateGiftInquiryForm';
 import { useBanners } from '@/hooks/useBanners';
+import { SUPPORT_PHONE_DISPLAY, WHATSAPP_NUMBER } from '@/components/layout/Navbar/navData';
 
 const TRUST_POINTS = [
   { icon: Truck, title: 'Last Mile Delivery', text: 'Coordinated dispatches for offices, events, and distributed teams.' },
@@ -41,46 +42,19 @@ export default function CorporateGiftingPage() {
                   className="group relative block overflow-hidden rounded-2xl bg-[#173A2A] shadow-[0_16px_44px_rgba(27,67,50,0.14)]"
                   style={{ backgroundColor: banner.bg_color }}
                 >
-                  <div className="relative min-h-[150px] sm:min-h-[190px]">
-                    {banner.image_url ? (
-                      <img
-                        src={banner.image_url}
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : null}
-                    <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/20 to-transparent" />
-                    <div className="relative flex min-h-[150px] max-w-2xl flex-col justify-center px-5 py-6 sm:min-h-[190px] sm:px-8">
-                      {banner.badge_text && (
-                        <span className="mb-3 w-fit rounded-full bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
-                          {banner.badge_text}
-                        </span>
-                      )}
-                      <h2
-                        className="text-2xl font-bold tracking-tight sm:text-3xl"
-                        style={{ color: banner.text_color }}
-                      >
-                        {banner.title}
-                      </h2>
-                      {banner.subtitle && (
-                        <p
-                          className="mt-2 max-w-xl text-sm leading-6 sm:text-base"
-                          style={{ color: banner.text_color }}
-                        >
-                          {banner.subtitle}
-                        </p>
-                      )}
-                      {banner.cta_text && (
-                        <span className="mt-4 w-fit rounded-full bg-white px-5 py-2 text-xs font-bold text-primary shadow-sm">
-                          {banner.cta_text}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                      <div className="relative min-h-[150px] sm:min-h-[190px]">
+                        {banner.image_url ? (
+                          <img
+                            src={banner.image_url}
+                            alt=""
+                            className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : null}
+                      </div>
                 </a>
               ))}
             </div>
@@ -109,10 +83,10 @@ export default function CorporateGiftingPage() {
                 <ArrowDown size={17} />
               </a>
               <a
-                href="tel:+917083883105"
+                href={`tel:+${WHATSAPP_NUMBER}`}
                 className="inline-flex items-center justify-center rounded-full bg-white px-7 py-3.5 text-sm font-bold text-primary shadow-sm ring-1 ring-primary-light/30 transition hover:-translate-y-0.5 hover:ring-primary"
               >
-                Call +91 7083883105
+                Call {SUPPORT_PHONE_DISPLAY}
               </a>
             </div>
           </div>

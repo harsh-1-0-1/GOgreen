@@ -4,11 +4,14 @@ import type { Product, ProductListResponse } from '@/types';
 
 interface ProductFilters {
   category_slug?: string;
+  /** Comma-separated category slugs — matches products in ANY of them. */
+  categories?: string;
   search?: string;
   min_price?: number;
   max_price?: number;
   tags?: string;
   sort_by?: string;
+  display_section?: string;
   page?: number;
   limit?: number;
 }
@@ -23,6 +26,9 @@ export function useProducts(filters: ProductFilters = {}) {
       const { data } = await api.get<ProductListResponse>('/products', { params });
       return data;
     },
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -34,6 +40,9 @@ export function useProduct(slug: string) {
       return data;
     },
     enabled: !!slug,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -45,5 +54,38 @@ export function useProductRaw(productId: number | null) {
       return data as Product;  // same shape as Product but image fields are relative keys
     },
     enabled: !!productId,
+    // Keep the raw admin data fresh for the duration of an edit session.
+    // Without staleTime, React Query refetches on every window-focus event, which causes
+    // the rawProduct useEffect to re-fire, reset seededPotImagesRef, and overwrite any
+    // variant images the admin has uploaded in the current session with stale server values.
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+
+export function useAdminAllProducts(limit: number = 1000) {
+  return useQuery({
+    queryKey: ['admin-all-products', limit],
+    queryFn: async () => {
+      const { data } = await api.get<ProductListResponse>('/products/admin/all', { 
+        params: { limit } 
+      });
+      return data;
+    },
+    staleTime: 60 * 1000, // 1 minute
+  });
+}
+
+export function useProductsByIds(ids: number[]) {
+  return useQuery({
+    queryKey: ['products-by-ids', ids],
+    queryFn: async () => {
+      const { data } = await api.get<Product[]>(`/products/by-ids`, {
+        params: { ids: ids.join(',') },
+      });
+      return data;
+    },
+    enabled: ids.length > 0,
+    staleTime: 5 * 60 * 1000,
   });
 }

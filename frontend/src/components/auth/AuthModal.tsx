@@ -4,6 +4,8 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/authStore';
 import { useCartStore } from '@/store/cartStore';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import api from '@/lib/api';
+import { getApiErrorDetail } from '@/lib/apiError';
 
 export default function AuthModal() {
   const { isAuthModalOpen, closeAuthModal, login, register, isLoading } = useAuthStore();
@@ -35,8 +37,8 @@ export default function AuthModal() {
       } else {
         await fetchCart();
       }
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Login failed');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Login failed'));
     }
   }
 
@@ -52,14 +54,14 @@ export default function AuthModal() {
       } else {
         await fetchCart();
       }
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Registration failed');
+    } catch (err) {
+      toast.error(getApiErrorDetail(err, 'Registration failed'));
     }
   }
 
   async function handleGoogleLogin() {
     try {
-      const { data } = await (await import('@/lib/api')).default.get('/auth/google');
+      const { data } = await api.get('/auth/google');
       window.location.href = data.authorization_url;
     } catch {
       toast.error('Failed to start Google login');

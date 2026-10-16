@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,19 +20,23 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Image as ImageIcon, Plus, X, Info, Layout, Calendar, CheckCircle } from 'lucide-react';
+import { GripVertical, Image as ImageIcon, Plus, X, Info, Layout, CheckCircle, Crop } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import api from '@/lib/api';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import type { Banner } from '@/types';
+import { useCategories } from '@/hooks/useCategories';
+import { getApiErrorDetail } from '@/lib/apiError';
+import ImageCropModal from '@/components/admin/ImageCropModal';
+import CategoryLinkPicker from '@/components/admin/CategoryLinkPicker';
+import type { Banner, Category } from '@/types';
 
 const PLACEMENTS = [
   {
     key: 'hero',
     label: '🏠 Home Page Hero Banner',
     description: 'This banner appears at the very top of the homepage. It is the first thing customers see.',
-    helpText: 'Use high-quality widescreen landscape images. Recommended size: 1920x650px.',
+    helpText: 'Upload two images: a phone crop (portrait 4:5, e.g. 800×1000px) and a wide desktop crop. Desktop sizes: Mobile(320-639px)=400px tall, SM(640-767px)=480px, MD(768-1023px)=560px, LG(1024-1279px)=640px, XL(1280px+)=720px. Recommended aspect ratios: 16:9 (1920×1080px) or Ugaoo-style 1404×564px (2.5:1 ratio, shows content below). Each has its own crop presets.',
   },
   {
     key: 'announcement',
@@ -50,7 +54,7 @@ const PLACEMENTS = [
     key: 'trending',
     label: '🔥 Trending Carousel Banner',
     description: 'Square promotional banners displayed within the "Trending Now" homepage slider.',
-    helpText: 'Recommended size: 600x600px square format. Use vibrant colors.',
+    helpText: 'Upload two images: a phone crop (required 600×600px, 1:1 square) and a wide desktop crop (16:9, e.g. 1920×1080px). Each has its own crop presets.',
   },
   {
     key: 'themed',
@@ -61,8 +65,8 @@ const PLACEMENTS = [
   {
     key: 'strip',
     label: '🏷️ Promotional Strip Tile',
-    description: 'A thin horizontal banner strip embedded between sections on the homepage.',
-    helpText: 'Recommended size: 1200x120px. Ideal for coupon announcements.',
+    description: '3:4 promo/product tiles shown in the horizontal strip on the homepage.',
+    helpText: 'Required size: 450x600px (3:4 ratio). The image fills the tile edge-to-edge and the label shows in a bar below the image. Use the crop tool to adjust your upload to a 3:4 ratio.',
   },
   {
     key: 'highlight',
@@ -71,28 +75,16 @@ const PLACEMENTS = [
     helpText: 'Recommended size: 400x550px. The title becomes the bold text overlay.',
   },
   {
+    key: 'category_nav',
+    label: '🔵 Homepage Category Circles',
+    description: 'The row of round category icons at the very top of the homepage. Each circle is one banner you fully control.',
+    helpText: 'Upload a square image (1:1). The "Title" is the name shown under the circle and the link decides what it opens. Drag to reorder the row.',
+  },
+  {
     key: 'mobile_promo',
     label: '📱 Mobile Drawer Promo',
-    description: 'Compact promotional card shown at the top of the mobile menu drawer.',
-    helpText: 'Recommended size: 400x400px. The first active banner is used for the drawer promo card.',
-  },
-  {
-    key: 'menu_banner',
-    label: '🧭 Menu Banner',
-    description: 'Portrait banner displayed in the mobile collections menu.',
-    helpText: 'Recommended size: 320x450px. Use clear category imagery and short labels.',
-  },
-  {
-    key: 'mobile_category',
-    label: '📲 Home Mobile Category Chips',
-    description: 'Circular category shortcuts shown above the homepage hero on mobile.',
-    helpText: 'Recommended size: 300x300px square images. Title becomes the chip label.',
-  },
-  {
-    key: 'cart_suggestions',
-    label: '🛒 Empty Cart Suggestions',
-    description: 'Collection cards shown when the cart drawer or cart page is empty.',
-    helpText: 'Recommended size: 500x380px. Title, subtitle, link, and image are used.',
+    description: 'Full-bleed rectangular banner shown at the top of the mobile menu drawer.',
+    helpText: 'Recommended size: 640×200px (16:5). A thin strip that fills the whole card edge-to-edge — no text is overlaid, so bake any text into the image itself.',
   },
   {
     key: 'corporate_gifting',
@@ -106,6 +98,30 @@ const PLACEMENTS = [
     description: 'Scrollable customer and plant photos shown on every product detail page.',
     helpText: 'Upload portrait photos. Recommended size: 800x1000px (4:5). Drag images to change their display order.',
   },
+  {
+    key: 'product_detail',
+    label: '📦 Product Detail Page Banner',
+    description: 'A wide promotional banner displayed on product detail pages, just above the FAQ section.',
+    helpText: 'Recommended aspect ratio 4:1 (e.g. 1400×350px). Banner renders at the uploaded image size. Choose a product type for type-specific banners, or fallback for all products.',
+  },
+  {
+    key: 'product_spec',
+    label: '📋 Product Spec Banner',
+    description: 'A wide promotional banner displayed on the product detail page, just above the Product Specification section.',
+    helpText: 'Recommended aspect ratio 1:1 (square, e.g. 600×600px). Banner renders at the uploaded image size. Choose a product type for type-specific spec banners, or fallback for all products.',
+  },
+  {
+    key: 'product_strip',
+    label: '🏷️ Product Strip Banner',
+    description: 'A wide horizontal strip banner displayed on the product detail page, just below the Buy It Now button.',
+    helpText: 'Recommended size: 1400×200px. Choose a product category for category-specific banners, or leave blank as fallback for all products.',
+  },
+  {
+    key: 'why_plantoga',
+    label: '🌿 Why Plantoga Side Banner',
+    description: 'A tall image displayed to the left of the "Plantoga vs the rest" comparison table on product detail pages.',
+    helpText: 'Upload a portrait image (e.g. 600×900px). Set the target category slug to show a category-specific image, or leave blank as a global fallback. The image is displayed at its natural ratio.',
+  },
 ] as const;
 
 const bannerSchema = z
@@ -115,7 +131,7 @@ const bannerSchema = z
     cta_text: z.string().max(50).optional().or(z.literal('')),
     cta_link: z.string().max(255).optional().or(z.literal('')),
     badge_text: z.string().max(100).optional().or(z.literal('')),
-    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'mobile_promo', 'menu_banner', 'mobile_category', 'cart_suggestions', 'corporate_gifting', 'happy_planters']),
+    placement: z.enum(['hero', 'announcement', 'page', 'trending', 'themed', 'strip', 'highlight', 'category_nav', 'mobile_promo', 'corporate_gifting', 'happy_planters', 'product_detail', 'product_spec', 'product_strip', 'why_plantoga']),
     target_path: z.string().max(255).optional().or(z.literal('')),
     bg_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #FFFFFF)'),
     text_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g. #000000)'),
@@ -134,8 +150,300 @@ const bannerSchema = z
 
 type BannerFormData = z.infer<typeof bannerSchema>;
 
+function topLevelCategories(categories: Category[] | undefined): Category[] {
+  return categories?.filter((category) => category.is_active) ?? [];
+}
+
+interface CategoryOption {
+  value: string;
+  label: string;
+}
+
+function flattenCategoryOptions(categories: Category[] | undefined): CategoryOption[] {
+  const options: CategoryOption[] = [];
+  const walk = (cat: Category, depth: number) => {
+    options.push({
+      value: cat.slug,
+      label: `${'— '.repeat(depth)}${cat.name} (/${cat.slug})`,
+    });
+    (cat.children ?? []).forEach((child) => walk(child, depth + 1));
+  };
+  (categories ?? []).forEach((cat) => walk(cat, 0));
+  return options;
+}
+
+const EMPTY_BANNERS: Banner[] = [];
+
 const inputClass =
   'w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors';
+
+// ── Banner image field (one per device variant) ─────────────────────────────
+
+export type BannerImageSlot = {
+  file: File | null;
+  preview: string | null;
+  // True only while `preview` is a local data: URL from a client-side crop.
+  // Drives whether cropping re-runs in the browser or on the server.
+  fromFile: boolean;
+  manualUrl: string;
+  urlValid: boolean | null;
+  cleared: boolean;
+  error: string;
+};
+
+const emptyImageSlot = (): BannerImageSlot => ({
+  file: null,
+  preview: null,
+  fromFile: false,
+  manualUrl: '',
+  urlValid: null,
+  cleared: false,
+  error: '',
+});
+
+export type BannerImageVariant = 'mobile' | 'web';
+
+type CropRequest = {
+  src: string;
+  useServerCrop: boolean;
+  variant: BannerImageVariant;
+};
+
+/**
+ * Upload / URL / crop control for a single banner image variant. The drawer
+ * renders this twice — once for the phone crop, once for the wide desktop crop —
+ * and owns the slot state so it can build the multipart payload.
+ */
+function BannerImageField({
+  variant,
+  title,
+  description,
+  emptyHint,
+  cropLabel,
+  isEdit,
+  existingUrl,
+  slot,
+  update,
+  onCropRequest,
+}: {
+  variant: BannerImageVariant;
+  title: string;
+  description: string;
+  emptyHint: string;
+  cropLabel: string;
+  isEdit: boolean;
+  existingUrl?: string | null;
+  slot: BannerImageSlot;
+  update: (patch: Partial<BannerImageSlot>) => void;
+  onCropRequest: (req: CropRequest) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const isWeb = variant === 'web';
+  const showExisting = !!isEdit && !!existingUrl && !slot.cleared;
+  const previewSrc = slot.preview || slot.manualUrl || (showExisting ? existingUrl : null);
+  const showPicker = !showExisting;
+
+  function handleFileSelect(file: File) {
+    if (file.size > 5 * 1024 * 1024) {
+      update({ error: 'File exceeds 5 MB limit' });
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      update({ error: 'Only JPG, PNG, or WebP files accepted' });
+      return;
+    }
+    // Hand the local file to the cropper; nothing is uploaded until Save.
+    const reader = new FileReader();
+    reader.onload = (e) =>
+      onCropRequest({ src: e.target?.result as string, useServerCrop: false, variant });
+    reader.readAsDataURL(file);
+  }
+
+  function validateUrl() {
+    if (!slot.manualUrl) {
+      update({ urlValid: null });
+      return;
+    }
+    const img = new window.Image();
+    img.onload = () => update({ urlValid: true });
+    img.onerror = () => update({ urlValid: false });
+    img.src = slot.manualUrl;
+  }
+
+  function requestCrop(src: string, useServerCrop: boolean) {
+    onCropRequest({ src, useServerCrop, variant });
+  }
+
+  const replaceExisting = () =>
+    update({ cleared: true, file: null, preview: null, fromFile: false, manualUrl: '' });
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span
+          className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
+            isWeb ? 'bg-sky-100 text-sky-700' : 'bg-violet-100 text-violet-700'
+          }`}
+        >
+          {isWeb ? 'Web' : 'Mobile'}
+        </span>
+        <p className="text-xs font-semibold text-gray-700">{title}</p>
+      </div>
+      <p className="text-[11px] text-gray-500">{description}</p>
+
+      {showExisting && (
+        <div className="relative rounded-lg overflow-hidden border group">
+          <img
+            src={previewSrc || existingUrl || ''}
+            alt={`Current ${variant} banner`}
+            className={`w-full object-cover ${isWeb ? 'h-28' : 'h-32'}`}
+          />
+          <div className="hidden sm:flex absolute inset-0 bg-black/40 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-2">
+            <button
+              type="button"
+              onClick={replaceExisting}
+              className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold hover:bg-red-700 transition"
+            >
+              Replace
+            </button>
+            <button
+              type="button"
+              onClick={() => requestCrop(existingUrl as string, true)}
+              className="px-3 py-1.5 bg-primary text-white rounded text-xs font-semibold hover:bg-primary/95 transition flex items-center gap-1"
+            >
+              <Crop size={14} /> Crop
+            </button>
+          </div>
+          <div className="sm:hidden absolute bottom-2 left-2 right-2 flex gap-2">
+            <button
+              type="button"
+              onClick={replaceExisting}
+              className="flex-1 px-3 py-1.5 bg-red-600/90 backdrop-blur-sm text-white rounded text-xs font-semibold active:bg-red-700 transition shadow-lg"
+            >
+              Replace
+            </button>
+            <button
+              type="button"
+              onClick={() => requestCrop(existingUrl as string, true)}
+              className="flex-1 px-3 py-1.5 bg-primary/90 backdrop-blur-sm text-white rounded text-xs font-semibold active:bg-primary transition flex items-center justify-center gap-1 shadow-lg"
+            >
+              <Crop size={14} /> Crop
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showPicker && (
+        <>
+          <div className="flex gap-4 text-xs font-semibold text-gray-600">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name={`imageMode-${variant}`}
+                checked={!slot.manualUrl}
+                onChange={() => update({ manualUrl: '', urlValid: null })}
+              />
+              Upload File
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name={`imageMode-${variant}`}
+                checked={!!slot.manualUrl}
+                onChange={() => update({ file: null, preview: null, fromFile: false })}
+              />
+              Use Web URL
+            </label>
+          </div>
+
+          {!slot.manualUrl ? (
+            <div>
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+              >
+                {slot.preview ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative w-full group">
+                      <img
+                        src={slot.preview}
+                        alt="Preview"
+                        className="max-h-32 mx-auto object-contain rounded"
+                      />
+                      <div className="hidden sm:flex absolute inset-0 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            requestCrop(slot.preview as string, !slot.fromFile);
+                          }}
+                          className="px-4 py-2 bg-primary/90 backdrop-blur-sm text-white rounded-lg hover:bg-primary transition flex items-center gap-1.5 text-xs font-semibold shadow-lg"
+                        >
+                          <Crop size={14} /> Edit Crop
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        requestCrop(slot.preview as string, !slot.fromFile);
+                      }}
+                      className="px-4 py-2 bg-primary text-white rounded-lg active:bg-primary/90 transition shadow-md text-xs font-semibold flex items-center gap-1"
+                    >
+                      <Crop size={14} /> {cropLabel}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-gray-400">
+                    <ImageIcon size={28} className="mx-auto mb-2" />
+                    <p className="text-xs font-semibold text-gray-700">
+                      Upload {isWeb ? 'Web' : 'Mobile'} Image
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{emptyHint}</p>
+                  </div>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileSelect(file);
+                  e.target.value = '';
+                }}
+              />
+              {slot.error && <p className="text-xs text-red-500 mt-1">{slot.error}</p>}
+            </div>
+          ) : (
+            <div>
+              <input
+                type="url"
+                value={slot.manualUrl}
+                onChange={(e) => update({ manualUrl: e.target.value, urlValid: null })}
+                onBlur={validateUrl}
+                placeholder="e.g. https://images.unsplash.com/..."
+                className={inputClass}
+              />
+              {slot.urlValid === true && (
+                <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                  <CheckCircle size={12} /> Image URL loaded successfully
+                </p>
+              )}
+              {slot.urlValid === false && (
+                <p className="text-xs text-red-500 mt-1">
+                  Could not verify image. Double check the address.
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 // ── Sortable row ───────────────────────────────────────────────────────────
 
@@ -157,6 +465,12 @@ function SortableBannerRow({
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: banner.id });
 
+  const rowThumbnail =
+    (banner.placement === 'hero' || banner.placement === 'trending') &&
+    banner.image_url_web
+      ? banner.image_url_web
+      : null;
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -171,21 +485,29 @@ function SortableBannerRow({
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing touch-target text-gray-400 hover:text-gray-600 shrink-0"
+        className="cursor-grab active:cursor-grabbing touch-none touch-target text-gray-400 hover:text-gray-600 shrink-0"
         aria-label="Drag to reorder"
       >
         <GripVertical size={18} />
       </button>
 
-      {banner.image_url ? (
-        <img
-          src={banner.image_url}
-          alt=""
-          className="w-16 h-10 object-cover rounded-lg shrink-0 bg-gray-50 border border-gray-100"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none';
-          }}
-        />
+      {/* Admin runs on desktop, so carousels show their web crop here when set. */}
+      {(rowThumbnail || banner.image_url) ? (
+        <div className="relative shrink-0">
+          <img
+            src={rowThumbnail || banner.image_url}
+            alt=""
+            className="w-16 h-10 object-cover rounded-lg bg-gray-50 border border-gray-100"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+          {rowThumbnail && (
+            <span className="absolute -bottom-1 -right-1 px-1 rounded bg-sky-600 text-[8px] font-bold text-white leading-tight">
+              WEB
+            </span>
+          )}
+        </div>
       ) : (
         <div className="w-16 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 border border-gray-100">
           <ImageIcon size={16} className="text-gray-300" />
@@ -195,8 +517,8 @@ function SortableBannerRow({
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-gray-800 truncate">{banner.title}</p>
         <p className="text-xs text-gray-400 truncate">
-          {banner.placement === 'page' && banner.target_path
-            ? `Target: ${banner.target_path}`
+          {(banner.placement === 'page' || banner.placement === 'product_detail' || banner.placement === 'product_spec' || banner.placement === 'product_strip') && banner.target_path
+            ? `${banner.placement === 'product_detail' || banner.placement === 'product_spec' || banner.placement === 'product_strip' ? 'Type' : 'Target'}: ${banner.target_path}`
             : banner.subtitle || banner.cta_link || '—'}
         </p>
       </div>
@@ -386,8 +708,7 @@ function HighlightCardPreview({
               }}
             />
           ) : null}
-          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/60 to-transparent" />
-          <h3 className="absolute inset-x-2 bottom-4 text-center text-sm font-semibold leading-tight text-white">
+          <h3 className="absolute inset-x-2 bottom-4 text-center text-sm font-semibold leading-tight text-white drop-shadow-sm">
             {title || 'Combos'}
           </h3>
         </div>
@@ -418,37 +739,52 @@ function TrendingBannerPreview({
   imageSrc: string | null;
 }) {
   return (
-    <div className="mt-4 p-4 border rounded-xl bg-gray-50 flex flex-col items-center">
-      <p className="text-[11px] font-semibold text-gray-400 mb-2 uppercase tracking-wider">Carousel Banner Preview</p>
-      <div
-        className="relative aspect-square w-48 overflow-hidden rounded-xl border border-gray-200"
-        style={{ backgroundColor: bgColor || '#e9dfc9' }}
-      >
-        {imageSrc ? (
-          <img
-            src={imageSrc}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
-          />
-        ) : null}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-        <h3
-          className="absolute left-3 top-3 max-w-[80%] text-xs font-bold leading-tight text-white drop-shadow"
-          style={{ color: textColor || '#FFFFFF' }}
-        >
-          {title || 'Perfect Indoor Plants'}
-        </h3>
-        {subtitle && (
-          <div className="absolute right-3 top-3 bg-yellow-400 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
-            {subtitle}
-          </div>
-        )}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded bg-[#ffeb3b] px-3 py-1 text-[9px] font-bold text-primary shadow">
-          {ctaText || 'SHOP NOW'}
+    <div className="mt-4 p-4 border rounded-xl bg-gray-50">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Carousel Banner Preview</p>
+        <div className="text-[10px] text-gray-500 bg-white px-2 py-1 rounded border">
+          Fixed Size: 600×600px (1:1)
         </div>
+      </div>
+      <div className="flex justify-center">
+        <div
+          className="relative w-60 h-60 overflow-hidden rounded-xl border-2 border-gray-300 shadow-lg"
+          style={{ backgroundColor: bgColor || '#e9dfc9' }}
+        >
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
+              No image uploaded
+            </div>
+          )}
+          <h3
+            className="absolute left-3 top-3 max-w-[80%] text-xs font-bold leading-tight text-white drop-shadow"
+            style={{ color: textColor || '#FFFFFF' }}
+          >
+            {title || 'Perfect Indoor Plants'}
+          </h3>
+          {subtitle && (
+            <div className="absolute right-3 top-3 bg-yellow-400 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+              {subtitle}
+            </div>
+          )}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded bg-[#ffeb3b] px-3 py-1 text-[9px] font-bold text-primary shadow">
+            {ctaText || 'SHOP NOW'}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 text-center">
+        <p className="text-[10px] text-amber-600 bg-amber-50 inline-block px-3 py-1.5 rounded-lg border border-amber-200">
+          ⚠️ Images must be square (1:1 ratio). Use the crop tool to adjust your image to 600×600px.
+        </p>
       </div>
     </div>
   );
@@ -459,37 +795,32 @@ function TrendingBannerPreview({
 function BannerDrawer({
   banner,
   placement,
-  cloudinaryEnabled,
   onClose,
   onSaved,
 }: {
   banner: Banner | null;
   placement: string;
-  cloudinaryEnabled: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const isEdit = !!banner;
-
-  const activePlacementDetails = useMemo(() => {
-    return PLACEMENTS.find((p) => p.key === (banner?.placement || placement)) || PLACEMENTS[0];
-  }, [banner, placement]);
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<BannerFormData>({
-    resolver: zodResolver(bannerSchema) as any,
+    resolver: zodResolver(bannerSchema),
     defaultValues: {
       title: banner?.title || '',
       subtitle: banner?.subtitle || '',
       cta_text: banner?.cta_text || '',
       cta_link: banner?.cta_link || '',
       badge_text: banner?.badge_text || '',
-      placement: (banner?.placement || placement) as any,
+      placement: (banner?.placement || placement) as BannerFormData['placement'],
       target_path: banner?.target_path || '',
       bg_color: banner?.bg_color || '#F5F0E8',
       text_color: banner?.text_color || '#1B4332',
@@ -504,57 +835,144 @@ function BannerDrawer({
   });
 
   useBodyScrollLock(true);
+  const { data: categories } = useCategories();
+  const productTypeOptions = topLevelCategories(categories);
+  const categoryOptions = flattenCategoryOptions(categories);
 
   const [submitting, setSubmitting] = useState(false);
-  const [imageMode, setImageMode] = useState<'upload' | 'url'>('upload');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string | null>(null);
-  const [manualUrl, setManualUrl] = useState('');
-  const [urlValid, setUrlValid] = useState<boolean | null>(null);
-  const [imageCleared, setImageCleared] = useState(false);
-  const [fileError, setFileError] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Phone crop (`image_url`) and the optional wide desktop crop (`image_url_web`).
+  const [mobileImage, setMobileImage] = useState<BannerImageSlot>(emptyImageSlot);
+  const [webImage, setWebImage] = useState<BannerImageSlot>(emptyImageSlot);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  // Every crop-modal trigger must set this explicitly so local previews use
+  // client-side cropping and persisted banner images use the server crop API.
+  const [useServerCrop, setUseServerCrop] = useState(false);
+  const [cropVariant, setCropVariant] = useState<BannerImageVariant>('mobile');
 
+  // react-hook-form's `watch()` is a React-Compiler-incompatible library (cannot be
+  // memoized safely); the live banner preview needs its reactive values, so the
+  // compiler is intentionally allowed to skip memoizing this drawer.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const watchedTitle = watch('title');
   const watchedSubtitle = watch('subtitle');
   const watchedBgColor = watch('bg_color');
   const watchedTextColor = watch('text_color');
   const watchedCtaText = watch('cta_text');
+  const watchedCtaLink = watch('cta_link');
   const watchedPlacement = watch('placement');
+  const watchedTargetPath = watch('target_path');
 
-  const previewImageSrc = useMemo(() => {
-    if (filePreview) return filePreview;
-    if (manualUrl) return manualUrl;
-    if (!imageCleared && banner?.image_url) return banner.image_url;
+  const hasCustomTargetPath =
+    watchedTargetPath &&
+    watchedTargetPath !== '*' &&
+    !categoryOptions.some((opt) => opt.value === watchedTargetPath);
+
+  // A circle opens exactly one thing, so the picker offers real destinations
+  // (pages + nested categories) instead of a free-text URL that can silently rot.
+  const circleLinkPages = useMemo(
+    () => [
+      { value: '/', label: 'Home page' },
+      { value: '/products', label: 'All products' },
+      { value: '/corporate-gifting', label: 'Corporate gifting' },
+      { value: '/blog', label: 'Blog' },
+      { value: '/faqs', label: 'FAQs' },
+      { value: '/damage-replacement', label: 'Damage replacement' },
+    ],
+    []
+  );
+  const circleLinkCategories = useMemo(
+    () =>
+      flattenCategoryOptions(categories).map((opt) => ({
+        value: `/products?category=${opt.value}`,
+        label: opt.label,
+      })),
+    [categories]
+  );
+  const circleLinkValues = useMemo(
+    () => new Set([...circleLinkPages, ...circleLinkCategories].map((o) => o.value)),
+    [circleLinkPages, circleLinkCategories]
+  );
+  const hasCustomCircleLink =
+    !!watchedCtaLink && !circleLinkValues.has(watchedCtaLink);
+
+  const activePlacementDetails = useMemo(() => {
+    return PLACEMENTS.find((p) => p.key === watchedPlacement) || PLACEMENTS[0];
+  }, [watchedPlacement]);
+
+  const slotPreview = (slot: BannerImageSlot, existingUrl?: string | null) => {
+    if (slot.preview) return slot.preview;
+    if (slot.manualUrl) return slot.manualUrl;
+    if (!slot.cleared && existingUrl) return existingUrl;
     return null;
-  }, [filePreview, manualUrl, imageCleared, banner?.image_url]);
+  };
 
-  function handleFileSelect(file: File) {
-    setFileError('');
-    if (file.size > 5 * 1024 * 1024) {
-      setFileError('File exceeds 5 MB limit');
-      return;
-    }
-    if (
-      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
-    ) {
-      setFileError('Only JPG, PNG, or WebP files accepted');
-      return;
-    }
-    setSelectedFile(file);
-    setFilePreview(URL.createObjectURL(file));
-    setImageCleared(false);
+  const previewImageSrc = useMemo(
+    () => slotPreview(mobileImage, banner?.image_url),
+    [mobileImage, banner?.image_url]
+  );
+
+  const webPreviewImageSrc = useMemo(
+    () => slotPreview(webImage, banner?.image_url_web),
+    [webImage, banner?.image_url_web]
+  );
+
+  // `hero` and `trending` are the two carousels, and the only placements wide
+  // enough on desktop for a phone crop to look wrong — so they get the extra
+  // web image slot.
+  const supportsWebImage = watchedPlacement === 'hero' || watchedPlacement === 'trending';
+
+  function requestCrop({ src, useServerCrop: server, variant }: CropRequest) {
+    setCropImageSrc(src);
+    setUseServerCrop(server);
+    setCropVariant(variant);
+    setCropModalOpen(true);
   }
 
-  function handleUrlBlur() {
-    if (!manualUrl) {
-      setUrlValid(null);
-      return;
+  function applyCropToSlot(
+    variant: BannerImageVariant,
+    patch: Partial<BannerImageSlot>
+  ) {
+    const setter = variant === 'web' ? setWebImage : setMobileImage;
+    setter((s) => ({ ...s, ...patch }));
+  }
+
+  function handleCropComplete(croppedFile: File, preview: string) {
+    // Client-side crop for a not-yet-uploaded file: keep it for the payload.
+    applyCropToSlot(cropVariant, {
+      file: croppedFile,
+      preview,
+      fromFile: true,
+      cleared: false,
+      error: '',
+    });
+  }
+
+  function handleServerCropComplete(
+    newImageUrl: string,
+    variant: BannerImageVariant
+  ) {
+    // Server-side crop is already persisted — only refresh the preview and
+    // refetch the list. Deliberately does not set `file`/`manualUrl`, so
+    // pressing Save afterwards submits nothing for this image.
+    applyCropToSlot(variant, { preview: newImageUrl, fromFile: false, error: '' });
+    onSaved();
+  }
+
+  function appendImageFields(
+    fd: FormData,
+    opts: { fileField: string; urlField: string; clearField: string; slot: BannerImageSlot }
+  ) {
+    const { fileField, urlField, clearField, slot } = opts;
+    if (slot.file) {
+      fd.append(fileField, slot.file);
+    } else if (slot.manualUrl) {
+      fd.append(urlField, slot.manualUrl);
+    } else if (slot.cleared) {
+      // An empty `urlField` value cannot express "remove this" — the multipart
+      // parser drops blank fields, so it would arrive as absent. Send the flag.
+      fd.append(clearField, 'true');
     }
-    const img = new window.Image();
-    img.onload = () => setUrlValid(true);
-    img.onerror = () => setUrlValid(false);
-    img.src = manualUrl;
   }
 
   async function onSubmit(data: BannerFormData) {
@@ -575,12 +993,19 @@ function BannerDrawer({
       if (data.valid_from) fd.append('valid_from', data.valid_from);
       if (data.valid_until) fd.append('valid_until', data.valid_until);
 
-      if (selectedFile) {
-        fd.append('image', selectedFile);
-      } else if (imageMode === 'url' && manualUrl) {
-        fd.append('image_url_manual', manualUrl);
-      } else if (imageCleared) {
-        fd.append('image_url_manual', '');
+      appendImageFields(fd, {
+        fileField: 'image',
+        urlField: 'image_url_manual',
+        clearField: 'clear_image',
+        slot: mobileImage,
+      });
+      if (supportsWebImage) {
+        appendImageFields(fd, {
+          fileField: 'image_web',
+          urlField: 'image_url_web_manual',
+          clearField: 'clear_image_web',
+          slot: webImage,
+        });
       }
 
       if (isEdit) {
@@ -596,9 +1021,9 @@ function BannerDrawer({
       toast.success('Banner saved successfully!');
       onSaved();
       onClose();
-    } catch (err: any) {
+    } catch (err) {
       toast.error(
-        err.response?.data?.detail || 'Failed to save banner',
+        getApiErrorDetail(err, 'Failed to save banner'),
       );
     } finally {
       setSubmitting(false);
@@ -638,18 +1063,98 @@ function BannerDrawer({
             </div>
           </div>
 
+          {watchedPlacement === 'highlight' && (
+            <HighlightCardPreview
+              title={watchedTitle || ''}
+              subtitle={watchedSubtitle || ''}
+              bgColor={watchedBgColor}
+              textColor={watchedTextColor}
+              imageSrc={previewImageSrc}
+            />
+          )}
+
           {watchedPlacement === 'page' && (
             <div>
               <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Target Path
+                Category Slug <span className="font-normal text-gray-400">(Target Path)</span>
               </label>
-              <input
-                {...register('target_path')}
-                className={inputClass}
-                placeholder="e.g. /products, /cart, or * for fallback"
-              />
+              <select {...register('target_path')} className={inputClass}>
+                <option value="">All categories (global fallback)</option>
+                {hasCustomTargetPath && (
+                  <option value={watchedTargetPath}>
+                    {watchedTargetPath} (custom — not a current slug)
+                  </option>
+                )}
+                {categoryOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
               <p className="text-[10px] text-gray-400 mt-0.5">
-                Exact page path for this banner. Leave blank or use * to make it the fallback banner.
+                Pick the actual category slug (e.g. <strong>indoor-plants</strong>) so the banner shows on the correct shop listing page. Leave blank to show this banner on all category pages as a fallback.
+              </p>
+              {errors.target_path && (
+                <p className="text-xs text-red-500 mt-1">
+                  {errors.target_path.message}
+                </p>
+              )}
+            </div>
+          )}
+
+          {(watchedPlacement === 'product_detail' || watchedPlacement === 'product_spec' || watchedPlacement === 'product_strip') && (
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Product Type
+              </label>
+              {productTypeOptions.length > 0 ? (
+                <select {...register('target_path')} className={inputClass}>
+                  <option value="">Fallback for all product types</option>
+                  <option value="*">Fallback (*)</option>
+                  {productTypeOptions.map((category) => (
+                    <option key={category.id} value={category.slug}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  {...register('target_path')}
+                  className={inputClass}
+                  placeholder="e.g. plants, pots, seeds, or * for fallback"
+                />
+              )}
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                The banner appears on products under this main category. Leave blank or use * as the fallback banner.
+              </p>
+              {errors.target_path && (
+                <p className="text-xs text-red-500 mt-1">
+                  {errors.target_path.message}
+                </p>
+              )}
+            </div>
+          )}
+
+          {watchedPlacement === 'why_plantoga' && (
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Category <span className="font-normal text-gray-400">(Target Path)</span>
+              </label>
+              <select {...register('target_path')} className={inputClass}>
+                <option value="">All categories (global fallback)</option>
+                {hasCustomTargetPath && (
+                  <option value={watchedTargetPath}>
+                    {watchedTargetPath} (custom — not a current slug)
+                  </option>
+                )}
+                {categoryOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                Select a category to show this banner only on products in that category. Leave blank to show for all products.
               </p>
               {errors.target_path && (
                 <p className="text-xs text-red-500 mt-1">
@@ -661,14 +1166,18 @@ function BannerDrawer({
 
           <div>
             <label className="text-xs font-semibold text-gray-700 mb-1 block">
-              Banner Heading / Title *
+              {watchedPlacement === 'category_nav' ? 'Name Under Circle *' : 'Banner Heading / Title *'}
             </label>
             <input
               {...register('title')}
               className={inputClass}
-              placeholder="e.g. Monsoon Plant Sale"
+              placeholder={watchedPlacement === 'category_nav' ? 'e.g. Indoor Plants' : 'e.g. Monsoon Plant Sale'}
             />
-            <p className="text-[10px] text-gray-400 mt-0.5">The main text displaying bold over the banner.</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              {watchedPlacement === 'category_nav'
+                ? 'Shown in small text directly beneath the circle. Keep it to one or two words so the row stays tidy.'
+                : 'The main text displaying bold over the banner.'}
+            </p>
             {errors.title && (
               <p className="text-xs text-red-500 mt-1">
                 {errors.title.message}
@@ -676,56 +1185,107 @@ function BannerDrawer({
             )}
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-gray-700 mb-1 block">
-              Sub-heading / Description
-            </label>
-            <input
-              {...register('subtitle')}
-              className={inputClass}
-              placeholder="e.g. Up to 40% off on all indoor ferns and air-purifiers."
-            />
-            <p className="text-[10px] text-gray-400 mt-0.5">Subtext displayed under the main heading.</p>
+          {watchedPlacement !== 'category_nav' && (
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Sub-heading / Description
+              </label>
+              <input
+                {...register('subtitle')}
+                className={inputClass}
+                placeholder="e.g. Up to 40% off on all indoor ferns and air-purifiers."
+              />
+              <p className="text-[10px] text-gray-400 mt-0.5">Subtext displayed under the main heading.</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            {watchedPlacement !== 'category_nav' && (
+              <div>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                  Button Label (Text)
+                </label>
+                <input
+                  {...register('cta_text')}
+                  placeholder="e.g. Shop Sale"
+                  className={inputClass}
+                />
+              </div>
+            )}
+            {watchedPlacement === 'category_nav' ? (
+              <div className={watchedPlacement === 'category_nav' ? 'col-span-2' : ''}>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                  Opens when tapped *
+                </label>
+                <select {...register('cta_link')} className={inputClass}>
+                  <option value="">— choose a page or category —</option>
+                  {hasCustomCircleLink && (
+                    <option value={watchedCtaLink}>{watchedCtaLink} (custom)</option>
+                  )}
+                  <optgroup label="Pages">
+                    {circleLinkPages.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Categories">
+                    {circleLinkCategories.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  {watchedCtaLink ? (
+                    <>
+                      This circle opens <strong>{watchedCtaLink}</strong>
+                    </>
+                  ) : (
+                    'Pick where this circle should take the shopper. Until you choose, the circle is not clickable.'
+                  )}
+                </p>
+                {errors.cta_link && (
+                  <p className="text-xs text-red-500 mt-1">{errors.cta_link.message}</p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                  Link Address (URL)
+                </label>
+                <input
+                  {...register('cta_link')}
+                  placeholder="e.g. /products?category=ferns"
+                  className={inputClass}
+                />
+                <CategoryLinkPicker
+                  categories={categories}
+                  value={watchedCtaLink}
+                  onPick={(link) => setValue('cta_link', link)}
+                />
+              </div>
+            )}
           </div>
+
+{watchedPlacement !== 'category_nav' && (
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Top Offer Badge Text
+              </label>
+              <input
+                {...register('badge_text')}
+                className={inputClass}
+                placeholder="e.g. LIMITED PERIOD ONLY or 20% OFF"
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Button Label (Text)
-              </label>
-              <input
-                {...register('cta_text')}
-                placeholder="e.g. Shop Sale"
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Link Address (URL)
-              </label>
-              <input
-                {...register('cta_link')}
-                placeholder="e.g. /products?category=ferns"
-                className={inputClass}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-gray-700 mb-1 block">
-              Top Offer Badge Text
-            </label>
-            <input
-              {...register('badge_text')}
-              placeholder="e.g. LIMITED PERIOD ONLY or 20% OFF"
-              className={inputClass}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Theme Background Color
+                {watchedPlacement === 'announcement' ? 'Announcement Bar Color' : 'Theme Background Color'}
               </label>
               <div className="flex gap-2">
                 <input
@@ -749,7 +1309,7 @@ function BannerDrawer({
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Banner Text Color
+                {watchedPlacement === 'announcement' ? 'Announcement Text Color' : 'Banner Text Color'}
               </label>
               <div className="flex gap-2">
                 <input
@@ -792,7 +1352,6 @@ function BannerDrawer({
                 type="datetime-local"
                 {...register('valid_until')}
                 className={inputClass}
-                {...register('valid_until')}
               />
               {errors.valid_until && (
                 <p className="text-xs text-red-500 mt-1">
@@ -811,18 +1370,16 @@ function BannerDrawer({
             </div>
             <button
               type="button"
-              onClick={() =>
-                setValue('is_active', !watch('is_active'))
-              }
+              onClick={() => setValue('is_active', !getValues('is_active'))}
               className={`relative w-11 h-6 rounded-full transition-colors ml-auto ${
                 watch('is_active') ? 'bg-primary' : 'bg-gray-300'
               }`}
             >
               <span
-                className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                className={`absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
                   watch('is_active')
-                    ? 'translate-x-[22px]'
-                    : 'translate-x-0.5'
+                    ? 'translate-x-5'
+                    : 'translate-x-0'
                 }`}
               />
             </button>
@@ -835,120 +1392,96 @@ function BannerDrawer({
                 Banner Graphic / Image
               </label>
 
-              {isEdit && banner?.image_url && !imageCleared && (
-                <div className="relative rounded-lg overflow-hidden border">
-                  <img
-                    src={banner.image_url}
-                    alt="Current banner"
-                    className="w-full h-32 object-cover"
-                  />
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setImageCleared(true);
-                        setSelectedFile(null);
-                        setFilePreview(null);
-                      }}
-                      className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold"
-                    >
-                      Replace Image
-                    </button>
+              {/* Special notice for trending banners */}
+              {watchedPlacement === 'trending' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 space-y-1">
+                  <div className="flex items-start gap-2">
+                    <Info size={14} className="shrink-0 mt-0.5 text-blue-600" />
+                    <div>
+                      <p className="font-semibold text-blue-900 mb-1">
+                        Trending banners require square images (1:1 ratio)
+                      </p>
+                      <p className="text-[11px] text-blue-700">
+                        Upload any image, then use the <strong>Crop</strong> button to adjust it to 600×600px. This applies to the mobile image — the optional web image below uses its own wide presets. The preview below shows exactly how it will appear.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {(!isEdit || imageCleared || !banner?.image_url) && (
+              {/* Special notice for promo strip tiles */}
+              {watchedPlacement === 'strip' && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-xs text-purple-800 space-y-1">
+                  <div className="flex items-start gap-2">
+                    <Info size={14} className="shrink-0 mt-0.5 text-purple-600" />
+                    <div>
+                      <p className="font-semibold text-purple-900 mb-1">
+                        Promo strip tiles use a fixed 3:4 ratio image
+                      </p>
+                      <p className="text-[11px] text-purple-700">
+                        Use the <strong>Crop</strong> button and pick the <strong>Promotional Strip (3:4)</strong> preset. The image fills the tile edge-to-edge and the tile label shows in a bar below it, so nothing overlaps the picture.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <BannerImageField
+                variant="mobile"
+                title="Mobile Image"
+                description={
+                  supportsWebImage
+                    ? watchedPlacement === 'trending'
+                      ? 'Shown on phones, below the 640px breakpoint. Square 1:1.'
+                      : 'Shown on phones, below the 640px breakpoint. Portrait 4:5 works best.'
+                    : 'Shown on phones, below the 640px breakpoint.'
+                }
+                emptyHint={
+                  watchedPlacement === 'trending'
+                    ? "After upload, you'll crop to 600×600px"
+                    : 'Drag file or click to select'
+                }
+                cropLabel={
+                  watchedPlacement === 'trending'
+                    ? 'Crop to 600×600px (Required)'
+                    : 'Edit Crop'
+                }
+                isEdit={isEdit}
+                existingUrl={banner?.image_url}
+                slot={mobileImage}
+                update={(patch) => setMobileImage((s) => ({ ...s, ...patch }))}
+                onCropRequest={requestCrop}
+              />
+
+              {supportsWebImage && (
                 <>
-                  <div className="flex gap-4 text-xs font-semibold text-gray-600">
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="imageMode"
-                        checked={imageMode === 'upload'}
-                        onChange={() => setImageMode('upload')}
-                      />
-                      Upload File
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="imageMode"
-                        checked={imageMode === 'url'}
-                        onChange={() => setImageMode('url')}
-                      />
-                      Use Web URL
-                    </label>
+                  <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800">
+                    <Info size={14} className="shrink-0 mt-0.5 text-sky-600" />
+                    <div>
+                      <p className="font-semibold text-sky-900 mb-1">
+                        Separate web image (optional)
+                      </p>
+                      <p className="text-[11px] text-sky-700">
+                        The carousel is much wider on desktop, so a phone crop gets
+                        cut off. Upload a wide image here and it replaces the mobile
+                        one from 640px upwards. Leave it empty and the mobile image is
+                        used everywhere, as before.
+                      </p>
+                    </div>
                   </div>
 
-                  {imageMode === 'upload' ? (
-                    <div>
-                      <div
-                        onClick={() => fileInputRef.current?.click()}
-                        className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                      >
-                        {filePreview ? (
-                          <img
-                            src={filePreview}
-                            alt="Preview"
-                            className="max-h-32 mx-auto object-contain rounded"
-                          />
-                        ) : (
-                          <div className="text-gray-400">
-                            <ImageIcon
-                              size={28}
-                              className="mx-auto mb-2"
-                            />
-                            <p className="text-xs font-semibold text-gray-700">
-                              Upload Banner Image
-                            </p>
-                            <p className="text-[10px] text-gray-400 mt-0.5">
-                              Drag file or click to select
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileSelect(file);
-                        }}
-                      />
-                      {fileError && (
-                        <p className="text-xs text-red-500 mt-1">
-                          {fileError}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div>
-                      <input
-                        type="url"
-                        value={manualUrl}
-                        onChange={(e) => {
-                          setManualUrl(e.target.value);
-                          setUrlValid(null);
-                        }}
-                        onBlur={handleUrlBlur}
-                        placeholder="e.g. https://images.unsplash.com/..."
-                        className={inputClass}
-                      />
-                      {urlValid === true && (
-                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                          <CheckCircle size={12} /> Image URL loaded successfully
-                        </p>
-                      )}
-                      {urlValid === false && (
-                        <p className="text-xs text-red-500 mt-1">
-                          Could not verify image. Double check the address.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  <BannerImageField
+                    variant="web"
+                    title="Web Image"
+                    description="Shown on desktop and tablet, 640px and up."
+                    emptyHint="Wide image, e.g. 1920×824px"
+                    cropLabel="Crop Web Image"
+                    isEdit={isEdit}
+                    existingUrl={banner?.image_url_web}
+                    slot={webImage}
+                    update={(patch) => setWebImage((s) => ({ ...s, ...patch }))}
+                    onCropRequest={requestCrop}
+                  />
                 </>
               )}
             </div>
@@ -975,6 +1508,39 @@ function BannerDrawer({
               ctaText={watchedCtaText || ''}
               imageSrc={previewImageSrc}
             />
+          )}
+
+          {/* Desktop mockup — shows which image desktop visitors will actually get */}
+          {supportsWebImage && (
+            <div className="mt-4 p-4 border rounded-xl bg-gray-50">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Desktop Preview (640px and up)
+                </p>
+                <div className="text-[10px] text-gray-500 bg-white px-2 py-1 rounded border">
+                  {webPreviewImageSrc ? 'Using web image' : 'Falling back to mobile image'}
+                </div>
+              </div>
+              <div
+                className="relative w-full aspect-[21/9] overflow-hidden rounded-xl border-2 border-gray-300 shadow-lg"
+                style={{ backgroundColor: watchedBgColor }}
+              >
+                {webPreviewImageSrc ? (
+                  <img
+                    src={webPreviewImageSrc}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
+                    No web image — desktop shows the mobile image
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {watchedPlacement === 'highlight' && (
@@ -1017,6 +1583,74 @@ function BannerDrawer({
             </div>
           )}
 
+          {watchedPlacement === 'strip' && (
+            <div className="mt-4 p-4 border rounded-xl bg-gray-50">
+              <p className="text-[11px] font-semibold text-gray-400 mb-2 uppercase tracking-wider">Promo Strip Tile Preview</p>
+              <div className="flex gap-3">
+                <div className="w-[130px] shrink-0 aspect-[3/4] rounded-xl overflow-hidden relative border border-gray-200 shadow-sm flex flex-col bg-gray-100">
+                  <div className="relative flex-1 min-h-0">
+                    {previewImageSrc ? (
+                      <img
+                        src={previewImageSrc}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center px-2 text-center">
+                        <span className="text-[10px] font-bold text-gray-500">Image preview</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative bg-white px-2 py-1.5 border-t">
+                    <span className="text-[11px] font-bold text-gray-800 leading-tight block text-center truncate">
+                      {watchedTitle || 'Tile Label'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex-1 text-[10px] text-gray-500 leading-relaxed">
+                  <p className="font-semibold text-gray-700 mb-1">Fixed tile = 3:4 ratio</p>
+                  <p>
+                    The image fills the tile edge-to-edge and the label bar sits below it,
+                    so nothing overlaps the picture. Crop your upload with the{' '}
+                    <strong>Promotional Strip (3:4)</strong> preset.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {watchedPlacement === 'product_strip' && (
+            <div className="mt-4 p-4 border rounded-xl bg-gray-50">
+              <p className="text-[11px] font-semibold text-gray-400 mb-2 uppercase tracking-wider">Product Strip Preview</p>
+              <div
+                className="h-[50px] w-full overflow-hidden rounded-lg border border-gray-200"
+                style={{ backgroundColor: watchedBgColor }}
+              >
+                {previewImageSrc ? (
+                  <img
+                    src={previewImageSrc}
+                    alt=""
+                    className="h-full w-full object-cover object-center"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center px-4 text-center">
+                    <span
+                      className="text-[10px] font-bold"
+                      style={{ color: watchedTextColor }}
+                    >
+                      {watchedTitle || 'Free Delivery — Shop Now'}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1.5">Appears below the Buy It Now button on product pages.</p>
+            </div>
+          )}
+
           <div className="flex gap-3 pt-4 border-t bg-white">
             <button
               type="button"
@@ -1035,6 +1669,21 @@ function BannerDrawer({
           </div>
         </form>
       </div>
+
+      <ImageCropModal
+        isOpen={cropModalOpen}
+        imageSrc={cropImageSrc || ''}
+        placement={watchedPlacement}
+        useServerCrop={useServerCrop}
+        bannerId={banner?.id}
+        variant={cropVariant}
+        onCropComplete={handleCropComplete}
+        onServerCropComplete={handleServerCropComplete}
+        onClose={() => {
+          setCropModalOpen(false);
+          setCropImageSrc(null);
+        }}
+      />
     </>
   );
 }
@@ -1052,15 +1701,8 @@ export default function BannersAdminPage() {
     null,
   );
 
-  const { data: config } = useQuery({
-    queryKey: ['banner-config'],
-    queryFn: () => api.get('/banners/config').then((r) => r.data),
-    retry: false,
-    staleTime: Infinity,
-  });
-
   const {
-    data: banners = [],
+    data: banners = EMPTY_BANNERS,
     isLoading,
     refetch,
   } = useQuery<Banner[]>({
@@ -1071,10 +1713,18 @@ export default function BannersAdminPage() {
         .then((r) => r.data),
   });
 
-  const [localBanners, setLocalBanners] = useState<Banner[]>([]);
-  useEffect(() => {
+  const [localBanners, setLocalBanners] = useState<Banner[]>(banners);
+
+  // Mirror fetched banners into editable local state. Guarded render-time
+  // adjustment replaces a synchronous setState effect.
+  // NOTE: the `banners` default above must stay a STABLE reference (EMPTY_BANNERS).
+  // A fresh `[]` per render makes this guard always true while loading, which
+  // loops forever (React "Too many re-renders").
+  const [lastFetchedBanners, setLastFetchedBanners] = useState(banners);
+  if (lastFetchedBanners !== banners) {
+    setLastFetchedBanners(banners);
     setLocalBanners(banners);
-  }, [banners]);
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -1154,7 +1804,7 @@ export default function BannersAdminPage() {
   function handleDrawerSaved() {
     refetch();
     queryClient.invalidateQueries({
-      queryKey: ['banners', activePlacement],
+      queryKey: ['banners'],
     });
   }
 
@@ -1256,7 +1906,6 @@ export default function BannersAdminPage() {
         <BannerDrawer
           banner={editingBanner}
           placement={activePlacement}
-          cloudinaryEnabled={config?.cloudinary_enabled ?? false}
           onClose={() => {
             setDrawerOpen(false);
             setEditingBanner(null);

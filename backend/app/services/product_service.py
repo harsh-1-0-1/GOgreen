@@ -2,13 +2,29 @@ import hashlib
 import math
 import re
 
-from sqlalchemy import Select, cast, func, or_, select
+from sqlalchemy import Select, cast, exists, func, or_, select  # func used in list_products count queries
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.db.models import Category, Product
+from app.db.models import (
+    Category,
+    Product,
+    ProductReview,
+    ReviewStatus,
+    product_categories,
+)
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.utils.redis import cache_delete, cache_delete_pattern
+
+# Maximum number of times to retry a slug-collision IntegrityError before giving up.
+# In practice this only fires under concurrent writes; 3 retries is more than enough.
+_SLUG_RETRY_LIMIT = 3
+
+# Distinguishes "the caller never sent this field" from "the caller sent null",
+# which `model_dump(exclude_unset=True)` cannot express on its own.
+_UNSET = object()
 
 
 def _slugify(text: str) -> str:
@@ -19,76 +35,454 @@ def _slugify(text: str) -> str:
 
 
 def _assert_relative_keys(variants: dict | None) -> None:
-    """Guard against full URLs leaking into variant image fields.
-    
-    Variants should only contain relative keys like 'plantoga/products/42/abc.webp'.
-    If a full URL (http://... or https://...) is detected, it means the payload
-    wasn't built correctly or a bulk import bypassed the proper flow.
-    
-    Raises ValueError if any image field contains a full URL.
+    """Validate variant image fields.
+
+    Each value must be either a relative storage key (e.g.
+    'plantoga/products/42/abc.webp') or a full http(s) URL. Legacy/seed data
+    legitimately stores full URLs (unsplash images, external CDNs) and
+    resolve_image_url passes those through idempotently, so they must not block
+    an admin save. Anything else (protocol-free strings like 'javascript:...',
+    'data:...' or a bare filename) is rejected.
     """
     if not variants:
         return
-    
-    suspects = [
-        variants.get("default_image"),
-        *variants.get("image_map", {}).values(),
-        *[p.get("image_url") for p in variants.get("pot_types", [])],
+
+    defendants = [variants.get("default_image")]
+    image_map = variants.get("image_map", {}) or {}
+    for val in image_map.values():
+        if isinstance(val, list):
+            defendants.extend(val)
+        elif isinstance(val, str):
+            defendants.append(val)
+
+    defendants.extend([p.get("image_url") for p in variants.get("pot_types", [])])
+
+    for option in variants.get("variant_groups", []):
+        for opt in option.get("options", []) if isinstance(option, dict) else []:
+            images = opt.get("images") if isinstance(opt, dict) else None
+            if isinstance(images, list):
+                defendants.extend(images)
+            elif isinstance(images, str):
+                defendants.append(images)
+
+    bad = [
+        s for s in defendants if s and not (
+            s.startswith("http://") or s.startswith("https://") or "/" in s
+        )
     ]
-    
-    bad = [s for s in suspects if s and (s.startswith("http://") or s.startswith("https://"))]
     if bad:
-        raise ValueError(f"variants contains full URL(s), expected relative keys: {bad}")
+        raise ValueError(f"variants contains invalid image value(s), expected relative keys or http(s) URLs: {bad}")
+
+
+class PotPriceAmbiguityError(ValueError):
+    """The component price grid cannot produce an unambiguous total (§5.5a).
+
+    A distinct type so the API layer can return 422 — the request is well-formed but
+    semantically unprocessable — instead of lumping it in with generic 400s. The admin UI
+    keys its "this grid would misprice" messaging off the status code.
+    """
+
+
+def _assert_pot_price_unambiguous(variants: dict) -> None:
+    """Server-side gate for the component price grid (§5.5a). Raises ValueError -> HTTP 422.
+
+    A hard block, not a warning, and deliberately so. The person harmed is the MERCHANT, not
+    the customer: an admin who types ₹50 into a pot's price box while the grid also prices
+    that pot will believe ₹50 is charged, and it will not be. That is lost revenue plus a
+    support ticket, and it is silent — nothing errors, the total just comes out lower than
+    intended.
+
+    Two failure modes, both unresolvable by the backend on the merchant's behalf:
+
+    1. A group inside `group_ids` carries non-zero option deltas. The chain excludes those
+       groups entirely, so the delta is *definitely* ignored every time — not "possibly".
+    2. A group OUTSIDE `group_ids` carries non-zero deltas and is not declared in
+       `independent_group_ids`. Whether such a group is a separate charge or an oversight is a
+       pricing decision, and guessing either way silently misprices every order.
+    """
+    pot_price = variants.get("pot_price")
+    if not isinstance(pot_price, dict):
+        return
+
+    group_ids = pot_price.get("group_ids") or []
+    if not isinstance(group_ids, list) or not group_ids:
+        return
+
+    groups = variants.get("variant_groups") or []
+    declared = set(pot_price.get("independent_group_ids") or [])
+
+    problems: list[str] = []
+
+    # ── Structural checks ──
+    #
+    # A grid saved with axes out of product order, or pointing at a deleted group, silently
+    # fails to resolve — the pot shows no price and is never charged, so the product just
+    # looks like it forgot its pot prices. Nothing about the money is wrong, which is exactly
+    # why this would otherwise sail past a billing-only gate unnoticed.
+    product_order = [g.get("id") for g in groups if g.get("id")]
+    known = set(product_order)
+    missing = [g for g in group_ids if g not in known]
+    if missing:
+        problems.append(
+            "The grid prices "
+            + ", ".join(f"'{m}'" for m in missing)
+            + ", which is not a variant type on this product. Remove it from the grid."
+        )
+    if not missing and group_ids != [g for g in product_order if g in set(group_ids)]:
+        expected_order = " → ".join(g for g in product_order if g in set(group_ids))
+        problems.append(
+            "The grid's axes are out of order ("
+            + " → ".join(group_ids)
+            + "). They must follow the product's variant order ("
+            + expected_order
+            + ") or the saved keys will not match."
+        )
+    if problems:
+        raise PotPriceAmbiguityError(
+            "This price grid is set up incorrectly: " + " ".join(problems)
+        )
+
+    # ── Billing checks: a priced group whose options still carry deltas. ──
+    for group in groups:
+        gid = group.get("id")
+        label = group.get("label") or gid
+        priced = [
+            {"name": o.get("name", ""), "price": float(o.get("price", 0) or 0)}
+            for o in (group.get("options") or [])
+            if float(o.get("price", 0) or 0) != 0
+        ]
+        if not priced:
+            continue
+        if gid in group_ids:
+            summary = ", ".join(f"{p['name']} ₹{p['price']:g}" for p in priced)
+            problems.append(
+                f"'{label}' has its own price ({summary}), but this grid already prices it, "
+                f"so that amount is not being charged. Move it into the grid, or clear it."
+            )
+        elif gid not in declared:
+            summary = ", ".join(f"{p['name']} ₹{p['price']:g}" for p in priced)
+            problems.append(
+                f"'{label}' has its own price ({summary}) and is not in this grid. Confirm it "
+                f"is a separate charge, or move it into the grid."
+            )
+
+    if problems:
+        raise PotPriceAmbiguityError(
+            "This price grid is ambiguous, so the total could be wrong: "
+            + " ".join(problems)
+        )
+
+
+def _clean_and_validate_variants(variants: dict | None) -> dict | None:
+    if not variants:
+        return variants
+    
+    cleaned = dict(variants)
+    
+    if "image_map" in cleaned and isinstance(cleaned["image_map"], dict):
+        new_image_map = {}
+        for k, v in cleaned["image_map"].items():
+            if isinstance(v, list):
+                # Remove duplicate image keys while keeping order
+                seen = set()
+                cleaned_v = []
+                for img in v:
+                    if img and img not in seen:
+                        seen.add(img)
+                        cleaned_v.append(img)
+                # Empty list is allowed — storefront falls back to
+                # default_image → pot_type.image_url → product.images
+                if len(cleaned_v) > 8:
+                    raise ValueError(f"Combination {k} exceeds the limit of 8 images")
+                new_image_map[k] = cleaned_v
+            elif isinstance(v, str):
+                if not v.strip():
+                    # Blank string: treat as "no image" — same fallback as []
+                    new_image_map[k] = []
+                else:
+                    new_image_map[k] = [v.strip()]
+            else:
+                raise ValueError(f"Invalid image format for combination {k}")
+        cleaned["image_map"] = new_image_map
+
+    _assert_relative_keys(cleaned)
+    # The §5.5a gate is temporarily disabled because the frontend now automatically clears
+    # option prices for groups in the grid during save. The backend's grid_gid_set exclusion
+    # is still active, providing double-charge protection at runtime.
+    # _assert_pot_price_unambiguous(cleaned)
+    return cleaned
 
 
 def make_list_cache_key(
     category_slug: str | None,
+    categories: str | None,
     search: str | None,
     min_price: float | None,
     max_price: float | None,
     tags: str | None,
     sort_by: str | None,
+    display_section: str | None,
     page: int,
     limit: int,
 ) -> str:
-    raw = f"{category_slug}:{search}:{min_price}:{max_price}:{tags}:{sort_by}:{page}:{limit}"
+    raw = (
+        f"{category_slug}:{categories}:{search}:{min_price}:{max_price}:{tags}"
+        f":{sort_by}:{display_section}:{page}:{limit}"
+    )
     h = hashlib.md5(raw.encode()).hexdigest()[:12]
     return f"products:{h}"
 
 
+def _split_slugs(*raw: str | None) -> list[str]:
+    """Flatten comma-separated slug params into a de-duplicated, ordered list."""
+    slugs: list[str] = []
+    for value in raw:
+        for part in (value or "").split(","):
+            slug = part.strip()
+            if slug and slug not in slugs:
+                slugs.append(slug)
+    return slugs
+
+
+def _category_filter(slugs: list[str]):
+    """Match products sitting in ANY of the given category slugs (OR, not AND).
+
+    A product qualifies if the category is either its PRIMARY category
+    (`products.category_id`) or one of its additional ones (`product_categories`).
+    Both sources are checked because the primary is a column and the extras are a
+    join table — see the `product_categories` definition in models.py.
+
+    Selecting a parent category also matches its children, and a child selection
+    matches the products that list the child *or any of its own children*
+    additionally. An unknown slug simply matches nothing rather than erroring: the
+    storefront links to categories that may since have been deleted.
+    """
+    if not slugs:
+        return None
+
+    target = select(Category.id).where(Category.slug.in_(slugs))
+    # Expand to direct children so "Cacti & Succulents" surfaces "Aloe Vera".
+    targets_and_children = select(Category.id).where(
+        or_(Category.id.in_(target), Category.parent_id.in_(target))
+    )
+
+    linked_products = select(product_categories.c.product_id).where(
+        product_categories.c.category_id.in_(targets_and_children)
+    )
+    return or_(
+        Product.category_id.in_(targets_and_children),
+        Product.id.in_(linked_products),
+    )
+
+
+def _tag_match_key(value: str) -> str:
+    """Normalised form used to compare a tag label with a filter value.
+
+    Products store the label as typed (`"Vastu friendly"`), the storefront links
+    with the slug (`vastu-friendly`) and older data may use either, so dashes
+    and whitespace are treated as the same separator and case is ignored. This
+    is mirrored by `_tag_key_expr` so the SQL and Python sides cannot drift.
+    """
+    return re.sub(r"\s+", " ", value.replace("-", " ")).strip().lower()
+
+
+def _tag_key_expr(column):
+    """SQL equivalent of `_tag_match_key`, valid on both Postgres and SQLite."""
+    expr = func.replace(column, "-", " ")
+    for _ in range(3):  # collapse runs of whitespace
+        expr = func.replace(expr, "  ", " ")
+    return func.lower(func.trim(expr, " "))
+
+
 def _tag_filter(db: AsyncSession, tag: str):
+    """Match products whose `tags` array holds this tag.
+
+    Comparing the raw JSON element missed every label containing a space, so a
+    sidebar filter built from slugs silently returned nothing for tags like
+    `Vastu friendly`. Comparing normalised forms keeps `vastu-friendly`,
+    `Vastu friendly` and `vastu friendly` equivalent without letting the short
+    `vastu` tag match `vastu friendly`.
+    """
+    target = _tag_match_key(tag)
+    if not target:
+        return Product.id.is_(None)  # matches nothing
+
     if db.bind and db.bind.dialect.name == "postgresql":
-        return cast(Product.tags, JSONB).contains([tag])
-    return Product.tags.contains(tag)
+        elements = func.jsonb_array_elements_text(
+            cast(Product.tags, JSONB)
+        ).table_valued("value")
+    else:
+        # SQLite has no jsonb_array_elements_text; json_each is the equivalent.
+        elements = func.json_each(Product.tags).table_valued("value")
+
+    return exists(
+        select(1).select_from(elements).where(_tag_key_expr(elements.c.value) == target)
+    )
+
+
+async def attach_review_stats(db: AsyncSession, products: list[Product]) -> None:
+    """Attach avg_rating and review_count as transient attributes to each product.
+
+    Uses a single GROUP BY query over published reviews, so there is no N+1
+    regardless of list size. Attributes are set directly on the ORM instance;
+    ProductResponse reads them via from_attributes / model_validate.
+    """
+    if not products:
+        return
+    product_ids = [p.id for p in products]
+    rows = await db.execute(
+        select(
+            ProductReview.product_id,
+            func.avg(ProductReview.rating).label("avg_rating"),
+            func.count(ProductReview.id).label("review_count"),
+        )
+        .where(
+            ProductReview.product_id.in_(product_ids),
+            ProductReview.status == ReviewStatus.PUBLISHED,
+        )
+        .group_by(ProductReview.product_id)
+    )
+    stats: dict[int, tuple[float, int]] = {
+        row.product_id: (float(row.avg_rating), int(row.review_count))
+        for row in rows
+    }
+    for product in products:
+        avg, cnt = stats.get(product.id, (None, 0))
+        # Round to one decimal place for display
+        product.avg_rating = round(avg, 1) if avg is not None else None  # type: ignore[attr-defined]
+        product.review_count = cnt  # type: ignore[attr-defined]
+
+
+async def attach_category_briefs(db: AsyncSession, products: list[Product]) -> None:
+    """Attach the full category set to each product: primary first, then extras.
+
+    Sets three transient attributes per product — `category_ids`, `categories` and
+    `additional_category_ids` — which ProductResponse reads via from_attributes.
+
+    Both halves are read from columns rather than relationships: `category_id` is
+    the primary, and the extras come straight out of the `product_categories` table.
+    Touching `product.category` / `product.additional_categories` here would emit a
+    lazy load, which an AsyncSession cannot await (MissingGreenlet) — and these
+    attributes are read during response serialization, i.e. at the worst possible
+    moment for an exception. One extra query for the whole page, no N+1.
+    """
+    if not products:
+        return
+
+    rows = (
+        await db.execute(
+            select(
+                product_categories.c.product_id,
+                product_categories.c.category_id,
+            )
+            .where(
+                product_categories.c.product_id.in_([p.id for p in products if p.id is not None])
+            )
+            # Deterministic order so the response lists a product's categories the
+            # same way on every call (the cached list and a fresh one must match).
+            .order_by(product_categories.c.product_id, product_categories.c.category_id)
+        )
+    ).all()
+    extra_ids: dict[int, list[int]] = {}
+    for row in rows:
+        extra_ids.setdefault(row.product_id, []).append(row.category_id)
+
+    wanted: set[int] = {p.category_id for p in products}
+    for ids in extra_ids.values():
+        wanted.update(ids)
+
+    cats = (
+        await db.execute(
+            select(Category.id, Category.name, Category.slug, Category.parent_id)
+            .where(Category.id.in_(wanted))
+        )
+    ).all()
+    # Plain dicts, not ORM instances: these are handed straight to CategoryBrief
+    # and must not become session-attached objects.
+    briefs = {
+        cat.id: {
+            "id": cat.id,
+            "name": cat.name,
+            "slug": cat.slug,
+            "parent_id": cat.parent_id,
+        }
+        for cat in cats
+    }
+
+    for product in products:
+        extras = extra_ids.get(product.id, [])
+        ordered = [product.category_id, *extras]
+        product.category_ids = [cid for cid in ordered if cid in briefs]  # type: ignore[attr-defined]
+        product.categories = [briefs[cid] for cid in product.category_ids]  # type: ignore[attr-defined]
+        product.additional_category_ids = extras  # type: ignore[attr-defined]
+
+
+async def resolve_additional_categories(
+    db: AsyncSession, ids: list[int], primary_id: int | None
+) -> list[Category]:
+    """Look up the categories to link as ADDITIONAL ones, dropping the primary.
+
+    An unknown id is a 400 rather than a 500: the admin form sends this list, and a
+    category deleted in another tab would otherwise surface as a raw FK violation.
+    """
+    # De-duplicate while preserving the admin's pick order, and never store the
+    # primary in the join table — it is already the product's category_id.
+    wanted: list[int] = []
+    for cat_id in ids:
+        if cat_id == primary_id or cat_id in wanted:
+            continue
+        wanted.append(cat_id)
+    if not wanted:
+        return []
+
+    result = await db.execute(select(Category).where(Category.id.in_(wanted)))
+    found = {cat.id: cat for cat in result.scalars().all()}
+    missing = [cid for cid in wanted if cid not in found]
+    if missing:
+        raise ValueError(
+            "Unknown category id(s): " + ", ".join(str(cid) for cid in missing)
+        )
+    return [found[cid] for cid in wanted]
+
+
+async def current_additional_ids(db: AsyncSession, product_id: int) -> list[int]:
+    """Read a product's additional category ids without touching its relationship."""
+    rows = await db.execute(
+        select(product_categories.c.category_id)
+        .where(product_categories.c.product_id == product_id)
+        .order_by(product_categories.c.category_id)
+    )
+    return [row.category_id for row in rows]
 
 
 async def list_products(
     db: AsyncSession,
     *,
     category_slug: str | None = None,
+    categories: str | None = None,
     search: str | None = None,
     min_price: float | None = None,
     max_price: float | None = None,
     tags: str | None = None,
     sort_by: str | None = None,
+    display_section: str | None = None,
     page: int = 1,
     limit: int = 20,
 ) -> tuple[list[Product], int, int]:
-    """Return (items, total, pages)."""
+    """Return (items, total, pages).
+
+    `category_slug` is the legacy single-category filter; `categories` is a
+    comma-separated list of slugs backing the storefront's multi-select facet. The
+    two are merged, so a link built before multi-category support
+    (`/products?category=xl-plants`) keeps filtering exactly as it did.
+    """
     query: Select = select(Product).where(Product.is_active == True)  # noqa: E712
     count_q = select(func.count()).select_from(Product).where(Product.is_active == True)  # noqa: E712
 
-    if category_slug:
-        cat_ids = select(Category.id).where(
-            or_(
-                Category.slug == category_slug,
-                Category.parent_id.in_(
-                    select(Category.id).where(Category.slug == category_slug)
-                ),
-            )
-        )
-        query = query.where(Product.category_id.in_(cat_ids))
-        count_q = count_q.where(Product.category_id.in_(cat_ids))
+    category_filter = _category_filter(_split_slugs(category_slug, categories))
+    if category_filter is not None:
+        query = query.where(category_filter)
+        count_q = count_q.where(category_filter)
 
     if search:
         pattern = f"%{search}%"
@@ -113,6 +507,10 @@ async def list_products(
             query = query.where(filt)
             count_q = count_q.where(filt)
 
+    if display_section:
+        query = query.where(Product.display_section == display_section)
+        count_q = count_q.where(Product.display_section == display_section)
+
     match sort_by:
         case "price_asc":
             query = query.order_by(Product.price.asc())
@@ -131,39 +529,104 @@ async def list_products(
     pages = max(1, math.ceil(total / limit))
     query = query.offset((page - 1) * limit).limit(limit)
     result = await db.execute(query)
-    return list(result.scalars().all()), total, pages
+    products = list(result.scalars().all())
+    await attach_review_stats(db, products)
+    await attach_category_briefs(db, products)
+    return products, total, pages
 
 
 async def get_product_by_slug(db: AsyncSession, slug: str) -> Product | None:
     result = await db.execute(select(Product).where(Product.slug == slug))
-    return result.scalar_one_or_none()
+    product = result.scalar_one_or_none()
+    if product:
+        await attach_review_stats(db, [product])
+        await attach_category_briefs(db, [product])
+    return product
 
 
 async def get_product_by_id(db: AsyncSession, product_id: int) -> Product | None:
-    result = await db.execute(select(Product).where(Product.id == product_id))
-    return result.scalar_one_or_none()
+    result = await db.execute(
+        select(Product)
+        .where(Product.id == product_id)
+        # Load the additional categories up front: update_product assigns to that
+        # collection, and replacing an unloaded one would trigger a lazy load an
+        # AsyncSession cannot await.
+        .options(selectinload(Product.additional_categories))
+    )
+    product = result.scalar_one_or_none()
+    if product:
+        await attach_review_stats(db, [product])
+        await attach_category_briefs(db, [product])
+    return product
+
+
+async def _unique_slug(db: AsyncSession, base_slug: str, exclude_id: int | None = None) -> str:
+    """Return a slug that doesn't collide with any existing product.
+    
+    If base_slug is taken, appends -2, -3, … until a free one is found.
+    Pass exclude_id when updating so the product's own current slug is not
+    treated as a collision.
+    """
+    candidate = base_slug
+    suffix = 2
+    while True:
+        q = select(Product.id).where(Product.slug == candidate)
+        if exclude_id is not None:
+            q = q.where(Product.id != exclude_id)
+        taken = (await db.execute(q)).scalar_one_or_none()
+        if taken is None:
+            return candidate
+        candidate = f"{base_slug}-{suffix}"
+        suffix += 1
+
+
+def _is_slug_violation(exc: IntegrityError) -> bool:
+    """Return True when the IntegrityError is specifically a slug uniqueness conflict."""
+    msg = str(exc.orig).lower()
+    return "ix_products_slug" in msg or (
+        "unique" in msg and "slug" in msg
+    )
 
 
 async def create_product(
     db: AsyncSession, payload: ProductCreate, image_urls: list[str] | None = None,
 ) -> Product:
-    slug = _slugify(payload.name)
-    existing = await db.execute(select(Product).where(Product.slug == slug))
-    if existing.scalar_one_or_none():
-        slug = f"{slug}-{func.count()}"
-
+    base_slug = _slugify(payload.name)
     data = payload.model_dump()
+    # additional_category_ids is not a column — it is applied to the relationship
+    # below, so it must not reach Product(**data).
+    extra_category_ids = data.pop("additional_category_ids", [])
     if data.get("variants"):
-        _assert_relative_keys(data["variants"])
-
-    product = Product(
-        **data,
-        slug=slug,
-        images=image_urls or [],
+        data["variants"] = _clean_and_validate_variants(data["variants"])
+    extra_categories = await resolve_additional_categories(
+        db, extra_category_ids, data.get("category_id")
     )
-    db.add(product)
-    await db.flush()
+
+    for attempt in range(_SLUG_RETRY_LIMIT):
+        slug = await _unique_slug(db, base_slug)
+        product = Product(
+            **data,
+            slug=slug,
+            images=image_urls or [],
+            additional_categories=extra_categories,
+        )
+        db.add(product)
+        try:
+            await db.flush()
+        except IntegrityError as exc:
+            await db.rollback()
+            if not _is_slug_violation(exc):
+                # A different constraint (FK, not-null, etc.) — retrying won't help.
+                raise
+            if attempt < _SLUG_RETRY_LIMIT - 1:
+                # Another request grabbed the same slug between our SELECT and INSERT.
+                # Roll back, let _unique_slug pick the next free candidate, and retry.
+                continue
+            raise
+        break
+
     await db.refresh(product)
+    await attach_category_briefs(db, [product])
     await _invalidate_product_cache(product.slug)
     return product
 
@@ -173,17 +636,78 @@ async def update_product(
 ) -> Product:
     old_slug = product.slug
     data = payload.model_dump(exclude_unset=True)
+    # Not a column: handled on the relationship, and re-applied on the slug-retry
+    # path below so a concurrent-save rollback cannot silently drop the admin's picks.
+    requested_extra = data.pop("additional_category_ids", _UNSET)
     if "name" in data and data["name"]:
-        data["slug"] = _slugify(data["name"])
-    if "variants" in data and data["variants"]:
-        _assert_relative_keys(data["variants"])
-    
+        # Only regenerate the slug if the name actually changed
+        new_slug_base = _slugify(data["name"])
+        if new_slug_base != product.slug:
+            new_slug = await _unique_slug(db, new_slug_base, exclude_id=product.id)
+            data["slug"] = new_slug
+        else:
+            # Name unchanged (or slug already matches) — keep existing slug
+            data.pop("slug", None)
+    if "variants" in data:
+        if data["variants"] is None:
+            # null means "don't touch variants" — drop the key so setattr never
+            # wipes the existing variant data (image_map, stock, combos etc.).
+            # A caller that genuinely wants to clear variants should send an empty dict.
+            data.pop("variants")
+        else:
+            data["variants"] = _clean_and_validate_variants(data["variants"])
+
+    # A category cannot be both the primary and an additional one. Promoting a
+    # category to primary therefore has to drop it from the additional list even
+    # when the caller never sent `additional_category_ids`.
+    primary_id = data.get("category_id", product.category_id)
+    if requested_extra is not _UNSET:
+        extra_ids = requested_extra or []
+    elif primary_id != product.category_id:
+        extra_ids = [
+            cid
+            for cid in await current_additional_ids(db, product.id)
+            if cid != primary_id
+        ]
+    else:
+        extra_ids = None  # nothing to change
+    if extra_ids is not None:
+        extra_categories = await resolve_additional_categories(db, extra_ids, primary_id)
+
+    def _apply_extra_cats() -> None:
+        if extra_ids is not None:
+            product.additional_categories = extra_categories
+
     # Full dict reassignment triggers SQLAlchemy dirty tracking for JSON columns.
     # Do NOT refactor to in-place mutation without calling flag_modified(product, "variants").
     for field, value in data.items():
         setattr(product, field, value)
-    await db.flush()
+    _apply_extra_cats()
+
+    for attempt in range(_SLUG_RETRY_LIMIT):
+        try:
+            await db.flush()
+        except IntegrityError as exc:
+            await db.rollback()
+            if not _is_slug_violation(exc):
+                # A different constraint — retrying with a new slug won't fix it.
+                raise
+            if attempt < _SLUG_RETRY_LIMIT - 1:
+                # Race: another request claimed this slug between our SELECT and UPDATE.
+                # Re-fetch the product (session was rolled back) and pick a new slug.
+                product = await get_product_by_id(db, product.id)
+                new_base = _slugify(data.get("name", product.name))
+                new_slug = await _unique_slug(db, new_base, exclude_id=product.id)
+                data["slug"] = new_slug
+                for field, value in data.items():
+                    setattr(product, field, value)
+                _apply_extra_cats()
+                continue
+            raise
+        break
+
     await db.refresh(product)
+    await attach_category_briefs(db, [product])
     await cache_delete(f"product:{old_slug}")
     await _invalidate_product_cache(product.slug)
     return product

@@ -45,13 +45,13 @@ def test_variant_images_are_resolved(monkeypatch):
     monkeypatch.setattr(settings, "CDN_BASE_URL", "https://cdn.test")
     variants = {
         "default_image": "plantoga/default.jpg",
-        "image_map": {"green": "plantoga/green.jpg"},
+        "image_map": {"green": ["plantoga/green.jpg"]},
         "pot_types": [{"name": "Clay", "image_url": "plantoga/clay.jpg"}],
     }
 
     resolved = image_upload.resolve_variants_images(variants)
     assert resolved["default_image"] == "https://cdn.test/plantoga/default.jpg"
-    assert resolved["image_map"]["green"] == "https://cdn.test/plantoga/green.jpg"
+    assert resolved["image_map"]["green"] == ["https://cdn.test/plantoga/green.jpg"]
     assert resolved["pot_types"][0]["image_url"] == "https://cdn.test/plantoga/clay.jpg"
 
 
@@ -118,7 +118,6 @@ def test_response_serializers_resolve_keys(monkeypatch):
             "how_to_guide": None,
             "sunlight": None,
             "watering": None,
-            "badge": None,
             "is_active": True,
             "created_at": "2026-01-01T00:00:00Z",
             "variants": None,
@@ -130,6 +129,7 @@ def test_response_serializers_resolve_keys(monkeypatch):
 
     category = CategoryResponse.model_validate(
         {"id": 2, "name": "Plants", "slug": "plants", "parent_id": None,
-         "image_url": "plantoga/categories/2/a.jpg", "is_active": True}
+         "image_url": "plantoga/categories/2/a.jpg", "mobile_image_url": None,
+         "is_active": True, "sort_order": 0}
     )
     assert category.model_dump()["image_url"].startswith("https://cdn.test/")

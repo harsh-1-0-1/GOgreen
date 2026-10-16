@@ -1,10 +1,17 @@
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel, Field, field_serializer
+
+
+# New-format variant products send selected_options as a list of option IDs;
+# old-format products send a dict of slugs. Both are normalized server-side.
+SelectedOptions = list[str] | dict[str, str] | None
 
 
 class CartItemCreate(BaseModel):
     product_id: int
     quantity: int = Field(ge=1, default=1)
-    selected_options: dict[str, str] | None = None
+    selected_options: SelectedOptions = None
 
 
 class CartItemUpdate(BaseModel):
@@ -26,12 +33,18 @@ class CartItemProduct(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("images")
+    def serialize_images(self, images: list[str]) -> list[str]:
+        from app.utils.image_upload import resolve_image_url
+
+        return [url for img in (images or []) if (url := resolve_image_url(img))]
+
 
 class CartItemResponse(BaseModel):
     id: int
     product_id: int
     quantity: int
-    selected_options: dict[str, str] | None = None
+    selected_options: list[str] | dict[str, Any] | None = None
     product: CartItemProduct
     line_total: float
     resolved_image_url: str
@@ -40,6 +53,12 @@ class CartItemResponse(BaseModel):
     stock_warning: bool
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("resolved_image_url")
+    def serialize_resolved_image_url(self, val: str) -> str | None:
+        from app.utils.image_upload import resolve_image_url
+
+        return resolve_image_url(val)
 
 
 class CartResponse(BaseModel):

@@ -1,27 +1,25 @@
-import axios from 'axios';
 import api from '@/lib/api';
+import type { CorporateInquiry, CorporateInquiryPayload } from '@/types';
 
-export interface CorporateGiftInquiryPayload {
-  fullName: string;
-  phone: string;
-  email: string;
-  companyName: string;
-  customisation?: string;
-}
+// Posts to the backend route. Deployments may override with VITE_CORPORATE_INQUIRY_ENDPOINT:
+//   - a full http(s):// URL → external webhook/endpoint
+//   - a relative path       → posted via the /api/v1 axios client
+// Default: /corporate-inquiries (relative path, uses the api client)
+const DEFAULT_ENDPOINT = '/corporate-inquiries';
+const configured = import.meta.env.VITE_CORPORATE_INQUIRY_ENDPOINT as string | undefined;
+const endpoint = configured && configured.trim() ? configured.trim() : DEFAULT_ENDPOINT;
 
-const endpoint = import.meta.env.VITE_CORPORATE_INQUIRY_ENDPOINT as string | undefined;
-
-export async function submitCorporateGiftInquiry(payload: CorporateGiftInquiryPayload) {
-  if (!endpoint) {
-    await new Promise((resolve) => window.setTimeout(resolve, 900));
-    return { ok: true };
-  }
-
+export async function submitCorporateGiftInquiry(
+  payload: CorporateInquiryPayload,
+): Promise<CorporateInquiry> {
+  // If endpoint is a full URL, use axios directly
   if (/^https?:\/\//i.test(endpoint)) {
-    const { data } = await axios.post(endpoint, payload);
+    const axios = (await import('axios')).default;
+    const { data } = await axios.post<CorporateInquiry>(endpoint, payload);
     return data;
   }
 
-  const { data } = await api.post(endpoint, payload);
+  // Otherwise, use the api client (relative path against /api/v1)
+  const { data } = await api.post<CorporateInquiry>(endpoint, payload);
   return data;
 }
