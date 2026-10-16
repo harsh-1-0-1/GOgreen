@@ -834,16 +834,13 @@ export default function ProductDetailPage() {
 
   let galleryImages: string[];
   if (comboImages.length > 0) {
-    // Combo image(s) first, rest of product gallery appended (deduped)
-    galleryImages = [
-      ...comboImages,
-      ...(product.images ?? []).filter((img) => !comboImages.includes(img)),
-    ];
+    // Variant combination has its own images — show only those.
+    // Don't append product.images: mixing in images from other colours/combos
+    // would show e.g. a green watering can when the user selected ivory.
+    galleryImages = comboImages;
   } else if (optionFallbackImages.length > 0) {
-    galleryImages = [
-      ...optionFallbackImages,
-      ...(product.images ?? []).filter((img) => !optionFallbackImages.includes(img)),
-    ];
+    // Option has its own images — show only those for the same reason.
+    galleryImages = optionFallbackImages;
   } else if (defaultVariantImage) {
     galleryImages = [defaultVariantImage, ...(product.images ?? [])];
   } else {
