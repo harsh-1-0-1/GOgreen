@@ -233,7 +233,17 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="border-t border-white/10">
           <div className="mx-auto px-6 sm:px-10 lg:px-16 xl:px-24 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white/40">
-            <span>© 2026 Plantoga. All rights reserved.</span>
+            <span>
+              © 2026 Plantoga. All rights reserved. Made by{' '}
+              <a
+                href="https://thinkingweb.in/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-white/70 transition-colors"
+              >
+                thinkingweb.in
+              </a>
+            </span>
             <div className="flex items-center gap-3">
               <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">VISA</span>
               <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-semibold tracking-wider">MASTERCARD</span>
