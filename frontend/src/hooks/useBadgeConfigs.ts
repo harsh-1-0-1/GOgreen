@@ -25,7 +25,7 @@ function getChannel(): BroadcastChannel | null {
 
 /**
  * Announce that badge configs changed. Called after an admin save; every other
- * open tab refetches straight away instead of waiting for its poll or a reload.
+ * open tab refetches straight away instead of waiting for a reload.
  */
 export function notifyBadgeConfigsChanged(): void {
   const stamp = String(Date.now());
@@ -35,7 +35,7 @@ export function notifyBadgeConfigsChanged(): void {
   try {
     window.localStorage.setItem(STORAGE_FALLBACK_KEY, stamp);
   } catch {
-    /* private browsing / storage disabled — the poll still covers it */
+    /* private browsing / storage disabled — an admin would need to reload */
   }
 }
 
@@ -47,10 +47,9 @@ export function notifyBadgeConfigsChanged(): void {
  * of the styling.
  *
  * Freshness matters here because an admin can restyle a category at any moment:
- * the data is refetched on a short poll, whenever the tab regains focus, and
- * immediately when another tab reports a change. Without that, a shopper (or the
- * admin checking their own work in a second tab) would stare at stale colours
- * for minutes.
+ * the data is refetched whenever the tab regains focus and immediately when
+ * another tab reports a change. Without that, a shopper (or the admin checking
+ * their own work in a second tab) would stare at stale colours for minutes.
  */
 export function useBadgeConfigs() {
   const query = useQuery({
@@ -59,13 +58,11 @@ export function useBadgeConfigs() {
       const { data } = await api.get<BadgeConfigMap>('/badge-configs');
       return data;
     },
-    staleTime: 30 * 1000,
+    staleTime: 5 * 60 * 1000,
     // Another tab said the configs changed: believe it over the cache.
-    refetchOnMount: 'always',
+    refetchOnMount: true,
     refetchOnWindowFocus: true,
-    // Quiet top-up poll for visitors on a different device to the admin's.
-    refetchInterval: 30 * 1000,
-    refetchIntervalInBackground: false,
+    refetchInterval: false,
     // Never leave a card without badges while loading — the defaults look
     // identical to an uncustomised install.
     placeholderData: undefined,

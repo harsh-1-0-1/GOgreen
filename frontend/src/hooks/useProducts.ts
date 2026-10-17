@@ -26,9 +26,9 @@ export function useProducts(filters: ProductFilters = {}) {
       const { data } = await api.get<ProductListResponse>('/products', { params });
       return data;
     },
-    staleTime: 0,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
   });
 }
 

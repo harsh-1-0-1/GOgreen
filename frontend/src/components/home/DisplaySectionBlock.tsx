@@ -6,6 +6,7 @@ import { useCartStore } from '@/store/cartStore';
 import ProductTagBadges from '@/components/product/ProductTagBadges';
 import ProductImageBadges from '@/components/product/ProductImageBadges';
 import { getApiErrorDetail } from '@/lib/apiError';
+import { srcSetFor, fallbackOnError } from '@/lib/imageVariants';
 import type { DisplaySection, Product } from '@/types';
 
 const SECONDARY = '#16A34A';
@@ -40,16 +41,23 @@ function ProductTile({ product }: { product: Product }) {
       className="group flex flex-col h-full bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"
     >
       <div className="relative aspect-square overflow-hidden bg-gray-50">
-        {product.images?.[0] ? (
-          <img
-            src={product.images?.[0]}
-            alt={product.name}
-            loading="lazy"
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          />
-        ) : (
-          <div className="w-full h-full bg-gray-100" />
-        )}
+        {(() => {
+          const variants = product.image_urls?.[0];
+          const fallback = product.images?.[0];
+          if (!variants && !fallback) return <div className="w-full h-full bg-gray-100" />;
+          return (
+            <img
+              src={variants?.card ?? fallback}
+              srcSet={srcSetFor(variants)}
+              sizes="(max-width: 767px) 46vw, (max-width: 1023px) 30vw, 23vw"
+              alt={product.name}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              onError={fallbackOnError(fallback)}
+            />
+          );
+        })()}
 
         <ProductImageBadges product={product} />
 
