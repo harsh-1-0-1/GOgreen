@@ -609,12 +609,21 @@ export default function ProductDetailPage() {
   // flow still applies afterwards: picking a higher level clears stranded lower ones.
   // Run during render (guarded by product id) instead of an effect to avoid the
   // set-state-in-effect hook violation.
+  // effectiveSelectedOptions is what selectedOptions WILL be after this render.
+  // On the very first render for a product, auto-select hasn't fired yet so
+  // selectedOptions is still {}. We compute the winning combo here and use
+  // effectiveSelectedOptions for the galleryImages derivation so the correct
+  // variant images show on the first paint — no flash of product.images first.
+  let effectiveSelectedOptions = selectedOptions;
+
   const [lastAutoSelectedProductId, setLastAutoSelectedProductId] = useState<number | null>(null);
   if (product && lastAutoSelectedProductId !== product.id) {
     const groups = product.variants?.variant_groups;
     if (!Array.isArray(groups) || groups.length === 0) {
+      effectiveSelectedOptions = {};
       setLastAutoSelectedProductId(product.id);
       setSelectedOptions({});
+      setGalleryActive(0);
       setQty(1);
     } else {
       const stockMap = product.variants?.stock_map ?? null;
@@ -649,19 +658,22 @@ export default function ProductDetailPage() {
         }
       }
       if (chosen) {
+        // Write effectiveSelectedOptions before setState so the gallery derivation
+        // below uses the correct options on this same render (no flash of product.images).
+        effectiveSelectedOptions = chosen.groupOption;
         setLastAutoSelectedProductId(product.id);
         setSelectedOptions(chosen.groupOption);
+        setGalleryActive(0);
         setQty(1);
       }
     }
   }
 
-  // Reset gallery to index 0 whenever the variant selection changes.
-  // useEffect (not render-time setState) so the reset is batched properly and
-  // galleryImages is already updated when the gallery re-renders.
-  useEffect(() => {
-    setGalleryActive(0);
-  }, [selectedOptions]);
+  // Gallery index reset is handled inside selectOption() and the auto-select block
+  // below, so it is always batched in the same React update as setSelectedOptions.
+  // A useEffect would fire after paint, leaving a one-frame window where galleryImages
+  // has switched to a new (possibly shorter) array while galleryActive still holds the
+  // old index — the MobileGallery's imperative track transform can then get stuck.
 
   if (isLoading) return <Spinner className="py-32" />;
   if (isError || !product) {
@@ -809,6 +821,9 @@ export default function ProductDetailPage() {
   //   3. default_image — catch-all variant fallback
   //   4. product.images — plain product gallery
   //
+  // Uses effectiveSelectedOptions (not selectedOptions) so the gallery shows the
+  // correct variant images on the very first render before auto-select's setState fires.
+  //
   // Stock: per-combination — the matched combo row's stock (no per-option min).
   // Old-format products fall back to the product-level stock_qty.
   const effectiveStock = hasGroups
@@ -816,7 +831,15 @@ export default function ProductDetailPage() {
     : product.stock_qty;
 
   const imageMap: Record<string, string[]> = product.variants?.image_map ?? {};
-  const comboImages: string[] = (imageMap[comboKey] ?? []).filter(Boolean);
+
+  // Gallery combo key built from effectiveSelectedOptions — may differ from comboKey
+  // on the initial render when selectedOptions is still {} and auto-select hasn't
+  // committed yet.
+  const galleryAllGroupsSelected = variantGroups.every((g) => effectiveSelectedOptions[g.id]);
+  const galleryComboKey = galleryAllGroupsSelected
+    ? variantGroups.map((g) => effectiveSelectedOptions[g.id]).filter(Boolean).join('__')
+    : '';
+  const comboImages: string[] = (imageMap[galleryComboKey] ?? []).filter(Boolean);
 
   // Option-image fallback: images on any selected option, in variant-group order,
   // deduped. Unlike the previous colour-only rule, this lets the photo of ANY
@@ -824,7 +847,7 @@ export default function ProductDetailPage() {
   const optionFallbackImages: string[] = [
     ...new Set(
       variantGroups.flatMap((g) => {
-        const optId = selectedOptions[g.id];
+        const optId = effectiveSelectedOptions[g.id];
         return optId ? (optionById[optId]?.images ?? []).filter(Boolean) : [];
       }),
     ),
@@ -874,13 +897,14 @@ export default function ProductDetailPage() {
     // no combo truth to validate against, so nothing is cleared.
     if (stockMap) {
       const myLevel = levelIndex[groupId] ?? 0;
-      let blocked = false;
       for (const g of orderedGroups) {
         const gLevel = levelIndex[g.id] ?? 0;
         if (gLevel <= myLevel) continue;
-        if (!next[g.id]) continue;
+
+        // Check whether the current pick (if any) is still valid given higher-level picks.
+        const currentPick = next[g.id];
         const stillValid =
-          !blocked &&
+          currentPick !== undefined &&
           comboRows.some(
             (row) =>
               row.stock > 0 &&
@@ -888,14 +912,35 @@ export default function ProductDetailPage() {
                 ([gid, oid]) => (levelIndex[gid] ?? 0) > gLevel || row.groupOption[gid] === oid,
               ),
           );
-        if (!stillValid) {
+
+        if (currentPick !== undefined && !stillValid) {
           delete next[g.id];
-          blocked = true;
+        }
+
+        // Whether the pick was just cleared or was already absent, try to auto-fill
+        // this group with the first in-stock option consistent with higher-level picks.
+        // This prevents the gallery from being stuck on a single option image when
+        // the user switches to a size that invalidates the current style — the new
+        // valid style is selected immediately instead of left blank.
+        if (!next[g.id]) {
+          const autoOpt = (g.options ?? []).find((o) =>
+            comboRows.some(
+              (row) =>
+                row.stock > 0 &&
+                row.groupOption[g.id] === o.id &&
+                Object.entries(next).every(
+                  ([gid, oid]) =>
+                    (levelIndex[gid] ?? 0) >= gLevel || row.groupOption[gid] === oid,
+                ),
+            ),
+          );
+          if (autoOpt) next[g.id] = autoOpt.id;
         }
       }
     }
 
     setSelectedOptions(next);
+    setGalleryActive(0);
     setQty(1);
     // On mobile the gallery sits above the variant selector and scrolls out of view.
     // Scroll back to the top of the page (galleryRef) so the image update is visible.
