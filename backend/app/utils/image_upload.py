@@ -123,6 +123,11 @@ def resolve_image_url(key: str | None, variant: str | None = None) -> str | None
     """
     if not key:
         return None
+    # Some rows store the full CDN URL instead of the key; strip it so variants still resolve.
+    if settings.CDN_BASE_URL:
+        cdn_prefix = settings.CDN_BASE_URL.rstrip("/") + "/"
+        if key.startswith(cdn_prefix):
+            key = key[len(cdn_prefix):]
     if key.startswith(("http://", "https://", "/")):
         return key
 
