@@ -6,6 +6,7 @@ import { useCartStore } from '@/store/cartStore';
 import { useDoNotForgetProducts } from '@/hooks/useDoNotForget';
 import { getApiErrorDetail } from '@/lib/apiError';
 import { exactPotPrice, gridGroupIds, COMBO_KEY_SEP } from '@/lib/potPrice';
+import { fallbackOnError } from '@/lib/imageVariants';
 import type { Product, VariantGroup, VariantOption } from '@/types';
 
 /**
@@ -210,10 +211,12 @@ export default function DoNotForgetBar() {
             <div className="relative w-full aspect-square overflow-hidden bg-gray-50">
               {item.product.images?.[0] ? (
                 <img
-                  src={item.product.images?.[0]}
+                  src={item.product.image_urls?.[0]?.thumb ?? item.product.images?.[0]}
                   alt={item.product.name}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   loading="lazy"
+                  decoding="async"
+                  onError={fallbackOnError(item.product.images?.[0])}
                 />
               ) : (
                 <div className="w-full h-full bg-gray-100" />

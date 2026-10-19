@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useCartStore } from '@/store/cartStore';
 import DoNotForgetBar from '@/components/cart/DoNotForgetBar';
 import { formatSelectedOptions } from '@/lib/variantDisplay';
+import { fallbackOnError } from '@/lib/imageVariants';
 import { getApiErrorDetail } from '@/lib/apiError';
 import { useSuggestionTiles } from '@/hooks/useSuggestionTiles';
 import { getShippingFee, useShippingSettings } from '@/hooks/useSettings';
@@ -115,10 +116,12 @@ export default function CartPage() {
               <Link to={`/products/${item.product.slug}`} className="shrink-0">
                 {item.resolved_image_url || item.product.images?.[0] ? (
                   <img
-                    src={item.resolved_image_url || item.product.images?.[0]}
+                    src={item.resolved_image_thumb_url || item.resolved_image_url || item.product.images?.[0]}
                     alt={item.product.name}
                     className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-lg sm:rounded-xl object-cover"
                     loading="lazy"
+                    decoding="async"
+                    onError={fallbackOnError(item.resolved_image_url || item.product.images?.[0])}
                   />
                 ) : (
                   <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-lg sm:rounded-xl bg-gray-100" />

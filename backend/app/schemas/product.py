@@ -332,6 +332,15 @@ class ProductResponse(BaseModel):
     # Parallel to `images` (same order). Each entry carries the original plus the
     # generated WebP variant URLs. Empty when no variants exist for an image.
     image_urls: list[dict[str, str]] = Field(default_factory=list)
+    # Same {original, thumb, card, detail} sets for images referenced inside
+    # `variants` (option / combo / default images), so the gallery can serve
+    # WebP for those too. Looked up by `original` URL on the client.
+    variant_image_urls: list[dict[str, str]] = Field(default_factory=list)
+    # {original, thumb, card, detail} for the three product banner images
+    # (uploaded to the `products` folder). Empty when the image is unset.
+    promise_banner_image_urls: dict[str, str] = Field(default_factory=dict)
+    why_plantoga_banner_image_urls: dict[str, str] = Field(default_factory=dict)
+    care_card_image_urls: dict[str, str] = Field(default_factory=dict)
     tags: list[str]
     care_tips: list[str]
     how_to_guide: str | None
@@ -375,17 +384,23 @@ class ProductResponse(BaseModel):
         Runs before serialization, so `self.images` still holds relative keys.
         External URLs pass through unchanged (resolve_image_url is idempotent).
         """
-        from app.utils.image_upload import resolve_image_url
+        from app.utils.image_upload import collect_variant_image_keys, image_variant_set
 
-        self.image_urls = [
-            {
-                "original": resolve_image_url(img),
-                "thumb": resolve_image_url(img, "thumb"),
-                "card": resolve_image_url(img, "card"),
-                "detail": resolve_image_url(img, "detail"),
-            }
-            for img in (self.images or [])
+        self.image_urls = [image_variant_set(img) for img in (self.images or [])]
+        self.variant_image_urls = [
+            image_variant_set(key) for key in collect_variant_image_keys(self.variants)
         ]
+        self.promise_banner_image_urls = (
+            image_variant_set(self.promise_banner_image) if self.promise_banner_image else {}
+        )
+        self.why_plantoga_banner_image_urls = (
+            image_variant_set(self.why_plantoga_banner_image)
+            if self.why_plantoga_banner_image
+            else {}
+        )
+        self.care_card_image_urls = (
+            image_variant_set(self.care_card_image) if self.care_card_image else {}
+        )
         return self
 
     @field_serializer("images")

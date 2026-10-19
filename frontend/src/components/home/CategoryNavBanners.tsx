@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { useBanners } from '@/hooks/useBanners';
+import { fallbackOnError, hideOnError } from '@/lib/imageVariants';
 
 /**
  * The row of round category icons at the top of the homepage.
@@ -66,13 +67,13 @@ export default function CategoryNavBanners() {
                 >
                   <div className="w-[60px] h-[60px] sm:w-[68px] sm:h-[68px] lg:w-[76px] lg:h-[76px] rounded-full overflow-hidden bg-gray-50 border-2 border-transparent group-hover:border-[#16A34A] transition-colors p-0.5">
                     <img
-                      src={banner.image_url || ''}
+                      src={banner.image_urls?.w400 ?? banner.image_url ?? ''}
                       alt={banner.title}
+                      width={76}
+                      height={76}
                       className="w-full h-full object-cover rounded-full"
-                      loading="lazy"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
+                      decoding="async"
+                      onError={fallbackOnError(banner.image_url, hideOnError)}
                     />
                   </div>
                   <span className="text-xs sm:text-sm lg:text-base font-medium text-center text-gray-700 leading-tight whitespace-nowrap">

@@ -19,11 +19,11 @@ STATIC_ROOT = Path("static")
 # collide. Folders not listed get no variants.
 FOLDER_VARIANTS: dict[str, dict[str, int]] = {
     "products": {"thumb": 400, "card": 800, "detail": 1600},
-    "product-variants": {"thumb": 400, "card": 800},
+    "product-variants": {"thumb": 400, "card": 800, "detail": 1600},
     "categories": {"thumb": 400, "card": 800},
     "blog": {"card": 800, "detail": 1600},
     "stories": {"thumb": 400, "card": 800},
-    "banners": {"w1600": 1600, "w1920": 1920},
+    "banners": {"w400": 400, "w800": 800, "w1600": 1600, "w1920": 1920},
 }
 VARIANT_QUALITY = 80
 IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
@@ -151,6 +151,47 @@ def extract_relative_key(url: str | None) -> str | None:
         return url[len("/static/"):]
 
     return url
+
+
+PRODUCT_VARIANT_NAMES = ("thumb", "card", "detail")
+
+
+def image_variant_set(key: str) -> dict[str, str]:
+    """{original, thumb, card, detail} URLs for one stored product image key."""
+    return {
+        "original": resolve_image_url(key),
+        **{name: resolve_image_url(key, name) for name in PRODUCT_VARIANT_NAMES},
+    }
+
+
+def collect_variant_image_keys(variants: dict | None) -> list[str]:
+    """Every raw image key referenced inside a product's `variants` JSON.
+
+    Covers both formats (variant_groups options, image_map, pot_types, colors,
+    default_image), de-duplicated in first-seen order.
+    """
+    if not variants:
+        return []
+    keys: list[str] = []
+
+    def add(val) -> None:
+        if isinstance(val, str) and val and val not in keys:
+            keys.append(val)
+
+    add(variants.get("default_image"))
+    for group in variants.get("variant_groups") or []:
+        for option in (group or {}).get("options") or []:
+            for img in (option or {}).get("images") or []:
+                add(img)
+    image_map = variants.get("image_map")
+    if isinstance(image_map, dict):
+        for imgs in image_map.values():
+            for img in imgs if isinstance(imgs, list) else []:
+                add(img)
+    for item in (variants.get("pot_types") or []) + (variants.get("colors") or []):
+        if isinstance(item, dict):
+            add(item.get("image_url"))
+    return keys
 
 
 def resolve_variants_images(variants: dict | None) -> dict | None:

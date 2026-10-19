@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import clsx from 'clsx';
+import { fallbackOnError, srcSetFor } from '@/lib/imageVariants';
 import type { Product } from '@/types';
 
 export interface ThemedProductSectionProps {
@@ -38,10 +39,14 @@ function ProductCard({ product }: { product: Product }) {
       <div className="relative overflow-hidden rounded-xl bg-[#f5f1ec] shrink-0 aspect-[4/3] sm:aspect-square flex items-center justify-center p-3 sm:p-4">
         {product.images?.[0] ? (
           <img
-            src={product.images?.[0]}
+            src={product.image_urls?.[0]?.card ?? product.images?.[0]}
+            srcSet={srcSetFor(product.image_urls?.[0])}
+            sizes="(min-width: 1024px) 28vw, (min-width: 640px) 44vw, 82vw"
             alt={product.name}
             className="w-full h-full object-contain object-center group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
+            decoding="async"
+            onError={fallbackOnError(product.images?.[0])}
           />
         ) : (
           <div className="w-full h-full bg-gray-100" />

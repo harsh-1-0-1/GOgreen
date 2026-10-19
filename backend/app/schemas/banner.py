@@ -40,7 +40,7 @@ class BannerOut(BannerBase):
     id: int
     image_url: Optional[str] = None
     image_url_web: Optional[str] = None
-    # Generated WebP variants per image: {original, w1600, w1920}. Empty when the
+    # Generated WebP variants per image: {original, w400, w800, w1600, w1920}. Empty when the
     # image is external or not yet migrated.
     image_urls: dict[str, str] = Field(default_factory=dict)
     image_urls_web: dict[str, str] = Field(default_factory=dict)
@@ -56,8 +56,10 @@ class BannerOut(BannerBase):
                 return {}
             return {
                 "original": resolve_image_url(val),
-                "w1600": resolve_image_url(val, "w1600"),
-                "w1920": resolve_image_url(val, "w1920"),
+                **{
+                    name: resolve_image_url(val, name)
+                    for name in ("w400", "w800", "w1600", "w1920")
+                },
             }
 
         self.image_urls = _map(self.image_url)

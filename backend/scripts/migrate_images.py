@@ -32,7 +32,7 @@ from app.utils.image_upload import (  # noqa: E402
 )
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-VARIANT_SUFFIXES = tuple(f".{name}.webp" for name in ("thumb", "card", "detail", "w1600", "w1920"))
+VARIANT_SUFFIXES = tuple(f".{name}.webp" for name in ("thumb", "card", "detail", "w400", "w800", "w1600", "w1920"))
 DEFAULT_PREFIXES = tuple(f"plantoga/{folder}/" for folder in (
     "products", "product-variants", "categories", "blog", "stories", "banners",
 ))

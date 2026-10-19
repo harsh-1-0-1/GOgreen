@@ -1,5 +1,6 @@
 import { Leaf, ShieldCheck, Truck } from 'lucide-react';
 import { WhatsAppIcon } from '@/components/layout/Navbar/WhatsAppIcon';
+import { fallbackOnError, srcSetFromMap } from '@/lib/imageVariants';
 
 const SERIF = "'Playfair Display', Georgia, serif";
 
@@ -26,12 +27,24 @@ const PROMISES = [
   },
 ];
 
-export default function PlantogaPromise({ bannerImage }: { bannerImage?: string | null }) {
+export default function PlantogaPromise({
+  bannerImage,
+  imageUrls,
+}: {
+  bannerImage?: string | null;
+  /** Generated WebP variants of `bannerImage`. */
+  imageUrls?: Record<string, string>;
+}) {
   if (bannerImage) {
     return (
       <section className="mt-4 sm:mt-6 rounded-2xl overflow-hidden">
         <img
           src={bannerImage}
+          srcSet={srcSetFromMap(imageUrls)}
+          sizes="(min-width: 1024px) 50vw, 100vw"
+          loading="lazy"
+          decoding="async"
+          onError={fallbackOnError(bannerImage)}
           alt="The Plantoga Promise"
           className="w-full h-auto object-cover"
         />

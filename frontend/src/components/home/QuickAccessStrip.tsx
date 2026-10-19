@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { useBanners } from '@/hooks/useBanners';
+import { fallbackOnError } from '@/lib/imageVariants';
 
 interface Tile {
   id: number;
@@ -10,6 +11,8 @@ interface Tile {
   label: string;
   link?: string;
   image?: string;
+  /** 800px WebP of `image` (sharp at 180px on 3x screens), when generated. */
+  thumb?: string;
   bg?: string;
   textColor?: string;
 }
@@ -62,9 +65,11 @@ function CategoryTile({ tile }: { tile: Tile }) {
     <>
       <div className="relative flex-1 min-h-0">
         <img
-          src={tile.image}
+          src={tile.thumb ?? tile.image}
           alt={tile.label}
           loading="lazy"
+          decoding="async"
+          onError={fallbackOnError(tile.image)}
           className="absolute inset-0 w-full h-full object-cover"
         />
       </div>
@@ -113,6 +118,7 @@ export default function QuickAccessStrip() {
     label: b.title.replace('\\n', '\n'),
     link: b.cta_link || undefined,
     image: b.image_url || undefined,
+    thumb: b.image_urls?.w800,
     bg: b.bg_color,
     textColor: b.text_color,
   }));

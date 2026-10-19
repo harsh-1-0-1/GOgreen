@@ -1,4 +1,4 @@
-import type { SyntheticEvent } from 'react';
+import { useState, type SyntheticEvent } from 'react';
 
 import { srcSetFromMap } from '@/lib/imageVariants';
 import type { Banner } from '@/types';
@@ -38,27 +38,40 @@ export default function ResponsiveBannerImage({
   onLoad,
   onError,
 }: ResponsiveBannerImageProps) {
+  // Set once a generated WebP fails to load (e.g. not backfilled yet): from then
+  // on only the originals are offered, and a second failure goes to `onError`.
+  const [originalsOnly, setOriginalsOnly] = useState(false);
   const mobileSrc = banner.image_url;
   const webSrc = banner.image_url_web;
-  const webSrcSet = srcSetFromMap(banner.image_urls_web);
+  const webSrcSet = originalsOnly ? undefined : srcSetFromMap(banner.image_urls_web);
+  const mobileSrcSet = originalsOnly ? undefined : srcSetFromMap(banner.image_urls);
 
   if (!mobileSrc && !webSrc) return null;
+
+  function handleError(e: SyntheticEvent<HTMLImageElement>) {
+    if (!originalsOnly && (webSrcSet || mobileSrcSet)) {
+      setOriginalsOnly(true);
+      return;
+    }
+    onError?.(e);
+  }
 
   return (
     <picture className="absolute inset-0 block h-full w-full">
       {webSrc && (
-        <source media={DESKTOP_MEDIA} srcSet={webSrcSet ?? webSrc} />
+        <source media={DESKTOP_MEDIA} srcSet={webSrcSet ?? webSrc} sizes="100vw" />
       )}
       <img
         src={mobileSrc || (webSrc as string)}
-        srcSet={srcSetFromMap(banner.image_urls)}
+        srcSet={mobileSrcSet}
+        sizes="100vw"
         alt=""
         className={className}
         loading={loading}
         fetchPriority={fetchPriority}
         decoding="async"
         onLoad={onLoad}
-        onError={onError}
+        onError={handleError}
       />
     </picture>
   );

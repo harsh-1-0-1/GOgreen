@@ -25,7 +25,7 @@ import type { Banner, Category, ImageVariantSet, VariantGroup, VariantOption } f
 import { useStories } from '@/hooks/useStories';
 import { StoriesCarousel } from '@/components/stories/StoriesCarousel';
 import { getApiErrorDetail } from '@/lib/apiError';
-import { fallbackOnError, srcSetFor, variantLookup } from '@/lib/imageVariants';
+import { fallbackOnError, hideOnError, srcSetFor, srcSetFromMap, variantLookup } from '@/lib/imageVariants';
 import { formatPotPrice, potPriceForOption, exactPotPrice, gridGroupIds } from '@/lib/potPrice';
 
 /** Shown when an option genuinely costs nothing. Data-driven rather than a hardcoded
@@ -870,9 +870,12 @@ export default function ProductDetailPage() {
     galleryImages = product.images ?? [];
   }
 
-  // Product-level image variants, keyed by original URL. Variant-option images
-  // aren't in here, so they simply render at their original size.
-  const galleryVariants = variantLookup(product.image_urls);
+  // Image variants keyed by original URL: product images plus the images inside
+  // `variants` (options / combos), so every gallery image gets a WebP srcset.
+  const galleryVariants = variantLookup([
+    ...(product.image_urls ?? []),
+    ...(product.variant_image_urls ?? []),
+  ]);
 
   // Disable Add to Cart: requires a selection for EVERY group — per-combination stock
   // needs a full combo key, so an unselected group (even a legacy `required: false`
@@ -1183,10 +1186,12 @@ export default function ProductDetailPage() {
                                 <div className="h-14 w-14 rounded-lg overflow-hidden bg-gray-50 mb-1.5 shrink-0">
                                   {opt.images?.[0] ? (
                                     <img
-                                      src={opt.images[0]}
+                                      src={galleryVariants[opt.images[0]]?.thumb ?? opt.images[0]}
                                       alt={opt.name}
                                       className="h-full w-full object-cover"
                                       loading="lazy"
+                                      decoding="async"
+                                      onError={fallbackOnError(opt.images[0])}
                                     />
                                   ) : (
                                     <div className="h-full w-full flex items-center justify-center text-gray-300">
@@ -1327,10 +1332,12 @@ export default function ProductDetailPage() {
                   >
                     <img
                       src={productStripBanner.image_url || ''}
+                      srcSet={srcSetFromMap(productStripBanner.image_urls)}
+                      sizes="(min-width: 1280px) 1280px, 100vw"
                       alt={productStripBanner.title}
                       className="w-full h-auto object-cover"
                       loading="lazy"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      onError={fallbackOnError(productStripBanner.image_url, hideOnError)}
                     />
                   </Link>
                 ) : (
@@ -1340,10 +1347,12 @@ export default function ProductDetailPage() {
                   >
                     <img
                       src={productStripBanner.image_url || ''}
+                      srcSet={srcSetFromMap(productStripBanner.image_urls)}
+                      sizes="(min-width: 1280px) 1280px, 100vw"
                       alt={productStripBanner.title}
                       className="w-full h-auto object-cover"
                       loading="lazy"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      onError={fallbackOnError(productStripBanner.image_url, hideOnError)}
                     />
                   </div>
                 )}
@@ -1363,11 +1372,11 @@ export default function ProductDetailPage() {
               <div className="rounded-xl overflow-hidden">
                 {productSpecBanner.cta_link ? (
                   <Link to={productSpecBanner.cta_link} className="block" style={{ backgroundColor: productSpecBanner.bg_color || '#F5F0E8' }}>
-                    <img src={productSpecBanner.image_url} alt={productSpecBanner.title} className="w-full max-h-[380px] object-cover" loading="lazy" />
+                    <img src={productSpecBanner.image_url} srcSet={srcSetFromMap(productSpecBanner.image_urls)} sizes="(min-width: 1280px) 1280px, 100vw" onError={fallbackOnError(productSpecBanner.image_url)} alt={productSpecBanner.title} className="w-full max-h-[380px] object-cover" loading="lazy" />
                   </Link>
                 ) : (
                   <div style={{ backgroundColor: productSpecBanner.bg_color || '#F5F0E8' }}>
-                    <img src={productSpecBanner.image_url} alt={productSpecBanner.title} className="w-full max-h-[380px] object-cover" loading="lazy" />
+                    <img src={productSpecBanner.image_url} srcSet={srcSetFromMap(productSpecBanner.image_urls)} sizes="(min-width: 1280px) 1280px, 100vw" onError={fallbackOnError(productSpecBanner.image_url)} alt={productSpecBanner.title} className="w-full max-h-[380px] object-cover" loading="lazy" />
                   </div>
                 )}
               </div>
@@ -1384,9 +1393,9 @@ export default function ProductDetailPage() {
 
             <CareTips tips={product.care_tips || []} />
 
-            <PlantCareCard careCardImage={product.care_card_image} />
+            <PlantCareCard careCardImage={product.care_card_image} imageUrls={product.care_card_image_urls} />
 
-            <PlantogaPromise bannerImage={product.promise_banner_image} />
+            <PlantogaPromise bannerImage={product.promise_banner_image} imageUrls={product.promise_banner_image_urls} />
 
             <ProductSpecification specs={productSpecs} title={product.is_combo ? 'About the Combo' : 'Product Specification'} />
           </div>
@@ -1404,6 +1413,9 @@ export default function ProductDetailPage() {
                 >
                   <img
                     src={whyPlantogaBanner.image_url}
+                    srcSet={srcSetFromMap(whyPlantogaBanner.image_urls)}
+                    sizes="(min-width: 1280px) 1280px, 100vw"
+                    onError={fallbackOnError(whyPlantogaBanner.image_url)}
                     alt={whyPlantogaBanner.title || ''}
                     className="w-full h-full object-cover"
                     loading="lazy"
@@ -1412,6 +1424,9 @@ export default function ProductDetailPage() {
               ) : (
                 <img
                   src={whyPlantogaBanner.image_url}
+                  srcSet={srcSetFromMap(whyPlantogaBanner.image_urls)}
+                  sizes="(min-width: 1280px) 1280px, 100vw"
+                  onError={fallbackOnError(whyPlantogaBanner.image_url)}
                   alt={whyPlantogaBanner.title || ''}
                   className="w-full h-full rounded-2xl object-cover"
                   loading="lazy"
@@ -1420,7 +1435,7 @@ export default function ProductDetailPage() {
             </div>
           )}
           <div className={whyPlantogaBanner?.image_url ? 'md:w-1/2' : 'w-full'}>
-            <WhyPlantoga bannerImage={product.why_plantoga_banner_image} />
+            <WhyPlantoga bannerImage={product.why_plantoga_banner_image} imageUrls={product.why_plantoga_banner_image_urls} />
           </div>
         </div>
 
@@ -1492,6 +1507,9 @@ export default function ProductDetailPage() {
                 >
                   <img
                     src={productDetailBanner.image_url}
+                    srcSet={srcSetFromMap(productDetailBanner.image_urls)}
+                    sizes="(min-width: 1280px) 1280px, 100vw"
+                    onError={fallbackOnError(productDetailBanner.image_url)}
                     alt={productDetailBanner.title}
                     className="w-full h-auto object-cover rounded-2xl md:h-full"
                     loading="lazy"
@@ -1504,6 +1522,9 @@ export default function ProductDetailPage() {
                 >
                   <img
                     src={productDetailBanner.image_url}
+                    srcSet={srcSetFromMap(productDetailBanner.image_urls)}
+                    sizes="(min-width: 1280px) 1280px, 100vw"
+                    onError={fallbackOnError(productDetailBanner.image_url)}
                     alt={productDetailBanner.title}
                     className="w-full h-auto object-cover rounded-2xl md:h-full"
                     loading="lazy"

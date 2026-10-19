@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 
 import { useBanners } from '@/hooks/useBanners';
+import { fallbackOnError, hideOnError, srcSetFromMap } from '@/lib/imageVariants';
 
 function HighlightCardSkeleton() {
   return (
@@ -34,13 +35,14 @@ export default function CategoryHighlightGrid() {
                     >
                       {card.image_url && (
                         <img
-                          src={card.image_url}
+                          src={card.image_urls?.w800 ?? card.image_url}
+                          srcSet={srcSetFromMap(card.image_urls)}
+                          sizes="(min-width: 1024px) 25vw, 50vw"
                           alt=""
                           loading="lazy"
+                          decoding="async"
                           className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
+                          onError={fallbackOnError(card.image_url, hideOnError)}
                         />
                       )}
                     </div>

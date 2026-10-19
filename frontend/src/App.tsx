@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect, type ComponentType } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -8,6 +8,7 @@ import { useCartStore } from '@/store/cartStore';
 
 import Layout from '@/components/layout/Layout';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
+import Spinner from '@/components/ui/Spinner';
 
 import HomePage from '@/pages/HomePage';
 import ProductsPage from '@/pages/ProductsPage';
@@ -24,23 +25,34 @@ import DamageReplacementPage from '@/pages/DamageReplacementPage';
 import MyDamageClaimsPage from '@/pages/MyDamageClaimsPage';
 import FaqPage from '@/pages/FaqPage';
 
-import AdminLayout from '@/components/admin/AdminLayout';
-import DashboardPage from '@/pages/admin/DashboardPage';
-import ProductsAdminPage from '@/pages/admin/ProductsAdminPage';
-import CategoriesAdminPage from '@/pages/admin/CategoriesAdminPage';
-import ImageBadgesAdminPage from '@/pages/admin/ImageBadgesAdminPage';
-import OrdersAdminPage from '@/pages/admin/OrdersAdminPage';
-import UsersAdminPage from '@/pages/admin/UsersAdminPage';
-import BannersAdminPage from '@/pages/admin/BannersAdminPage';
-import BlogAdminPage from '@/pages/admin/BlogAdminPage';
-import StoriesAdminPage from '@/pages/admin/StoriesAdminPage';
-import CorporateAdminPage from '@/pages/admin/CorporateAdminPage';
-import CouponsAdminPage from '@/pages/admin/CouponsAdminPage';
-import DamageClaimsAdminPage from '@/pages/admin/DamageClaimsAdminPage';
-import DoNotForgetAdminPage from '@/pages/admin/DoNotForgetAdminPage';
-import MenuAdminPage from '@/pages/admin/MenuAdminPage';
-import DisplaySectionsAdminPage from '@/pages/admin/DisplaySectionsAdminPage';
-import SettingsAdminPage from '@/pages/admin/SettingsAdminPage';
+// Admin screens are code-split so shoppers never download them: they made up
+// most of the main bundle, which every storefront visit waits on before any
+// image can start loading.
+const AdminLayout = lazy(() => import('@/components/admin/AdminLayout'));
+const DashboardPage = lazy(() => import('@/pages/admin/DashboardPage'));
+const ProductsAdminPage = lazy(() => import('@/pages/admin/ProductsAdminPage'));
+const CategoriesAdminPage = lazy(() => import('@/pages/admin/CategoriesAdminPage'));
+const ImageBadgesAdminPage = lazy(() => import('@/pages/admin/ImageBadgesAdminPage'));
+const OrdersAdminPage = lazy(() => import('@/pages/admin/OrdersAdminPage'));
+const UsersAdminPage = lazy(() => import('@/pages/admin/UsersAdminPage'));
+const BannersAdminPage = lazy(() => import('@/pages/admin/BannersAdminPage'));
+const BlogAdminPage = lazy(() => import('@/pages/admin/BlogAdminPage'));
+const StoriesAdminPage = lazy(() => import('@/pages/admin/StoriesAdminPage'));
+const CorporateAdminPage = lazy(() => import('@/pages/admin/CorporateAdminPage'));
+const CouponsAdminPage = lazy(() => import('@/pages/admin/CouponsAdminPage'));
+const DamageClaimsAdminPage = lazy(() => import('@/pages/admin/DamageClaimsAdminPage'));
+const DoNotForgetAdminPage = lazy(() => import('@/pages/admin/DoNotForgetAdminPage'));
+const MenuAdminPage = lazy(() => import('@/pages/admin/MenuAdminPage'));
+const DisplaySectionsAdminPage = lazy(() => import('@/pages/admin/DisplaySectionsAdminPage'));
+const SettingsAdminPage = lazy(() => import('@/pages/admin/SettingsAdminPage'));
+
+function withSuspense(Page: ComponentType) {
+  return (
+    <Suspense fallback={<Spinner className="py-24" />}>
+      <Page />
+    </Suspense>
+  );
+}
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
@@ -118,23 +130,23 @@ export default function App() {
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route element={<Layout />}>
-              <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<DashboardPage />} />
-                <Route path="products" element={<ProductsAdminPage />} />
-                <Route path="categories" element={<CategoriesAdminPage />} />
-                <Route path="badges" element={<ImageBadgesAdminPage />} />
-                <Route path="orders" element={<OrdersAdminPage />} />
-                <Route path="users" element={<UsersAdminPage />} />
-                <Route path="banners" element={<BannersAdminPage />} />
-                <Route path="stories" element={<StoriesAdminPage />} />
-                <Route path="blog" element={<BlogAdminPage />} />
-                <Route path="corporate" element={<CorporateAdminPage />} />
-                <Route path="coupons" element={<CouponsAdminPage />} />
-                <Route path="damage-claims" element={<DamageClaimsAdminPage />} />
-                <Route path="do-not-forget" element={<DoNotForgetAdminPage />} />
-                <Route path="navigation" element={<MenuAdminPage />} />
-                <Route path="display-sections" element={<DisplaySectionsAdminPage />} />
-                <Route path="settings" element={<SettingsAdminPage />} />
+              <Route path="/admin" element={withSuspense(AdminLayout)}>
+                <Route index element={withSuspense(DashboardPage)} />
+                <Route path="products" element={withSuspense(ProductsAdminPage)} />
+                <Route path="categories" element={withSuspense(CategoriesAdminPage)} />
+                <Route path="badges" element={withSuspense(ImageBadgesAdminPage)} />
+                <Route path="orders" element={withSuspense(OrdersAdminPage)} />
+                <Route path="users" element={withSuspense(UsersAdminPage)} />
+                <Route path="banners" element={withSuspense(BannersAdminPage)} />
+                <Route path="stories" element={withSuspense(StoriesAdminPage)} />
+                <Route path="blog" element={withSuspense(BlogAdminPage)} />
+                <Route path="corporate" element={withSuspense(CorporateAdminPage)} />
+                <Route path="coupons" element={withSuspense(CouponsAdminPage)} />
+                <Route path="damage-claims" element={withSuspense(DamageClaimsAdminPage)} />
+                <Route path="do-not-forget" element={withSuspense(DoNotForgetAdminPage)} />
+                <Route path="navigation" element={withSuspense(MenuAdminPage)} />
+                <Route path="display-sections" element={withSuspense(DisplaySectionsAdminPage)} />
+                <Route path="settings" element={withSuspense(SettingsAdminPage)} />
               </Route>
             </Route>
           </Routes>

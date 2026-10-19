@@ -1,5 +1,7 @@
 import { Check, Leaf, Minus, X } from 'lucide-react';
 
+import { fallbackOnError } from '@/lib/imageVariants';
+
 type ComparisonValue = {
   status: 'yes' | 'no' | 'mixed';
   text: string;
@@ -84,12 +86,24 @@ function ValueCell({ value, featured = false }: { value: ComparisonValue; featur
   );
 }
 
-export default function WhyPlantoga({ bannerImage }: { bannerImage?: string | null }) {
+export default function WhyPlantoga({
+  bannerImage,
+  imageUrls,
+}: {
+  bannerImage?: string | null;
+  /** Generated WebP variants of `bannerImage`. */
+  imageUrls?: Record<string, string>;
+}) {
   if (bannerImage) {
     return (
       <section>
+        {/* Rendered at natural size, so no srcset: the 1600px WebP keeps the
+            original's width (variants never upscale) at a fraction of the bytes. */}
         <img
-          src={bannerImage}
+          src={imageUrls?.detail ?? bannerImage}
+          loading="lazy"
+          decoding="async"
+          onError={fallbackOnError(bannerImage)}
           alt="Plantoga vs the rest"
           className="mx-auto max-w-full h-auto"
         />

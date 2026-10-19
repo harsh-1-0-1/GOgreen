@@ -125,14 +125,19 @@ export default function CartDrawer() {
                 <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
                   {item.resolved_image_url || item.product.images?.[0] ? (
                     <img
-                      src={item.resolved_image_url || item.product.images?.[0]}
+                      src={item.resolved_image_thumb_url || item.resolved_image_url || item.product.images?.[0]}
                       alt={item.product.name}
                       className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover shrink-0 bg-white"
+                      decoding="async"
                       onError={(event) => {
+                        // Walk thumb → full cart image → product image, then give up.
                         const image = event.currentTarget;
-                        const productImage = item.product.images?.[0];
-                        if (productImage && image.src !== productImage) {
-                          image.src = productImage;
+                        const next = [item.resolved_image_url, item.product.images?.[0]].find(
+                          (url) => url && url !== image.getAttribute('src'),
+                        );
+                        if (next && !image.dataset.tried?.includes(next)) {
+                          image.dataset.tried = `${image.dataset.tried ?? ''} ${next}`;
+                          image.src = next;
                         } else {
                           image.style.visibility = 'hidden';
                         }

@@ -117,6 +117,8 @@ export interface Product {
   images: string[];
   /** Parallel to `images` (same order): original + generated WebP variants. */
   image_urls?: ImageVariantSet[];
+  /** Variant sets for images inside `variants` (options, combos), keyed by `original`. */
+  variant_image_urls?: ImageVariantSet[];
   tags: string[];
   care_tips: string[];
   how_to_guide: string | null;
@@ -129,6 +131,10 @@ export interface Product {
   promise_banner_image?: string | null;
   why_plantoga_banner_image?: string | null;
   care_card_image?: string | null;
+  /** {original, thumb, card, detail} for the three banner images above. */
+  promise_banner_image_urls?: Record<string, string>;
+  why_plantoga_banner_image_urls?: Record<string, string>;
+  care_card_image_urls?: Record<string, string>;
   faqs?: FAQItem[] | null;
   related_product_ids?: number[];
   // ── Image overlay badges ──────────────────────────────────────────────
@@ -342,6 +348,8 @@ export interface CartItem {
   product: CartItemProduct;
   line_total: number;
   resolved_image_url: string;
+  /** 400px WebP of `resolved_image_url` (the original when none exists). */
+  resolved_image_thumb_url?: string | null;
   unit_price: number;
   available_stock: number;
   stock_warning: boolean;
@@ -527,9 +535,9 @@ export interface Banner {
   image_url?: string;
   /** Wide desktop image. Falls back to `image_url` when not uploaded. */
   image_url_web?: string | null;
-  /** Generated WebP variants for the mobile image: {original, w1600, w1920}. */
+  /** Generated WebP variants for the mobile image: {original, w400, w800, w1600, w1920}. */
   image_urls?: Record<string, string>;
-  /** Generated WebP variants for the wide image: {original, w1600, w1920}. */
+  /** Generated WebP variants for the wide image: {original, w400, w800, w1600, w1920}. */
   image_urls_web?: Record<string, string>;
   badge_text?: string;
   bg_color: string;
@@ -600,6 +608,8 @@ export interface DoNotForgetProduct {
     price: number;
     original_price: number | null;
     images: string[];
+    /** Parallel to `images`: original + generated WebP variants. */
+    image_urls?: ImageVariantSet[];
     stock_qty: number;
     is_active: boolean;
     variants: ProductVariants | null;

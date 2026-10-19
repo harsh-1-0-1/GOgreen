@@ -26,6 +26,8 @@ const WIDTH_HINTS: Record<string, number> = {
   thumb: 400,
   card: 800,
   detail: 1600,
+  w400: 400,
+  w800: 800,
   w1600: 1600,
   w1920: 1920,
 };
@@ -57,14 +59,26 @@ export function srcSetFromMap(
  *
  * When `srcset` is present the browser ignores a changed `src`, so it must be
  * removed first; the `dataset.fellBack` flag stops the error handler from
- * looping if the original is missing too.
+ * looping if the original is missing too. `onFinalError` runs when even the
+ * original fails (e.g. to hide the image).
  */
-export function fallbackOnError(original?: string) {
+export function fallbackOnError(
+  original?: string,
+  onFinalError?: (e: SyntheticEvent<HTMLImageElement>) => void,
+) {
   return (e: SyntheticEvent<HTMLImageElement>) => {
     const el = e.currentTarget;
-    if (!original || el.dataset.fellBack) return;
+    if (!original || el.dataset.fellBack) {
+      onFinalError?.(e);
+      return;
+    }
     el.dataset.fellBack = '1';
     el.removeAttribute('srcset');
     el.src = original;
   };
+}
+
+/** Hide a broken image: the usual last resort once the original also failed. */
+export function hideOnError(e: SyntheticEvent<HTMLImageElement>) {
+  e.currentTarget.style.display = 'none';
 }
