@@ -22,6 +22,9 @@ declare global {
 
 const states = ['Madhya Pradesh', 'Maharashtra', 'Delhi', 'Karnataka', 'Tamil Nadu', 'Telangana', 'Uttar Pradesh', 'West Bengal'];
 
+// Cash on Delivery is only offered up to this payable total (INR); the backend enforces the same limit.
+const COD_MAX_ORDER_TOTAL = 1000;
+
 function money(value: number) {
   return `₹${value.toFixed(2)}`;
 }
@@ -268,7 +271,7 @@ export default function CheckoutPage() {
   const [form, setForm] = useState<AddressFormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay');
+  const [chosenPaymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay');
   const [billingMode, setBillingMode] = useState<'same' | 'different'>('same');
   const [paying, setPaying] = useState(false);
   const [couponCode, setCouponCode] = useState('');
@@ -283,6 +286,9 @@ export default function CheckoutPage() {
   const shipping = getShippingFee(subtotal, shippingSettings);
   const discount = appliedCoupon?.discount_amount ?? 0;
   const total = Math.max(0, subtotal + shipping - discount);
+  const codAllowed = total <= COD_MAX_ORDER_TOTAL;
+  // Falls back to Razorpay if COD was picked and the total later goes over the limit.
+  const paymentMethod = codAllowed ? chosenPaymentMethod : 'razorpay';
 
   async function applyCoupon() {
     const code = couponCode.trim();
@@ -579,11 +585,15 @@ export default function CheckoutPage() {
                 <span className="flex-1 font-bold text-gray-950">Razorpay Secure <span className="text-xs text-gray-500 font-normal ml-1.5">(UPI, Cards, NetBanking, Wallets)</span></span>
                 <CreditCard className="text-primary h-5 w-5" />
               </label>
-              <label className={`flex cursor-pointer items-start gap-3 p-3 text-sm ${paymentMethod === 'cod' ? 'border-primary bg-primary/5' : 'bg-white'}`}>
-                <input type="radio" name="payment_method" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="mt-0.5 h-4 w-4 accent-primary" />
-                <span className="flex-1 font-bold text-gray-950">Cash on Delivery <span className="text-xs text-gray-500 font-normal ml-1.5">(Pay when your order arrives)</span></span>
-                <Banknote className="text-primary h-5 w-5" />
-              </label>
+              {codAllowed ? (
+                <label className={`flex cursor-pointer items-start gap-3 p-3 text-sm ${paymentMethod === 'cod' ? 'border-primary bg-primary/5' : 'bg-white'}`}>
+                  <input type="radio" name="payment_method" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="mt-0.5 h-4 w-4 accent-primary" />
+                  <span className="flex-1 font-bold text-gray-950">Cash on Delivery <span className="text-xs text-gray-500 font-normal ml-1.5">(Pay when your order arrives)</span></span>
+                  <Banknote className="text-primary h-5 w-5" />
+                </label>
+              ) : (
+                <p className="border-b border-gray-200 bg-white p-3 text-xs text-gray-500">Cash on Delivery is available only on orders up to {money(COD_MAX_ORDER_TOTAL)}.</p>
+              )}
               <div className="bg-gray-50 p-4 text-center text-xs text-gray-600">
                 {paymentMethod === 'razorpay'
                   ? 'You’ll be redirected to Razorpay Secure to complete your purchase.'

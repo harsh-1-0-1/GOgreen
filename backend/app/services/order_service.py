@@ -209,6 +209,17 @@ async def restore_order_stock(db: AsyncSession, order: Order) -> list[str]:
     return affected_product_slugs
 
 
+COD_MAX_ORDER_TOTAL = 1000.0
+
+
+async def _ensure_cod_allowed(db: AsyncSession, payment_method: str, total_amount: float) -> None:
+    if payment_method == "cod" and total_amount > COD_MAX_ORDER_TOTAL:
+        await db.rollback()
+        raise ValueError(
+            f"Cash on Delivery is available only on orders up to ₹{COD_MAX_ORDER_TOTAL:,.0f}. Please pay online."
+        )
+
+
 async def checkout(
     db: AsyncSession, user_id: int, address_id: int, cart_id: int,
     email: str, full_name: str, phone: str, payment_method: str = "razorpay",
@@ -260,6 +271,7 @@ async def checkout(
             db, coupon_code, subtotal,
         )
     total_amount, shipping_fee = await _calculate_order_total(db, subtotal, coupon_discount)
+    await _ensure_cod_allowed(db, payment_method, total_amount)
 
     order = Order(
         user_id=user_id,
@@ -334,6 +346,7 @@ async def direct_checkout(
             db, coupon_code, subtotal,
         )
     total_amount, shipping_fee = await _calculate_order_total(db, subtotal, coupon_discount)
+    await _ensure_cod_allowed(db, payment_method, total_amount)
 
     order = Order(
         user_id=user_id,
