@@ -819,7 +819,7 @@ export default function ProductDetailPage() {
   //   1. image_map[optId1__optId2__...] — exact combo match (set in admin combinations table)
   //   2. Selected option's per-option images — the photo of any chosen option/colour
   //   3. default_image — catch-all variant fallback
-  //   4. product.images — plain product gallery
+  //   4. product.images — plain product gallery, always appended after 1–3 (deduped)
   //
   // Uses effectiveSelectedOptions (not selectedOptions) so the gallery shows the
   // correct variant images on the very first render before auto-select's setState fires.
@@ -855,20 +855,20 @@ export default function ProductDetailPage() {
 
   const defaultVariantImage: string = product.variants?.default_image ?? '';
 
-  let galleryImages: string[];
-  if (comboImages.length > 0) {
-    // Variant combination has its own images — show only those.
-    // Don't append product.images: mixing in images from other colours/combos
-    // would show e.g. a green watering can when the user selected ivory.
-    galleryImages = comboImages;
-  } else if (optionFallbackImages.length > 0) {
-    // Option has its own images — show only those for the same reason.
-    galleryImages = optionFallbackImages;
-  } else if (defaultVariantImage) {
-    galleryImages = [defaultVariantImage, ...(product.images ?? [])];
-  } else {
-    galleryImages = product.images ?? [];
-  }
+  // Variant images (combo → option → default_image) come first, then the plain
+  // product gallery is appended so shoppers can still browse the general photos.
+  // Deduped so an image shared by the variant and the product appears once.
+  const variantImages: string[] =
+    comboImages.length > 0
+      ? comboImages
+      : optionFallbackImages.length > 0
+        ? optionFallbackImages
+        : defaultVariantImage
+          ? [defaultVariantImage]
+          : [];
+  const galleryImages: string[] = [
+    ...new Set([...variantImages, ...(product.images ?? []).filter(Boolean)]),
+  ];
 
   // Image variants keyed by original URL: product images plus the images inside
   // `variants` (options / combos), so every gallery image gets a WebP srcset.
