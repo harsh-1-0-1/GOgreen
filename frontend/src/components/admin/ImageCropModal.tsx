@@ -129,9 +129,9 @@ const CROP_PRESETS: Record<string, CropPreset> = {
 };
 
 // Desktop-only presets. Banners keep their phone crop in `image_url` and get a
-// separate wide image in `image_url_web`, so the web list is deliberately all
-// landscape ratios — a portrait phone crop pasted into a desktop slot is what
-// caused the cropped/letterboxed hero.
+// separate desktop image in `image_url_web`, so the web list is landscape ratios
+// plus one square (for the product detail banner beside the FAQ) — a portrait
+// phone crop pasted into a desktop slot is what caused the cropped/letterboxed hero.
 const WEB_CROP_PRESETS: Record<string, CropPreset> = {
   web_hero: {
     label: '🖥️ Web Hero (16:9)',
@@ -153,6 +153,13 @@ const WEB_CROP_PRESETS: Record<string, CropPreset> = {
     width: 1920,
     height: 1080,
     hint: '1920×1080px — Standard desktop banner, safe default for most placements.',
+  },
+  web_square: {
+    label: '🖥️ Web Square (1:1)',
+    aspect: 1,
+    width: 1200,
+    height: 1200,
+    hint: '1200×1200px — Square desktop banner, e.g. the product detail banner beside the FAQ.',
   },
   web_strip: {
     label: '🖥️ Web Letterbox (16:5)',
@@ -253,7 +260,9 @@ export default function ImageCropModal({
     variant === 'web'
       ? placement === 'hero'
         ? 'web_hero'
-        : 'web_wide'
+        : placement === 'product_detail'
+          ? 'web_square'
+          : 'web_wide'
       : usesSplitPresets
         ? placement
         : CROP_PRESETS[placement]

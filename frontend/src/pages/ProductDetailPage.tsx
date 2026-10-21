@@ -161,6 +161,41 @@ function selectProductTypeBanner(
   );
 }
 
+// Matches Tailwind's `md` breakpoint, where the detail banner moves beside the FAQ.
+const FAQ_SIDE_BY_SIDE_MEDIA = '(min-width: 768px)';
+
+/**
+ * The banner next to the FAQ. Phones get the wide `image_url`; from `md` up the
+ * banner sits in a half-width column beside the FAQ, so it swaps to the square
+ * `image_url_web` when one was uploaded. Without a web image the mobile image is
+ * used everywhere, as before.
+ */
+function ProductDetailBannerImage({ banner }: { banner: Banner }) {
+  const mobileSrc = banner.image_url;
+  const webSrc = banner.image_url_web;
+  const original = mobileSrc || webSrc || undefined;
+  return (
+    <picture className="block w-full h-full">
+      {webSrc && (
+        <source
+          media={FAQ_SIDE_BY_SIDE_MEDIA}
+          srcSet={srcSetFromMap(banner.image_urls_web) ?? webSrc}
+          sizes="(min-width: 1280px) 640px, 50vw"
+        />
+      )}
+      <img
+        src={original}
+        srcSet={mobileSrc ? srcSetFromMap(banner.image_urls) : undefined}
+        sizes="100vw"
+        onError={fallbackOnError(original)}
+        alt={banner.title}
+        className={`w-full h-auto object-cover rounded-2xl ${webSrc ? 'md:aspect-square' : 'md:h-full'}`}
+        loading="lazy"
+      />
+    </picture>
+  );
+}
+
 function ProductDescription({ description }: { description: string | null }) {
   if (!description?.trim()) return null;
 
@@ -1494,41 +1529,31 @@ export default function ProductDetailPage() {
 
         <ProductReviews productId={product.id} />
 
-        {/* FAQ + detail banner — image LEFT (capped height, sticky), FAQ RIGHT.
+        {/* FAQ + detail banner — image LEFT, FAQ RIGHT from `md` up.
             Falls back to full-width FAQ when no banner is configured. */}
-        {productDetailBanner?.image_url ? (
-          <div className="mt-8 sm:mt-10 flex flex-col gap-6 lg:gap-8 md:flex-row items-stretch">
-            <div className="flex md:w-1/2 shrink-0">
+        {productDetailBanner?.image_url || productDetailBanner?.image_url_web ? (
+          <div
+            className={`mt-8 sm:mt-10 flex flex-col gap-6 lg:gap-8 md:flex-row ${
+              productDetailBanner.image_url_web ? 'md:items-start' : 'items-stretch'
+            }`}
+          >
+            {/* A square web image keeps its shape and stays in view while the FAQ
+                scrolls; the legacy single image still stretches to the FAQ height. */}
+            <div className={`flex md:w-1/2 shrink-0 ${productDetailBanner.image_url_web ? 'md:sticky md:top-24' : ''}`}>
               {productDetailBanner.cta_link ? (
                 <Link
                   to={productDetailBanner.cta_link}
                   className="block w-full rounded-2xl overflow-hidden"
                   style={{ backgroundColor: productDetailBanner.bg_color || '#1B4332' }}
                 >
-                  <img
-                    src={productDetailBanner.image_url}
-                    srcSet={srcSetFromMap(productDetailBanner.image_urls)}
-                    sizes="(min-width: 1280px) 1280px, 100vw"
-                    onError={fallbackOnError(productDetailBanner.image_url)}
-                    alt={productDetailBanner.title}
-                    className="w-full h-auto object-cover rounded-2xl md:h-full"
-                    loading="lazy"
-                  />
+                  <ProductDetailBannerImage banner={productDetailBanner} />
                 </Link>
               ) : (
                 <div
                   className="w-full rounded-2xl overflow-hidden"
                   style={{ backgroundColor: productDetailBanner.bg_color || '#1B4332' }}
                 >
-                  <img
-                    src={productDetailBanner.image_url}
-                    srcSet={srcSetFromMap(productDetailBanner.image_urls)}
-                    sizes="(min-width: 1280px) 1280px, 100vw"
-                    onError={fallbackOnError(productDetailBanner.image_url)}
-                    alt={productDetailBanner.title}
-                    className="w-full h-auto object-cover rounded-2xl md:h-full"
-                    loading="lazy"
-                  />
+                  <ProductDetailBannerImage banner={productDetailBanner} />
                 </div>
               )}
             </div>

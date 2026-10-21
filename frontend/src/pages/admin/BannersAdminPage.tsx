@@ -101,8 +101,8 @@ const PLACEMENTS = [
   {
     key: 'product_detail',
     label: '📦 Product Detail Page Banner',
-    description: 'A wide promotional banner displayed on product detail pages, just above the FAQ section.',
-    helpText: 'Recommended aspect ratio 4:1 (e.g. 1400×350px). Banner renders at the uploaded image size. Choose a product type for type-specific banners, or fallback for all products.',
+    description: 'A promotional banner on product detail pages: beside the FAQ section on desktop, above it on phones.',
+    helpText: 'Upload two images: a wide phone crop (4:1, e.g. 1400×350px) and a square web crop (1:1, e.g. 1200×1200px) shown beside the FAQ on desktop. Choose a product type for type-specific banners, or fallback for all products.',
   },
   {
     key: 'product_spec',
@@ -917,10 +917,15 @@ function BannerDrawer({
     [webImage, banner?.image_url_web]
   );
 
-  // `hero` and `trending` are the two carousels, and the only placements wide
-  // enough on desktop for a phone crop to look wrong — so they get the extra
-  // web image slot.
-  const supportsWebImage = watchedPlacement === 'hero' || watchedPlacement === 'trending';
+  // `hero` and `trending` are the two carousels, wide enough on desktop for a
+  // phone crop to look wrong. `product_detail` moves into a half-width column
+  // beside the FAQ on desktop, where it needs a square image instead of the wide
+  // phone strip. These get the extra web image slot.
+  const supportsWebImage =
+    watchedPlacement === 'hero' ||
+    watchedPlacement === 'trending' ||
+    watchedPlacement === 'product_detail';
+  const squareWebImage = watchedPlacement === 'product_detail';
 
   function requestCrop({ src, useServerCrop: server, variant }: CropRequest) {
     setCropImageSrc(src);
@@ -1430,11 +1435,13 @@ function BannerDrawer({
                 variant="mobile"
                 title="Mobile Image"
                 description={
-                  supportsWebImage
-                    ? watchedPlacement === 'trending'
-                      ? 'Shown on phones, below the 640px breakpoint. Square 1:1.'
-                      : 'Shown on phones, below the 640px breakpoint. Portrait 4:5 works best.'
-                    : 'Shown on phones, below the 640px breakpoint.'
+                  squareWebImage
+                    ? 'Shown on phones, above the FAQ (below 768px). Wide 4:1 works best.'
+                    : supportsWebImage
+                      ? watchedPlacement === 'trending'
+                        ? 'Shown on phones, below the 640px breakpoint. Square 1:1.'
+                        : 'Shown on phones, below the 640px breakpoint. Portrait 4:5 works best.'
+                      : 'Shown on phones, below the 640px breakpoint.'
                 }
                 emptyHint={
                   watchedPlacement === 'trending'
@@ -1462,19 +1469,22 @@ function BannerDrawer({
                         Separate web image (optional)
                       </p>
                       <p className="text-[11px] text-sky-700">
-                        The carousel is much wider on desktop, so a phone crop gets
-                        cut off. Upload a wide image here and it replaces the mobile
-                        one from 640px upwards. Leave it empty and the mobile image is
-                        used everywhere, as before.
+                        {squareWebImage
+                          ? 'On desktop this banner sits beside the FAQ in a square slot. Upload a square image here (1:1, e.g. 1200×1200px) and it replaces the mobile one from 768px upwards. Leave it empty and the mobile image is used everywhere, as before.'
+                          : 'The carousel is much wider on desktop, so a phone crop gets cut off. Upload a wide image here and it replaces the mobile one from 640px upwards. Leave it empty and the mobile image is used everywhere, as before.'}
                       </p>
                     </div>
                   </div>
 
                   <BannerImageField
                     variant="web"
-                    title="Web Image"
-                    description="Shown on desktop and tablet, 640px and up."
-                    emptyHint="Wide image, e.g. 1920×824px"
+                    title={squareWebImage ? 'Web Image (Square)' : 'Web Image'}
+                    description={
+                      squareWebImage
+                        ? 'Shown beside the FAQ on desktop and tablet, 768px and up.'
+                        : 'Shown on desktop and tablet, 640px and up.'
+                    }
+                    emptyHint={squareWebImage ? 'Square image, e.g. 1200×1200px' : 'Wide image, e.g. 1920×824px'}
                     cropLabel="Crop Web Image"
                     isEdit={isEdit}
                     existingUrl={banner?.image_url_web}
@@ -1515,14 +1525,16 @@ function BannerDrawer({
             <div className="mt-4 p-4 border rounded-xl bg-gray-50">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                  Desktop Preview (640px and up)
+                  Desktop Preview ({squareWebImage ? '768px' : '640px'} and up)
                 </p>
                 <div className="text-[10px] text-gray-500 bg-white px-2 py-1 rounded border">
                   {webPreviewImageSrc ? 'Using web image' : 'Falling back to mobile image'}
                 </div>
               </div>
               <div
-                className="relative w-full aspect-[21/9] overflow-hidden rounded-xl border-2 border-gray-300 shadow-lg"
+                className={`relative overflow-hidden rounded-xl border-2 border-gray-300 shadow-lg ${
+                  squareWebImage ? 'mx-auto w-1/2 aspect-square' : 'w-full aspect-[21/9]'
+                }`}
                 style={{ backgroundColor: watchedBgColor }}
               >
                 {webPreviewImageSrc ? (
