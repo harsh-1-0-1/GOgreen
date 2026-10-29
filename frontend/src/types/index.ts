@@ -135,6 +135,8 @@ export interface Product {
   promise_banner_image_urls?: Record<string, string>;
   why_plantoga_banner_image_urls?: Record<string, string>;
   care_card_image_urls?: Record<string, string>;
+  /** Admin raw endpoint only: stored image key → display URL, resolved by the backend. */
+  resolved_image_urls?: Record<string, string>;
   faqs?: FAQItem[] | null;
   related_product_ids?: number[];
   // ── Image overlay badges ──────────────────────────────────────────────

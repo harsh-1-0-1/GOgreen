@@ -315,6 +315,10 @@ function ProductModal({ onClose, editProduct }: { onClose: () => void; editProdu
   // Full URLs pass through unchanged (external images, legacy data).
   function resolveImageUrl(key: string | null | undefined): string {
     if (!key) return '';
+    // Prefer the backend's resolution: it uses the live CDN_BASE_URL, while
+    // VITE_CDN_BASE_URL is frozen into the bundle at build time.
+    const resolved = rawProduct?.resolved_image_urls?.[key];
+    if (resolved) return resolved;
     if (key.startsWith('http://') || key.startsWith('https://')) return key;
     const cdn = (import.meta.env.VITE_CDN_BASE_URL as string | undefined) || '';
     if (cdn) return `${cdn.replace(/\/$/, '')}/${key.replace(/^\//, '')}`;

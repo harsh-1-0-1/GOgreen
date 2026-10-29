@@ -20,6 +20,7 @@ from app.schemas.product import (
 )
 from app.services import product_service
 from app.utils.image_upload import (
+    collect_variant_image_keys,
     delete_image_file,
     extract_relative_key,
     resolve_image_url,
@@ -210,6 +211,19 @@ async def get_product_raw(
         "combo_description": product.combo_description,
         "combo_items": product.combo_items or [],
         "created_at": product.created_at.isoformat() if product.created_at else None,
+        # Display URLs for every raw key above, resolved with the server's CDN_BASE_URL
+        # so the admin form never has to rebuild them from a build-time env var.
+        "resolved_image_urls": {
+            key: resolve_image_url(key)
+            for key in [
+                *(product.images or []),
+                *collect_variant_image_keys(product.variants),
+                product.promise_banner_image,
+                product.why_plantoga_banner_image,
+                product.care_card_image,
+            ]
+            if key
+        },
     }
 
 
