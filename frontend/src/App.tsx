@@ -24,6 +24,7 @@ import CorporateGiftingPage from '@/pages/CorporateGiftingPage';
 import DamageReplacementPage from '@/pages/DamageReplacementPage';
 import MyDamageClaimsPage from '@/pages/MyDamageClaimsPage';
 import FaqPage from '@/pages/FaqPage';
+import ChangePasswordPage from '@/pages/ChangePasswordPage';
 
 // Admin screens are code-split so shoppers never download them: they made up
 // most of the main bundle, which every storefront visit waits on before any
@@ -127,6 +128,7 @@ export default function App() {
               <Route path="/damage-replacement" element={<DamageReplacementPage />} />
               <Route path="/damage-claims" element={<MyDamageClaimsPage />} />
               <Route path="/faqs" element={<FaqPage />} />
+              <Route path="/account/password" element={<ChangePasswordPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route element={<Layout />}>

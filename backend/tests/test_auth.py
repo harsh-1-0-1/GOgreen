@@ -137,3 +137,106 @@ async def test_access_token_works(client: AsyncClient):
         headers={"Authorization": f"Bearer {access_token}"},
     )
     assert resp.status_code == 200
+
+
+# ---- Change password ----------------------------------------------------
+
+CHANGE_PW_URL = "/api/v1/auth/change-password"
+
+
+@pytest.mark.asyncio
+async def test_change_password_success(client: AsyncClient):
+    reg_email = "changepw@example.com"
+    reg_resp = await client.post(REGISTER_URL, json={**SAMPLE_USER, "email": reg_email})
+    tokens = reg_resp.json()
+
+    resp = await client.post(
+        CHANGE_PW_URL,
+        json={"current_password": SAMPLE_USER["password"], "new_password": "N3wStr0ngPass!"},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert resp.status_code == 200
+    assert "access_token" in resp.json()
+
+    # Old password no longer works, new one does
+    old = await client.post(LOGIN_URL, json={"email": reg_email, "password": SAMPLE_USER["password"]})
+    assert old.status_code == 401
+    new = await client.post(LOGIN_URL, json={"email": reg_email, "password": "N3wStr0ngPass!"})
+    assert new.status_code == 200
+
+    # The refresh token from before the change was revoked
+    stale = await client.post(REFRESH_URL, json={"refresh_token": tokens["refresh_token"]})
+    assert stale.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_change_password_wrong_current(client: AsyncClient):
+    reg_email = "changepw_wrong@example.com"
+    reg_resp = await client.post(REGISTER_URL, json={**SAMPLE_USER, "email": reg_email})
+    access_token = reg_resp.json()["access_token"]
+
+    resp = await client.post(
+        CHANGE_PW_URL,
+        json={"current_password": "NotMyPassword", "new_password": "N3wStr0ngPass!"},
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert resp.status_code == 400
+    assert "incorrect" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_change_password_too_short(client: AsyncClient):
+    reg_email = "changepw_short@example.com"
+    reg_resp = await client.post(REGISTER_URL, json={**SAMPLE_USER, "email": reg_email})
+    access_token = reg_resp.json()["access_token"]
+
+    resp = await client.post(
+        CHANGE_PW_URL,
+        json={"current_password": SAMPLE_USER["password"], "new_password": "abc"},
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_change_password_requires_auth(client: AsyncClient):
+    resp = await client.post(
+        CHANGE_PW_URL,
+        json={"current_password": "whatever1", "new_password": "N3wStr0ngPass!"},
+    )
+    assert resp.status_code == 401
+
+
+# ---- Guest login --------------------------------------------------------
+
+GUEST_URL = "/api/v1/auth/guest"
+
+
+@pytest.mark.asyncio
+async def test_guest_login_refused_for_registered_email(client: AsyncClient):
+    reg_email = "guest_victim@example.com"
+    await client.post(REGISTER_URL, json={**SAMPLE_USER, "email": reg_email})
+
+    resp = await client.post(GUEST_URL, json={"email": reg_email, "full_name": "Attacker"})
+    assert resp.status_code == 409
+    assert "sign in" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_guest_login_refused_for_registered_phone(client: AsyncClient):
+    await client.post(
+        REGISTER_URL, json={**SAMPLE_USER, "email": "guest_phone_victim@example.com", "phone": "9876543210"},
+    )
+
+    resp = await client.post(GUEST_URL, json={"email": "9876543210", "full_name": "Attacker"})
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_guest_login_reuses_guest_account(client: AsyncClient):
+    payload = {"email": "repeat_guest@example.com", "full_name": "Repeat Guest"}
+    first = await client.post(GUEST_URL, json=payload)
+    assert first.status_code == 200
+
+    second = await client.post(GUEST_URL, json=payload)
+    assert second.status_code == 200

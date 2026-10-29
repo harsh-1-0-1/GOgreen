@@ -470,7 +470,17 @@ export default function CheckoutPage() {
         const fullName = `${firstName} ${lastName}`.trim();
         const phone = form.phone;
         
-        await useAuthStore.getState().guestCheckoutAuth(email, fullName, phone);
+        try {
+          await useAuthStore.getState().guestCheckoutAuth(email, fullName, phone);
+        } catch (err) {
+          // 409: these details belong to a registered account, so the shopper must sign in instead.
+          if ((err as { response?: { status?: number } }).response?.status === 409) {
+            toast.error(getApiErrorDetail(err, 'Please sign in to continue'));
+            openAuthModal();
+            return;
+          }
+          throw err;
+        }
         currentUser = useAuthStore.getState().user;
       }
 

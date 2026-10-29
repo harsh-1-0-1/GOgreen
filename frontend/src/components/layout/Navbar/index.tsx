@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileCheck2,
+  KeyRound,
   LogOut,
   Menu,
   Package,
@@ -264,6 +265,10 @@ function ShopMegaMenu({
                 <Link to="/damage-claims" onClick={onClose}
                   className="flex items-center gap-2 py-1.5 text-[12px] font-medium text-gray-700 hover:text-primary transition-colors">
                   <FileCheck2 size={13} className="text-gray-400 shrink-0" /> My Damage Claims
+                </Link>
+                <Link to="/account/password" onClick={onClose}
+                  className="flex items-center gap-2 py-1.5 text-[12px] font-medium text-gray-700 hover:text-primary transition-colors">
+                  <KeyRound size={13} className="text-gray-400 shrink-0" /> Change Password
                 </Link>
                 {user.is_admin && (
                   <Link to="/admin" onClick={onClose}
@@ -822,6 +827,13 @@ export default function Navbar() {
                       onClick={() => setUserMenuOpen(false)}
                     >
                       <FileCheck2 size={15} /> My Damage Claims
+                    </Link>
+                    <Link
+                      to="/account/password"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-gray-50 text-gray-700 transition-colors"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <KeyRound size={15} /> Change Password
                     </Link>
                     <button
                       onClick={() => {

@@ -195,6 +195,27 @@ async def authenticate(db: AsyncSession, email: str, password: str) -> User | No
 
 
 # ---------------------------------------------------------------------------
+# Change password
+# ---------------------------------------------------------------------------
+
+async def change_password(db: AsyncSession, user: User, current_password: str, new_password: str) -> None:
+    if not user.hashed_password:
+        raise ValueError("This account has no password set (it signs in with Google or as a guest)")
+    valid, _ = verify_password(current_password, user.hashed_password)
+    if not valid:
+        logger.warning("Password change failed – bad current password for user_id={}", user.id)
+        raise ValueError("Current password is incorrect")
+    if current_password == new_password:
+        raise ValueError("New password must be different from the current one")
+
+    user.hashed_password = hash_password(new_password)
+    await db.flush()
+    # Revoke the stored refresh token so other sessions can't renew; caller issues a fresh pair.
+    await _delete_refresh_token(user.id)
+    logger.info("Password changed for user_id={}", user.id)
+
+
+# ---------------------------------------------------------------------------
 # Refresh
 # ---------------------------------------------------------------------------
 

@@ -15,6 +15,7 @@ interface AuthState {
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
   fetchUser: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   setTokens: (data: TokenResponse) => void;
   hydrateFromStorage: () => void;
   guestCheckoutAuth: (email: string, full_name: string, phone?: string) => Promise<void>;
@@ -102,6 +103,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       set({ user: null });
     }
+  },
+
+  changePassword: async (currentPassword, newPassword) => {
+    const { data } = await api.post<TokenResponse>('/auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+    // The backend revokes the old refresh token, so keep this session alive with the new pair.
+    get().setTokens(data);
   },
 
   guestCheckoutAuth: async (email, full_name, phone) => {

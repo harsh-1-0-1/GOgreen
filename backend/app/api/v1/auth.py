@@ -7,6 +7,7 @@ from app.core.security import get_current_active_user
 from app.db.models import User
 from app.db.session import get_db
 from app.schemas.auth import (
+    ChangePasswordRequest,
     GuestRequest,
     LoginRequest,
     RefreshRequest,
@@ -71,6 +72,21 @@ async def get_me(user: User = Depends(get_current_active_user)):
     }
 
 
+@router.post("/change-password", response_model=TokenResponse)
+async def change_password(
+    body: ChangePasswordRequest,
+    user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await auth_service.change_password(
+            db, user, current_password=body.current_password, new_password=body.new_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return await auth_service.issue_tokens(user)
+
+
 @router.get("/google")
 async def google_auth():
     url = await auth_service.generate_google_auth_url()
@@ -94,7 +110,10 @@ async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_
 
 @router.post("/guest", response_model=TokenResponse)
 async def guest_login(body: GuestRequest, db: AsyncSession = Depends(get_db)):
-    user = await auth_service.guest_register_or_login(
-        db, email=body.email, full_name=body.full_name, phone=body.phone
-    )
+    try:
+        user = await auth_service.guest_register_or_login(
+            db, email=body.email, full_name=body.full_name, phone=body.phone
+        )
+    except auth_service.AccountRequiresLoginError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return await auth_service.issue_tokens(user)
