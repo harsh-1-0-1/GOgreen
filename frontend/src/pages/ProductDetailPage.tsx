@@ -461,7 +461,7 @@ function MobileGallery({
               width={800}
               height={800}
               alt={`Product image ${i + 1}`}
-              className="w-full aspect-square object-cover"
+              className="w-full aspect-square object-contain bg-gray-50"
               loading={i === 0 ? 'eager' : 'lazy'}
               fetchPriority={i === 0 ? 'high' : 'auto'}
               decoding="async"
@@ -559,7 +559,7 @@ function DesktopGallery({
             width={800}
             height={800}
             alt="Product"
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
             loading="eager"
             fetchPriority="high"
             decoding="async"
