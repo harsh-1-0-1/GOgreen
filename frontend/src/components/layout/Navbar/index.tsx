@@ -1362,6 +1362,18 @@ export default function Navbar() {
                     })}
                   </div>
 
+                  {user && (
+                    <div className="pt-1.5">
+                      <Link
+                        to="/account/password"
+                        onClick={closeDrawer}
+                        className="w-full flex items-center justify-center gap-1.5 py-3 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-xs font-bold transition-all duration-200"
+                      >
+                        <KeyRound size={14} /> Change Password
+                      </Link>
+                    </div>
+                  )}
+
                   {/* Extra admin navigation link if needed */}
                   {user?.is_admin && (
                     <div className="pt-1.5">
