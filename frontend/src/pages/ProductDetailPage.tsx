@@ -310,28 +310,19 @@ function MobileGallery({
   }, []);
 
   function settle(toIndex: number) {
-    // Re-enable transition, then let React re-render drive the transform.
-    // For snap-back (toIndex === currentIndex), also force the pixel position
-    // so the animation plays — React won't re-render since index didn't change.
+    // Write the exact transform/transition React renders for toIndex, so the DOM
+    // never drifts from React's last-rendered style. Clearing them instead (the old
+    // snap-back did on transitionend) left the track at translateX(0) — the first
+    // image — and made the next slide change jump with no animation, because React
+    // only re-applies style values that changed between renders.
     // Use activeIndexRef (not the prop directly) to avoid stale-closure bugs
     // when a variant switch triggers a re-render while a gesture is in flight.
     const currentIndex = activeIndexRef.current;
-    if (!trackRef.current || !containerRef.current) return;
+    if (!trackRef.current) return;
     const el = trackRef.current;
     el.style.transition = EASING;
-    if (toIndex === currentIndex) {
-      el.style.transform = `translateX(${-currentIndex * containerRef.current.offsetWidth}px)`;
-      const onEnd = () => {
-        el.style.transform = '';
-        el.style.transition = '';
-        el.removeEventListener('transitionend', onEnd);
-      };
-      el.addEventListener('transitionend', onEnd);
-    } else {
-      // React re-render will apply the correct percentage transform with transition
-      el.style.transform = '';
-      onActiveChange(toIndex);
-    }
+    el.style.transform = `translateX(${-toIndex * 100}%)`;
+    if (toIndex !== currentIndex) onActiveChange(toIndex);
   }
 
   function handleTouchStart(e: React.TouchEvent) {
@@ -376,8 +367,12 @@ function MobileGallery({
   }
 
   function handleTouchEnd() {
-    // If intent was vertical (or never determined), nothing to do
-    if (gestureIntent.current !== 'h' || !containerRef.current) return;
+    // If intent was vertical (or a plain tap), just restore the transition that
+    // touchstart disabled, otherwise the next arrow tap would jump without sliding.
+    if (gestureIntent.current !== 'h' || !containerRef.current) {
+      if (trackRef.current) trackRef.current.style.transition = EASING;
+      return;
+    }
 
     const width = containerRef.current.offsetWidth;
     const dist = touchDeltaX.current;
@@ -432,6 +427,7 @@ function MobileGallery({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
         className="flex will-change-transform"
         style={{
           transform: `translateX(${-safeActiveIndex * 100}%)`,
